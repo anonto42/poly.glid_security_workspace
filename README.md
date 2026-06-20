@@ -33,6 +33,7 @@ Recon, audit, reporting, diagnostics
 ## First Documentation Pass
 
 - [Codebase Architecture](docs/architecture/CODEBASE.md)
+- [CLI Technology Decision](docs/architecture/CLI_TECH_DECISION.md)
 - [Repository Layout](docs/architecture/REPOSITORY_LAYOUT.md)
 - [System Architecture](docs/architecture/SYSTEM.md)
 - [Development Targets](docs/planning/DEVELOPMENT_TARGETS.md)
