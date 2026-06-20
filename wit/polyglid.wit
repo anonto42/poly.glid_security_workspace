@@ -1,0 +1,32 @@
+package polyglid:engine@0.1.0;
+
+interface types {
+    enum severity {
+        info,
+        low,
+        medium,
+        high,
+        critical,
+    }
+
+    record issue {
+        title: string,
+        severity: severity,
+        description: string,
+        recommendation: string,
+    }
+
+    record plugin-report {
+        plugin-name: string,
+        target-tested: string,
+        issues: list<issue>,
+        summary: string,
+    }
+}
+
+world security-tool {
+    use types.{plugin-report};
+
+    export execute: func(target: string) -> result<plugin-report, string>;
+}
+
