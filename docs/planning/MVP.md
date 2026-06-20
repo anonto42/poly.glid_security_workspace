@@ -58,6 +58,9 @@ recommendations
 ## First CLI Commands
 
 ```bash
+cargo run -p polyglid-cli -- --help
+cargo run -p polyglid-cli -- doctor
+cargo run -p polyglid-cli -- plugin list
 cargo run -p polyglid-cli -- plugin inspect ./path/to/plugin.wasm
 cargo run -p polyglid-cli -- plugin run ./path/to/plugin.wasm --target example.com
 cargo run -p polyglid-cli -- config validate
@@ -71,4 +74,3 @@ cargo run -p polyglid-cli -- config validate
 - CLI can run the demo plugin and print structured output.
 - Runtime errors do not crash the host process.
 - Docs explain how to build and run the MVP.
-

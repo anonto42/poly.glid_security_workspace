@@ -33,7 +33,9 @@ Recon, audit, reporting, diagnostics
 ## First Documentation Pass
 
 - [Codebase Architecture](docs/architecture/CODEBASE.md)
+- [Repository Layout](docs/architecture/REPOSITORY_LAYOUT.md)
 - [System Architecture](docs/architecture/SYSTEM.md)
+- [Development Targets](docs/planning/DEVELOPMENT_TARGETS.md)
 - [Roadmap](docs/planning/ROADMAP.md)
 - [MVP Definition](docs/planning/MVP.md)
 - [Security Model](docs/security/SECURITY_MODEL.md)
@@ -69,4 +71,3 @@ poly.glid_security_workspace/
 5. Add the Tauri shell.
 6. Add the workspace UI.
 7. Add richer plugins only after the boundary is tested.
-
