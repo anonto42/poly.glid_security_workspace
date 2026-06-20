@@ -83,6 +83,7 @@ Package the app.
 - plugin packaging format
 - plugin registry/index
 - update strategy
+- multi-platform CLI release binaries
+- platform-specific app data layout
 
 Exit condition: another machine can install PolyGlid and run approved plugins.
-

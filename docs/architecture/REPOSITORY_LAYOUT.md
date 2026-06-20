@@ -147,6 +147,11 @@ Contains project planning, architecture, security, development, and brand docume
 
 Docs are part of the product. They explain the reasoning behind the codebase so future implementation does not drift.
 
+Important development docs:
+
+- `docs/development/WORKFLOW.md`
+- `docs/development/PACKAGING.md`
+
 ## Why This Layout Works
 
 The CLI, desktop app, and future clients can all reuse the same core:
@@ -158,4 +163,3 @@ apps/desktop   ----/
 ```
 
 This prevents duplicated logic and keeps the project testable while it grows.
-
