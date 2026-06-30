@@ -58,3 +58,7 @@ supported.
 
 Added persistent approval config loading through `POLYGLID_CONFIG`, with
 `config.example.toml` documenting global and plugin-specific capability grants.
+
+Added the first concrete host capability adapter: WIT `dns.resolve`. The runtime
+links the import, scopes it to the current run target, and `recon_probe` now
+requests `dns-resolve`.

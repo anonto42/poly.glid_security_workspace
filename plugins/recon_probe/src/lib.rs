@@ -5,13 +5,16 @@ wit_bindgen::generate!({
     path: "../../wit",
 });
 
-use crate::polyglid::engine::types::{Issue, Severity};
+use crate::polyglid::engine::{
+    dns,
+    types::{Issue, Severity},
+};
 
 struct ReconProbe;
 
 impl Guest for ReconProbe {
     fn execute(target: String) -> Result<PluginReport, String> {
-        let issues = analyze_target(&target)
+        let issues = analyze_target(&target, resolve_target(&target))
             .into_iter()
             .map(|observation| Issue {
                 title: observation.title,
@@ -39,6 +42,10 @@ impl Guest for ReconProbe {
     }
 }
 
+fn resolve_target(target: &str) -> Result<Vec<String>, String> {
+    dns::resolve(target)
+}
+
 export!(ReconProbe);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,7 +55,10 @@ pub struct ReconObservation {
     pub recommendation: String,
 }
 
-pub fn analyze_target(target: &str) -> Vec<ReconObservation> {
+pub fn analyze_target(
+    target: &str,
+    resolution: Result<Vec<String>, String>,
+) -> Vec<ReconObservation> {
     let trimmed = target.trim();
     if trimmed.is_empty() {
         return vec![ReconObservation {
@@ -66,7 +76,30 @@ pub fn analyze_target(target: &str) -> Vec<ReconObservation> {
         }];
     }
 
-    Vec::new()
+    match resolution {
+        Ok(addresses) if addresses.is_empty() => vec![ReconObservation {
+            title: "DNS returned no addresses".to_string(),
+            description: format!(
+                "The host resolved successfully but no addresses were returned for {trimmed}."
+            ),
+            recommendation: "Confirm that the target is expected to have DNS records.".to_string(),
+        }],
+        Ok(addresses) => vec![ReconObservation {
+            title: "DNS resolution available".to_string(),
+            description: format!(
+                "The host resolved through PolyGlid's DNS capability to {} address(es).",
+                addresses.len()
+            ),
+            recommendation: "Use resolved addresses only for authorized follow-up checks."
+                .to_string(),
+        }],
+        Err(message) => vec![ReconObservation {
+            title: "DNS resolution unavailable".to_string(),
+            description: format!("The DNS capability did not resolve {trimmed}: {message}"),
+            recommendation: "Approve dns-resolve for this plugin and verify the target name."
+                .to_string(),
+        }],
+    }
 }
 
 #[cfg(test)]
@@ -75,18 +108,25 @@ mod tests {
 
     #[test]
     fn reports_empty_target() {
-        let observations = analyze_target(" ");
+        let observations = analyze_target(" ", Ok(Vec::new()));
         assert_eq!(observations[0].title, "Empty target");
     }
 
     #[test]
     fn reports_loopback_target() {
-        let observations = analyze_target("127.0.0.1");
+        let observations = analyze_target("127.0.0.1", Ok(vec!["127.0.0.1".to_string()]));
         assert_eq!(observations[0].title, "Loopback target");
     }
 
     #[test]
-    fn accepts_normal_target() {
-        assert!(analyze_target("example.com").is_empty());
+    fn reports_dns_resolution() {
+        let observations = analyze_target("example.com", Ok(vec!["93.184.216.34".to_string()]));
+        assert_eq!(observations[0].title, "DNS resolution available");
+    }
+
+    #[test]
+    fn reports_dns_denial() {
+        let observations = analyze_target("example.com", Err("denied".to_string()));
+        assert_eq!(observations[0].title, "DNS resolution unavailable");
     }
 }

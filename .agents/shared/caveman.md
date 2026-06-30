@@ -9,10 +9,11 @@ WIT host/guest bindings, WASI adapter componentization, Wasmtime execution, CLI
 manifest parsing, capability display/parsing, denied-by-default permission
 decisions, scoped capability requests, and allowed/denied/failed capability
 audit events. Added `POLYGLID_CONFIG` persistent approval loading. Checks green.
+Added WIT `dns.resolve` as the first host capability adapter, scoped to the run
+target and gated by `dns-resolve`.
 
-NEXT: Continue Phase 2 by adding concrete host capability adapters. Do not
-expose network, filesystem, process, or env host functions without permission
-checks.
+NEXT: Continue Phase 2 by adding more host adapters only behind manifest
+requests, approvals, and scoped runtime checks.
 
 HANDOFFS: Use `docs/development/STEP_BY_STEP_DEVELOPMENT_FLOW.md` as the build
 sequence. Use `.agents/shared/rules/polyglid-architecture.md` for Rust/WIT/

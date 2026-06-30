@@ -33,6 +33,10 @@ cargo run -p polyglid-cli -- plugin componentize \
 cargo run -p polyglid-cli -- plugin run \
   target/wasm32-wasip1/debug/recon_probe.component.wasm \
   --target example.com
+cargo run -p polyglid-cli -- plugin run \
+  target/wasm32-wasip1/debug/recon_probe.component.wasm \
+  --target localhost \
+  --allow dns-resolve
 POLYGLID_CONFIG=config.example.toml cargo run -p polyglid-cli -- config validate
 ```
 

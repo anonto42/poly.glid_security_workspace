@@ -118,6 +118,13 @@ The host runtime should enforce:
 - structured error reporting
 - audit log for sensitive actions
 
+## Host Capability Adapters
+
+The first concrete adapter is `dns.resolve`. Plugins import it through WIT
+instead of using raw WASI networking. The runtime scopes DNS resolution to the
+current run target, and core denies execution unless the plugin manifest requests
+`dns-resolve` and the host approval store grants it.
+
 ## Safety Position
 
 PolyGlid should avoid building or shipping features whose main purpose is unauthorized access, persistence, stealth, credential abuse, or command-and-control activity. If a feature has dual-use risk, design it as an authorized defensive audit or lab-only validation tool with explicit guardrails.

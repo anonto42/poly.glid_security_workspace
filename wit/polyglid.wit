@@ -24,9 +24,14 @@ interface types {
     }
 }
 
+interface dns {
+    resolve: func(host: string) -> result<list<string>, string>;
+}
+
 world security-tool {
     use types.{plugin-report};
 
+    import dns;
+
     export execute: func(target: string) -> result<plugin-report, string>;
 }
-

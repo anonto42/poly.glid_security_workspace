@@ -1,6 +1,7 @@
 //! Runtime adapter for WebAssembly Component Model plugins.
 
 use std::fs;
+use std::net::ToSocketAddrs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -10,7 +11,7 @@ use polyglid_plugin_api::{
     PluginReport as ApiPluginReport, Severity as ApiSeverity,
 };
 use serde::Deserialize;
-use wasmtime::component::{Component, Linker};
+use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
@@ -173,7 +174,12 @@ fn run_component(path: &Path, target: &str) -> Result<ApiPluginReport, CoreError
     let component = Component::from_file(&engine, path).map_runtime_error()?;
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_runtime_error()?;
-    let mut store = Store::new(&engine, RuntimeState::default());
+    polyglid::engine::dns::add_to_linker::<RuntimeState, HasSelf<RuntimeState>>(
+        &mut linker,
+        |state: &mut RuntimeState| state,
+    )
+    .map_runtime_error()?;
+    let mut store = Store::new(&engine, RuntimeState::new(target));
 
     let bindings =
         SecurityTool::instantiate(&mut store, &component, &linker).map_runtime_error()?;
@@ -188,13 +194,15 @@ fn run_component(path: &Path, target: &str) -> Result<ApiPluginReport, CoreError
 struct RuntimeState {
     table: ResourceTable,
     wasi: WasiCtx,
+    allowed_dns_host: String,
 }
 
-impl Default for RuntimeState {
-    fn default() -> Self {
+impl RuntimeState {
+    fn new(allowed_dns_host: &str) -> Self {
         Self {
             table: ResourceTable::new(),
             wasi: WasiCtxBuilder::new().build(),
+            allowed_dns_host: allowed_dns_host.to_string(),
         }
     }
 }
@@ -205,6 +213,27 @@ impl WasiView for RuntimeState {
             ctx: &mut self.wasi,
             table: &mut self.table,
         }
+    }
+}
+
+impl polyglid::engine::dns::Host for RuntimeState {
+    fn resolve(&mut self, host: String) -> Result<Vec<String>, String> {
+        if host != self.allowed_dns_host {
+            return Err(format!(
+                "dns-resolve is scoped to {}",
+                self.allowed_dns_host
+            ));
+        }
+
+        let addresses = (host.as_str(), 0)
+            .to_socket_addrs()
+            .map_err(|err| err.to_string())?
+            .map(|address| address.ip().to_string())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+
+        Ok(addresses)
     }
 }
 
@@ -353,5 +382,15 @@ path_prefix = "/tmp/polyglid"
 
         let _ = std::fs::remove_file(manifest_path);
         let _ = std::fs::remove_dir(dir);
+    }
+
+    #[test]
+    fn dns_host_import_is_scoped_to_run_target() {
+        let mut state = RuntimeState::new("example.com");
+
+        let err = polyglid::engine::dns::Host::resolve(&mut state, "not-example.com".to_string())
+            .expect_err("host is denied");
+
+        assert_eq!(err, "dns-resolve is scoped to example.com");
     }
 }
