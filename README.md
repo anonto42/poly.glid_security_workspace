@@ -41,6 +41,7 @@ Recon, audit, reporting, diagnostics
 - [MVP Definition](docs/planning/MVP.md)
 - [Security Model](docs/security/SECURITY_MODEL.md)
 - [Development Workflow](docs/development/WORKFLOW.md)
+- [MVP Runbook](docs/development/MVP_RUNBOOK.md)
 - [Step-By-Step Development Flow](docs/development/STEP_BY_STEP_DEVELOPMENT_FLOW.md)
 - [Packaging And Distribution](docs/development/PACKAGING.md)
 - [Brand Guide](docs/branding/README.md)
@@ -74,3 +75,13 @@ poly.glid_security_workspace/
 5. Add the Tauri shell.
 6. Add the workspace UI.
 7. Add richer plugins only after the boundary is tested.
+
+## Run The Current MVP
+
+```bash
+rustup target add wasm32-wasip1
+scripts/run-mvp.sh
+```
+
+The MVP runs the CLI host, componentizes `recon_probe`, grants `dns-resolve` and
+`report-write` for the run, and writes output under `reports/`.

@@ -23,6 +23,7 @@ cargo clippy --workspace -- -D warnings
 ## CLI Harness
 
 ```bash
+scripts/run-mvp.sh
 cargo run -p polyglid-cli -- doctor
 cargo run -p polyglid-cli -- plugin list
 cargo run -p polyglid-cli -- plugin inspect ./path/to/plugin.wasm

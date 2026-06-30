@@ -66,3 +66,6 @@ requests `dns-resolve`.
 Added WIT `reports.write` as a scoped report output adapter. It writes only
 named files under `reports_dir`, rejects traversal, and is gated by
 `report-write`.
+
+Added `scripts/run-mvp.sh` and `docs/development/MVP_RUNBOOK.md` to make the
+current CLI MVP runnable with one command.

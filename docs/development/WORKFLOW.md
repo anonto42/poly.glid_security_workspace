@@ -20,6 +20,8 @@ For the full phased build plan, see
 Current commands:
 
 ```bash
+scripts/run-mvp.sh
+
 cargo fmt --all -- --check
 cargo check --workspace
 cargo test --workspace
