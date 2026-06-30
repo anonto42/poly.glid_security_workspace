@@ -58,23 +58,52 @@ pub trait PluginRuntime {
 }
 
 pub trait PermissionStore {
-    fn is_allowed(&self, plugin_id: &PluginId, capability: Capability) -> bool;
+    fn decide(
+        &self,
+        plugin_id: &PluginId,
+        capability: Capability,
+    ) -> Result<PermissionDecision, CoreError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PermissionDecision {
+    Allow,
+    Deny { reason: String },
 }
 
 #[derive(Debug, Default)]
 pub struct InMemoryPermissionStore {
-    grants: HashSet<(PluginId, Capability)>,
+    plugin_grants: HashSet<(PluginId, Capability)>,
+    global_grants: HashSet<Capability>,
 }
 
 impl InMemoryPermissionStore {
     pub fn grant(&mut self, plugin_id: PluginId, capability: Capability) {
-        self.grants.insert((plugin_id, capability));
+        self.plugin_grants.insert((plugin_id, capability));
+    }
+
+    pub fn grant_for_all(&mut self, capability: Capability) {
+        self.global_grants.insert(capability);
     }
 }
 
 impl PermissionStore for InMemoryPermissionStore {
-    fn is_allowed(&self, plugin_id: &PluginId, capability: Capability) -> bool {
-        self.grants.contains(&(plugin_id.clone(), capability))
+    fn decide(
+        &self,
+        plugin_id: &PluginId,
+        capability: Capability,
+    ) -> Result<PermissionDecision, CoreError> {
+        if self.global_grants.contains(&capability)
+            || self
+                .plugin_grants
+                .contains(&(plugin_id.clone(), capability))
+        {
+            Ok(PermissionDecision::Allow)
+        } else {
+            Ok(PermissionDecision::Deny {
+                reason: "capability is denied by default".to_string(),
+            })
+        }
     }
 }
 
@@ -118,15 +147,33 @@ where
     pub fn run_plugin(&mut self, request: PluginRunRequest) -> Result<PluginReport, CoreError> {
         let manifest = self.runtime.inspect(&request.plugin)?;
         for capability in &manifest.requested_capabilities {
-            if !self.permissions.is_allowed(&manifest.id, *capability) {
-                self.events.emit(PolyGlidEvent::CapabilityDenied {
-                    plugin_id: manifest.id.clone(),
-                    capability: format!("{capability:?}"),
-                });
-                return Err(CoreError::CapabilityDenied {
-                    plugin_id: manifest.id,
-                    capability: *capability,
-                });
+            match self.permissions.decide(&manifest.id, *capability) {
+                Ok(PermissionDecision::Allow) => {
+                    self.events.emit(PolyGlidEvent::CapabilityAllowed {
+                        plugin_id: manifest.id.clone(),
+                        capability: capability.to_string(),
+                    });
+                }
+                Ok(PermissionDecision::Deny { reason }) => {
+                    self.events.emit(PolyGlidEvent::CapabilityDenied {
+                        plugin_id: manifest.id.clone(),
+                        capability: capability.to_string(),
+                        reason: reason.clone(),
+                    });
+                    return Err(CoreError::CapabilityDenied {
+                        plugin_id: manifest.id,
+                        capability: *capability,
+                        reason,
+                    });
+                }
+                Err(err) => {
+                    self.events.emit(PolyGlidEvent::CapabilityCheckFailed {
+                        plugin_id: manifest.id.clone(),
+                        capability: capability.to_string(),
+                        message: err.to_string(),
+                    });
+                    return Err(err);
+                }
             }
         }
 
@@ -156,6 +203,10 @@ where
     pub fn config(&self) -> &AppConfig {
         &self.config
     }
+
+    pub fn events(&self) -> &E {
+        &self.events
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,7 +218,9 @@ pub enum CoreError {
     CapabilityDenied {
         plugin_id: PluginId,
         capability: Capability,
+        reason: String,
     },
+    PermissionStore(String),
 }
 
 impl fmt::Display for CoreError {
@@ -180,11 +233,13 @@ impl fmt::Display for CoreError {
             Self::CapabilityDenied {
                 plugin_id,
                 capability,
+                reason,
             } => write!(
                 f,
-                "plugin '{}' is missing required capability {capability:?}",
+                "plugin '{}' is missing required capability {capability}: {reason}",
                 plugin_id.as_str()
             ),
+            Self::PermissionStore(message) => write!(f, "permission store error: {message}"),
         }
     }
 }
@@ -197,7 +252,9 @@ mod tests {
     use polyglid_events::VecEventSink;
     use polyglid_plugin_api::{Issue, Severity};
 
-    struct FakeRuntime;
+    struct FakeRuntime {
+        capabilities: Vec<Capability>,
+    }
 
     impl PluginRuntime for FakeRuntime {
         fn inspect(&self, _plugin: &PluginRef) -> Result<PluginManifest, CoreError> {
@@ -205,7 +262,7 @@ mod tests {
                 id: PluginId::new("demo").expect("valid id"),
                 name: "Demo".to_string(),
                 version: "0.1.0".to_string(),
-                requested_capabilities: Vec::new(),
+                requested_capabilities: self.capabilities.clone(),
             })
         }
 
@@ -232,7 +289,9 @@ mod tests {
     #[test]
     fn engine_runs_plugin_when_no_capabilities_are_required() {
         let mut engine = CoreEngine::new(
-            FakeRuntime,
+            FakeRuntime {
+                capabilities: Vec::new(),
+            },
             InMemoryPermissionStore::default(),
             VecEventSink::default(),
             AppConfig::development(),
@@ -248,5 +307,99 @@ mod tests {
 
         assert_eq!(report.target_tested, "example.com");
         assert!(report.has_findings());
+    }
+
+    #[test]
+    fn engine_denies_requested_capabilities_by_default() {
+        let mut engine = CoreEngine::new(
+            FakeRuntime {
+                capabilities: vec![Capability::NetworkConnect],
+            },
+            InMemoryPermissionStore::default(),
+            VecEventSink::default(),
+            AppConfig::development(),
+        )
+        .expect("valid engine");
+
+        let err = engine
+            .run_plugin(PluginRunRequest {
+                plugin: PluginRef::from_path("demo.wasm"),
+                target: Target::parse("example.com").expect("valid target"),
+            })
+            .expect_err("capability denied");
+
+        assert!(matches!(err, CoreError::CapabilityDenied { .. }));
+        assert!(matches!(
+            engine.events().events().last(),
+            Some(PolyGlidEvent::CapabilityDenied { capability, .. })
+                if capability == "network-connect"
+        ));
+    }
+
+    #[test]
+    fn engine_runs_when_requested_capability_is_granted() {
+        let mut permissions = InMemoryPermissionStore::default();
+        permissions.grant_for_all(Capability::DnsResolve);
+        let mut engine = CoreEngine::new(
+            FakeRuntime {
+                capabilities: vec![Capability::DnsResolve],
+            },
+            permissions,
+            VecEventSink::default(),
+            AppConfig::development(),
+        )
+        .expect("valid engine");
+
+        let report = engine
+            .run_plugin(PluginRunRequest {
+                plugin: PluginRef::from_path("demo.wasm"),
+                target: Target::parse("example.com").expect("valid target"),
+            })
+            .expect("plugin runs");
+
+        assert_eq!(report.target_tested, "example.com");
+        assert!(engine.events().events().iter().any(|event| matches!(
+            event,
+            PolyGlidEvent::CapabilityAllowed { capability, .. } if capability == "dns-resolve"
+        )));
+    }
+
+    struct FailingPermissionStore;
+
+    impl PermissionStore for FailingPermissionStore {
+        fn decide(
+            &self,
+            _plugin_id: &PluginId,
+            _capability: Capability,
+        ) -> Result<PermissionDecision, CoreError> {
+            Err(CoreError::PermissionStore("unavailable".to_string()))
+        }
+    }
+
+    #[test]
+    fn engine_audits_permission_check_failures() {
+        let mut engine = CoreEngine::new(
+            FakeRuntime {
+                capabilities: vec![Capability::EnvironmentRead],
+            },
+            FailingPermissionStore,
+            VecEventSink::default(),
+            AppConfig::development(),
+        )
+        .expect("valid engine");
+
+        let err = engine
+            .run_plugin(PluginRunRequest {
+                plugin: PluginRef::from_path("demo.wasm"),
+                target: Target::parse("example.com").expect("valid target"),
+            })
+            .expect_err("permission store fails");
+
+        assert!(matches!(err, CoreError::PermissionStore(_)));
+        assert!(matches!(
+            engine.events().events().last(),
+            Some(PolyGlidEvent::CapabilityCheckFailed { capability, .. })
+                if capability == "environment-read"
+        ));
     }
 }

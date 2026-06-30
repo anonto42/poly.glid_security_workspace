@@ -1,0 +1,5 @@
+id = "polyglid.recon_probe"
+name = "Recon Probe"
+version = "0.1.0"
+entry_world = "security-tool"
+capabilities = []

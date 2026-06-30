@@ -1,12 +1,15 @@
 //! Runtime adapter for WebAssembly Component Model plugins.
 
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use polyglid_core::{CoreError, PluginRef, PluginRunRequest, PluginRuntime};
 use polyglid_plugin_api::{
-    Issue as ApiIssue, PluginId, PluginManifest, PluginReport as ApiPluginReport,
+    Capability, Issue as ApiIssue, PluginId, PluginManifest, PluginReport as ApiPluginReport,
     Severity as ApiSeverity,
 };
+use serde::Deserialize;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
@@ -28,6 +31,10 @@ impl WasmRuntime {
 impl PluginRuntime for WasmRuntime {
     fn inspect(&self, plugin: &PluginRef) -> Result<PluginManifest, CoreError> {
         ensure_file_exists(plugin.path())?;
+        if let Some(manifest_path) = manifest_path_for(plugin.path()) {
+            return read_manifest(&manifest_path);
+        }
+
         let id = plugin
             .path()
             .file_stem()
@@ -54,6 +61,69 @@ fn ensure_file_exists(path: &Path) -> Result<(), CoreError> {
     } else {
         Err(CoreError::PluginNotFound(path.to_path_buf()))
     }
+}
+
+fn manifest_path_for(plugin_path: &Path) -> Option<PathBuf> {
+    let same_name = plugin_path.with_extension("polyglid.toml");
+    if same_name.is_file() {
+        return Some(same_name);
+    }
+
+    let same_dir = plugin_path.parent()?.join("polyglid.toml");
+    if same_dir.is_file() {
+        return Some(same_dir);
+    }
+
+    for stem in manifest_stems(plugin_path) {
+        let source_manifest = Path::new("plugins").join(stem).join("polyglid.toml");
+        if source_manifest.is_file() {
+            return Some(source_manifest);
+        }
+    }
+
+    None
+}
+
+fn read_manifest(path: &Path) -> Result<PluginManifest, CoreError> {
+    let raw = fs::read_to_string(path).map_runtime_error()?;
+    let manifest: RawPluginManifest = toml::from_str(&raw).map_runtime_error()?;
+    let id = PluginId::new(manifest.id).map_err(|err| CoreError::Runtime(err.to_string()))?;
+    let requested_capabilities = manifest
+        .capabilities
+        .into_iter()
+        .map(|capability| Capability::from_str(&capability))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| CoreError::Runtime(err.to_string()))?;
+
+    Ok(PluginManifest {
+        id,
+        name: manifest.name,
+        version: manifest.version,
+        requested_capabilities,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct RawPluginManifest {
+    id: String,
+    name: String,
+    version: String,
+    #[allow(dead_code)]
+    entry_world: Option<String>,
+    #[serde(default)]
+    capabilities: Vec<String>,
+}
+
+fn manifest_stems(plugin_path: &Path) -> Vec<String> {
+    let Some(stem) = plugin_path.file_stem().and_then(|value| value.to_str()) else {
+        return Vec::new();
+    };
+
+    let mut stems = vec![stem.to_string()];
+    if let Some(stripped) = stem.strip_suffix(".component") {
+        stems.push(stripped.to_string());
+    }
+    stems
 }
 
 fn run_component(path: &Path, target: &str) -> Result<ApiPluginReport, CoreError> {
@@ -143,5 +213,53 @@ impl From<polyglid::engine::types::Severity> for ApiSeverity {
             polyglid::engine::types::Severity::High => Self::High,
             polyglid::engine::types::Severity::Critical => Self::Critical,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_stems_strip_component_suffix() {
+        let stems = manifest_stems(Path::new("target/recon_probe.component.wasm"));
+
+        assert_eq!(
+            stems,
+            vec![
+                "recon_probe.component".to_string(),
+                "recon_probe".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn reads_plugin_manifest_capabilities() {
+        let dir =
+            std::env::temp_dir().join(format!("polyglid-manifest-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let manifest_path = dir.join("polyglid.toml");
+        std::fs::write(
+            &manifest_path,
+            r#"
+id = "polyglid.test"
+name = "Test Plugin"
+version = "0.1.0"
+entry_world = "security-tool"
+capabilities = ["dns-resolve", "network-connect"]
+"#,
+        )
+        .expect("write manifest");
+
+        let manifest = read_manifest(&manifest_path).expect("manifest");
+
+        assert_eq!(manifest.id.as_str(), "polyglid.test");
+        assert_eq!(
+            manifest.requested_capabilities,
+            vec![Capability::DnsResolve, Capability::NetworkConnect]
+        );
+
+        let _ = std::fs::remove_file(manifest_path);
+        let _ = std::fs::remove_dir(dir);
     }
 }

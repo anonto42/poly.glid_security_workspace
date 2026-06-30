@@ -1137,6 +1137,8 @@ version = "0.1.0"
 dependencies = [
  "polyglid-core",
  "polyglid-plugin-api",
+ "serde",
+ "toml",
  "wasmtime",
  "wasmtime-wasi",
 ]

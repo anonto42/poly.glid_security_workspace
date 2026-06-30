@@ -1,6 +1,7 @@
 //! Shared host/plugin types mirrored from `wit/polyglid.wit`.
 
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
@@ -92,10 +93,62 @@ impl PluginId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Capability {
     NetworkConnect,
-    FileRead,
-    FileWrite,
+    NetworkListen,
+    FilesystemRead,
+    FilesystemWrite,
+    ConfigRead,
+    ReportWrite,
+    Crypto,
+    DnsResolve,
     ProcessSpawn,
     EnvironmentRead,
+}
+
+impl Capability {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::NetworkConnect => "network-connect",
+            Self::NetworkListen => "network-listen",
+            Self::FilesystemRead => "filesystem-read",
+            Self::FilesystemWrite => "filesystem-write",
+            Self::ConfigRead => "config-read",
+            Self::ReportWrite => "report-write",
+            Self::Crypto => "crypto",
+            Self::DnsResolve => "dns-resolve",
+            Self::ProcessSpawn => "process-spawn",
+            Self::EnvironmentRead => "environment-read",
+        }
+    }
+}
+
+impl fmt::Display for Capability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for Capability {
+    type Err = ApiError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim() {
+            "network-connect" | "NetworkConnect" => Ok(Self::NetworkConnect),
+            "network-listen" | "NetworkListen" => Ok(Self::NetworkListen),
+            "filesystem-read" | "FilesystemRead" | "file-read" | "FileRead" => {
+                Ok(Self::FilesystemRead)
+            }
+            "filesystem-write" | "FilesystemWrite" | "file-write" | "FileWrite" => {
+                Ok(Self::FilesystemWrite)
+            }
+            "config-read" | "ConfigRead" => Ok(Self::ConfigRead),
+            "report-write" | "ReportWrite" => Ok(Self::ReportWrite),
+            "crypto" | "Crypto" => Ok(Self::Crypto),
+            "dns-resolve" | "DnsResolve" => Ok(Self::DnsResolve),
+            "process-spawn" | "ProcessSpawn" => Ok(Self::ProcessSpawn),
+            "environment-read" | "EnvironmentRead" | "env-read" => Ok(Self::EnvironmentRead),
+            _ => Err(ApiError::UnknownCapability(value.to_string())),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,14 +162,34 @@ pub struct PluginManifest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApiError {
     EmptyPluginId,
+    UnknownCapability(String),
 }
 
 impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyPluginId => f.write_str("plugin id cannot be empty"),
+            Self::UnknownCapability(value) => write!(f, "unknown capability: {value}"),
         }
     }
 }
 
 impl std::error::Error for ApiError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_documented_capabilities() {
+        assert_eq!(
+            "network-connect".parse::<Capability>().expect("capability"),
+            Capability::NetworkConnect
+        );
+        assert_eq!(
+            "DnsResolve".parse::<Capability>().expect("capability"),
+            Capability::DnsResolve
+        );
+        assert_eq!(Capability::FilesystemRead.to_string(), "filesystem-read");
+    }
+}

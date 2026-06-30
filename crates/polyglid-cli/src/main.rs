@@ -2,10 +2,12 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::str::FromStr;
 
 use polyglid_config::AppConfig;
 use polyglid_core::{CoreEngine, InMemoryPermissionStore, PluginRef, PluginRunRequest, Target};
 use polyglid_events::VecEventSink;
+use polyglid_plugin_api::Capability;
 use polyglid_runtime::WasmRuntime;
 use wasi_preview1_component_adapter_provider::{
     WASI_SNAPSHOT_PREVIEW1_ADAPTER_NAME, WASI_SNAPSHOT_PREVIEW1_REACTOR_ADAPTER,
@@ -53,7 +55,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
         [command, subcommand, path, target_flag, target]
             if command == "plugin" && subcommand == "run" && target_flag == "--target" =>
         {
-            plugin_run(path, target)
+            plugin_run(path, target, &[])
+        }
+        [command, subcommand, path, target_flag, target, rest @ ..]
+            if command == "plugin" && subcommand == "run" && target_flag == "--target" =>
+        {
+            plugin_run(path, target, rest)
         }
         _ => Err("unknown command; run `polyglid --help`".to_string()),
     }
@@ -78,7 +85,7 @@ fn plugin_list() -> Result<(), String> {
 }
 
 fn plugin_inspect(path: &str) -> Result<(), String> {
-    let mut engine = engine()?;
+    let mut engine = engine(Vec::new())?;
     let manifest = engine
         .inspect_plugin(PluginRef::from_path(PathBuf::from(path)))
         .map_err(|err| err.to_string())?;
@@ -86,10 +93,14 @@ fn plugin_inspect(path: &str) -> Result<(), String> {
     println!("id: {}", manifest.id.as_str());
     println!("name: {}", manifest.name);
     println!("version: {}", manifest.version);
-    println!(
-        "requested capabilities: {}",
-        manifest.requested_capabilities.len()
-    );
+    if manifest.requested_capabilities.is_empty() {
+        println!("requested capabilities: none");
+    } else {
+        println!("requested capabilities:");
+        for capability in manifest.requested_capabilities {
+            println!("- {capability}");
+        }
+    }
     Ok(())
 }
 
@@ -112,8 +123,8 @@ fn plugin_componentize(input: &str, output: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn plugin_run(path: &str, target: &str) -> Result<(), String> {
-    let mut engine = engine()?;
+fn plugin_run(path: &str, target: &str, flags: &[String]) -> Result<(), String> {
+    let mut engine = engine(parse_allow_flags(flags)?)?;
     let report = engine
         .run_plugin(PluginRunRequest {
             plugin: PluginRef::from_path(PathBuf::from(path)),
@@ -137,14 +148,39 @@ fn plugin_run(path: &str, target: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn engine() -> Result<CoreEngine<WasmRuntime, InMemoryPermissionStore, VecEventSink>, String> {
+fn engine(
+    allowed_capabilities: Vec<Capability>,
+) -> Result<CoreEngine<WasmRuntime, InMemoryPermissionStore, VecEventSink>, String> {
+    let mut permissions = InMemoryPermissionStore::default();
+    for capability in AppConfig::development().default_capabilities {
+        permissions.grant_for_all(capability);
+    }
+    for capability in allowed_capabilities {
+        permissions.grant_for_all(capability);
+    }
+
     CoreEngine::new(
         WasmRuntime::new(),
-        InMemoryPermissionStore::default(),
+        permissions,
         VecEventSink::default(),
         AppConfig::development(),
     )
     .map_err(|err| err.to_string())
+}
+
+fn parse_allow_flags(flags: &[String]) -> Result<Vec<Capability>, String> {
+    let mut capabilities = Vec::new();
+    let mut chunks = flags.chunks_exact(2);
+    for chunk in &mut chunks {
+        if chunk[0] != "--allow" {
+            return Err(format!("unknown plugin run flag: {}", chunk[0]));
+        }
+        capabilities.push(Capability::from_str(&chunk[1]).map_err(|err| err.to_string())?);
+    }
+    if !chunks.remainder().is_empty() {
+        return Err("expected `--allow <capability>`".to_string());
+    }
+    Ok(capabilities)
 }
 
 fn config_help() -> Result<(), String> {
@@ -158,7 +194,7 @@ fn plugin_help() -> Result<(), String> {
     println!("  polyglid plugin list");
     println!("  polyglid plugin inspect <plugin.wasm>");
     println!("  polyglid plugin componentize <module.wasm> <component.wasm>");
-    println!("  polyglid plugin run <plugin.wasm> --target <target>");
+    println!("  polyglid plugin run <plugin.wasm> --target <target> [--allow <capability>...]");
     Ok(())
 }
 
@@ -171,5 +207,5 @@ fn print_help() {
     println!("  polyglid plugin list");
     println!("  polyglid plugin inspect <plugin.wasm>");
     println!("  polyglid plugin componentize <module.wasm> <component.wasm>");
-    println!("  polyglid plugin run <plugin.wasm> --target <target>");
+    println!("  polyglid plugin run <plugin.wasm> --target <target> [--allow <capability>...]");
 }

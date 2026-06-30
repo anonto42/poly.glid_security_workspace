@@ -44,3 +44,10 @@ WASI componentization, Wasmtime execution, and `recon_probe` demo logic. `cargo
 fmt --all -- --check`, `cargo check --workspace`, `cargo test --workspace`,
 `cargo clippy --workspace -- -D warnings`, `polyglid doctor`, `polyglid config
 validate`, and real component plugin runs passed.
+
+## Phase 2 Started
+
+Added denied-by-default permission decisions, documented capability parsing,
+plugin manifest TOML parsing, CLI `--allow <capability>` grants, and audit
+events for allowed, denied, and failed capability checks. Workspace format,
+check, test, and clippy passes were green.

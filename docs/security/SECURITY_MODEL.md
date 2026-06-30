@@ -73,17 +73,20 @@ ReportWrite:
 
 Every plugin should declare requested capabilities.
 
-```yaml
-id: polyglid.recon_probe
-name: Recon Probe
-version: 0.1.0
-entry_world: security-tool
-capabilities:
-  - DnsResolve
-  - NetworkConnect
+First-party plugins use a `polyglid.toml` manifest next to the plugin source or
+next to the built component.
+
+```toml
+id = "polyglid.recon_probe"
+name = "Recon Probe"
+version = "0.1.0"
+entry_world = "security-tool"
+capabilities = ["dns-resolve", "network-connect"]
 ```
 
 The host compares requested capabilities against user-approved permissions.
+The CLI development harness grants a capability explicitly with
+`--allow <capability>`; no capability is approved by default.
 
 ## Runtime Controls
 
@@ -100,4 +103,3 @@ The host runtime should enforce:
 ## Safety Position
 
 PolyGlid should avoid building or shipping features whose main purpose is unauthorized access, persistence, stealth, credential abuse, or command-and-control activity. If a feature has dual-use risk, design it as an authorized defensive audit or lab-only validation tool with explicit guardrails.
-

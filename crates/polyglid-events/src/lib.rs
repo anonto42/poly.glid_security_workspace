@@ -19,9 +19,19 @@ pub enum PolyGlidEvent {
         plugin_id: PluginId,
         message: String,
     },
+    CapabilityAllowed {
+        plugin_id: PluginId,
+        capability: String,
+    },
     CapabilityDenied {
         plugin_id: PluginId,
         capability: String,
+        reason: String,
+    },
+    CapabilityCheckFailed {
+        plugin_id: PluginId,
+        capability: String,
+        message: String,
     },
 }
 
