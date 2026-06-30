@@ -2,6 +2,9 @@
 
 Build PolyGlid in thin vertical slices. Each slice should cross the real boundary from host to plugin and back.
 
+For the full phased build plan, see
+[`STEP_BY_STEP_DEVELOPMENT_FLOW.md`](STEP_BY_STEP_DEVELOPMENT_FLOW.md).
+
 ## Local Development Order
 
 1. Write or update the WIT contract.
@@ -14,12 +17,22 @@ Build PolyGlid in thin vertical slices. Each slice should cross the real boundar
 
 ## Early Commands
 
-Planned commands:
+Current commands:
 
 ```bash
-cargo test
-cargo run -p polyglid-cli -- plugin inspect ./target/wasm32-wasip1/release/recon_probe.wasm
-cargo run -p polyglid-cli -- plugin run ./target/wasm32-wasip1/release/recon_probe.wasm --target example.com
+cargo fmt --all -- --check
+cargo check --workspace
+cargo test --workspace
+cargo clippy --workspace -- -D warnings
+
+rustup target add wasm32-wasip1
+cargo build -p recon-probe --target wasm32-wasip1
+cargo run -p polyglid-cli -- plugin componentize \
+  target/wasm32-wasip1/debug/recon_probe.wasm \
+  target/wasm32-wasip1/debug/recon_probe.component.wasm
+cargo run -p polyglid-cli -- plugin run \
+  target/wasm32-wasip1/debug/recon_probe.component.wasm \
+  --target example.com
 ```
 
 ## Testing Strategy
@@ -46,4 +59,3 @@ Manual tests:
 ## Development Rule
 
 The GUI should never be the only way to test a plugin. Every plugin must be runnable through the development harness.
-

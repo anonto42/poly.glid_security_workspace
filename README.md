@@ -41,6 +41,7 @@ Recon, audit, reporting, diagnostics
 - [MVP Definition](docs/planning/MVP.md)
 - [Security Model](docs/security/SECURITY_MODEL.md)
 - [Development Workflow](docs/development/WORKFLOW.md)
+- [Step-By-Step Development Flow](docs/development/STEP_BY_STEP_DEVELOPMENT_FLOW.md)
 - [Packaging And Distribution](docs/development/PACKAGING.md)
 - [Brand Guide](docs/branding/README.md)
 

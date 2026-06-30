@@ -1,0 +1,14 @@
+[package]
+name = "polyglid-runtime"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+polyglid-core = { path = "../polyglid-core" }
+polyglid-plugin-api = { path = "../polyglid-plugin-api" }
+wasmtime = { version = "46.0.1", features = ["component-model"] }
+wasmtime-wasi = "46.0.1"
+
+[lib]
+path = "src/lib.rs"

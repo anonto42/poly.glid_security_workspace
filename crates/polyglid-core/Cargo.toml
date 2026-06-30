@@ -1,0 +1,13 @@
+[package]
+name = "polyglid-core"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+polyglid-config = { path = "../polyglid-config" }
+polyglid-events = { path = "../polyglid-events" }
+polyglid-plugin-api = { path = "../polyglid-plugin-api" }
+
+[lib]
+path = "src/lib.rs"
