@@ -62,3 +62,7 @@ Added persistent approval config loading through `POLYGLID_CONFIG`, with
 Added the first concrete host capability adapter: WIT `dns.resolve`. The runtime
 links the import, scopes it to the current run target, and `recon_probe` now
 requests `dns-resolve`.
+
+Added WIT `reports.write` as a scoped report output adapter. It writes only
+named files under `reports_dir`, rejects traversal, and is gated by
+`report-write`.

@@ -36,7 +36,8 @@ cargo run -p polyglid-cli -- plugin run \
 cargo run -p polyglid-cli -- plugin run \
   target/wasm32-wasip1/debug/recon_probe.component.wasm \
   --target localhost \
-  --allow dns-resolve
+  --allow dns-resolve \
+  --allow report-write
 POLYGLID_CONFIG=config.example.toml cargo run -p polyglid-cli -- config validate
 ```
 

@@ -6,7 +6,7 @@ wit_bindgen::generate!({
 });
 
 use crate::polyglid::engine::{
-    dns,
+    dns, reports,
     types::{Issue, Severity},
 };
 
@@ -14,7 +14,21 @@ struct ReconProbe;
 
 impl Guest for ReconProbe {
     fn execute(target: String) -> Result<PluginReport, String> {
-        let issues = analyze_target(&target, resolve_target(&target))
+        let mut observations = analyze_target(&target, resolve_target(&target));
+        observations.extend(
+            write_summary_report(&target)
+                .err()
+                .map(|message| ReconObservation {
+                    title: "Report write unavailable".to_string(),
+                    description: format!(
+                        "The report-write capability did not store a summary: {message}"
+                    ),
+                    recommendation: "Approve report-write for the configured reports directory."
+                        .to_string(),
+                }),
+        );
+
+        let issues = observations
             .into_iter()
             .map(|observation| Issue {
                 title: observation.title,
@@ -44,6 +58,25 @@ impl Guest for ReconProbe {
 
 fn resolve_target(target: &str) -> Result<Vec<String>, String> {
     dns::resolve(target)
+}
+
+fn write_summary_report(target: &str) -> Result<String, String> {
+    let filename = format!("recon-probe-{}.txt", report_safe_target(target));
+    let contents = format!("PolyGlid Recon Probe\nTarget: {target}\n");
+    reports::write(&filename, &contents)
+}
+
+fn report_safe_target(target: &str) -> String {
+    target
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }
 
 export!(ReconProbe);
@@ -128,5 +161,10 @@ mod tests {
     fn reports_dns_denial() {
         let observations = analyze_target("example.com", Err("denied".to_string()));
         assert_eq!(observations[0].title, "DNS resolution unavailable");
+    }
+
+    #[test]
+    fn sanitizes_report_filename_target() {
+        assert_eq!(report_safe_target("local/host:443"), "local-host-443");
     }
 }

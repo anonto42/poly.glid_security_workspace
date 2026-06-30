@@ -120,10 +120,15 @@ The host runtime should enforce:
 
 ## Host Capability Adapters
 
-The first concrete adapter is `dns.resolve`. Plugins import it through WIT
-instead of using raw WASI networking. The runtime scopes DNS resolution to the
-current run target, and core denies execution unless the plugin manifest requests
-`dns-resolve` and the host approval store grants it.
+The first concrete adapters are narrow WIT imports:
+
+- `dns.resolve` resolves only the current run target instead of exposing raw
+  networking.
+- `reports.write` writes a named report file under the configured `reports_dir`
+  and rejects absolute paths, separators, and traversal.
+
+Core denies execution unless the plugin manifest requests the matching
+capability and the host approval store grants it.
 
 ## Safety Position
 

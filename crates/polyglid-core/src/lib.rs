@@ -55,7 +55,11 @@ impl Target {
 
 pub trait PluginRuntime {
     fn inspect(&self, plugin: &PluginRef) -> Result<PluginManifest, CoreError>;
-    fn execute(&self, request: &PluginRunRequest) -> Result<PluginReport, CoreError>;
+    fn execute(
+        &self,
+        request: &PluginRunRequest,
+        config: &AppConfig,
+    ) -> Result<PluginReport, CoreError>;
 }
 
 pub trait PermissionStore {
@@ -199,7 +203,7 @@ where
             target: request.target.as_str().to_string(),
         });
 
-        match self.runtime.execute(&request) {
+        match self.runtime.execute(&request, &self.config) {
             Ok(report) => {
                 self.events.emit(PolyGlidEvent::PluginRunCompleted {
                     plugin_id: manifest.id,
@@ -283,7 +287,11 @@ mod tests {
             })
         }
 
-        fn execute(&self, request: &PluginRunRequest) -> Result<PluginReport, CoreError> {
+        fn execute(
+            &self,
+            request: &PluginRunRequest,
+            _config: &AppConfig,
+        ) -> Result<PluginReport, CoreError> {
             Ok(PluginReport {
                 plugin_name: "Demo".to_string(),
                 target_tested: request.target.as_str().to_string(),

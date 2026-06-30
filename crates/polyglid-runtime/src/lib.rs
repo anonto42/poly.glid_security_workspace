@@ -2,9 +2,10 @@
 
 use std::fs;
 use std::net::ToSocketAddrs;
-use std::path::{Path, PathBuf};
+use std::path::{Component as PathComponent, Path, PathBuf};
 use std::str::FromStr;
 
+use polyglid_config::AppConfig;
 use polyglid_core::{CoreError, PluginRef, PluginRunRequest, PluginRuntime};
 use polyglid_plugin_api::{
     Capability, CapabilityRequest, CapabilityScope, Issue as ApiIssue, PluginId, PluginManifest,
@@ -50,9 +51,17 @@ impl PluginRuntime for WasmRuntime {
         })
     }
 
-    fn execute(&self, request: &PluginRunRequest) -> Result<ApiPluginReport, CoreError> {
+    fn execute(
+        &self,
+        request: &PluginRunRequest,
+        config: &AppConfig,
+    ) -> Result<ApiPluginReport, CoreError> {
         ensure_file_exists(request.plugin.path())?;
-        run_component(request.plugin.path(), request.target.as_str())
+        run_component(
+            request.plugin.path(),
+            request.target.as_str(),
+            config.reports_dir.clone(),
+        )
     }
 }
 
@@ -166,7 +175,11 @@ fn manifest_stems(plugin_path: &Path) -> Vec<String> {
     stems
 }
 
-fn run_component(path: &Path, target: &str) -> Result<ApiPluginReport, CoreError> {
+fn run_component(
+    path: &Path,
+    target: &str,
+    reports_dir: PathBuf,
+) -> Result<ApiPluginReport, CoreError> {
     let mut config = Config::new();
     config.wasm_component_model(true);
 
@@ -179,7 +192,12 @@ fn run_component(path: &Path, target: &str) -> Result<ApiPluginReport, CoreError
         |state: &mut RuntimeState| state,
     )
     .map_runtime_error()?;
-    let mut store = Store::new(&engine, RuntimeState::new(target));
+    polyglid::engine::reports::add_to_linker::<RuntimeState, HasSelf<RuntimeState>>(
+        &mut linker,
+        |state: &mut RuntimeState| state,
+    )
+    .map_runtime_error()?;
+    let mut store = Store::new(&engine, RuntimeState::new(target, reports_dir));
 
     let bindings =
         SecurityTool::instantiate(&mut store, &component, &linker).map_runtime_error()?;
@@ -195,14 +213,16 @@ struct RuntimeState {
     table: ResourceTable,
     wasi: WasiCtx,
     allowed_dns_host: String,
+    reports_dir: PathBuf,
 }
 
 impl RuntimeState {
-    fn new(allowed_dns_host: &str) -> Self {
+    fn new(allowed_dns_host: &str, reports_dir: PathBuf) -> Self {
         Self {
             table: ResourceTable::new(),
             wasi: WasiCtxBuilder::new().build(),
             allowed_dns_host: allowed_dns_host.to_string(),
+            reports_dir,
         }
     }
 }
@@ -235,6 +255,32 @@ impl polyglid::engine::dns::Host for RuntimeState {
 
         Ok(addresses)
     }
+}
+
+impl polyglid::engine::reports::Host for RuntimeState {
+    fn write(&mut self, filename: String, contents: String) -> Result<String, String> {
+        let output_path = safe_report_path(&self.reports_dir, &filename)?;
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+        fs::write(&output_path, contents).map_err(|err| err.to_string())?;
+        Ok(output_path.display().to_string())
+    }
+}
+
+fn safe_report_path(reports_dir: &Path, filename: &str) -> Result<PathBuf, String> {
+    let path = Path::new(filename);
+    if path.as_os_str().is_empty() || path.is_absolute() {
+        return Err("report filename must be relative".to_string());
+    }
+    if path
+        .components()
+        .any(|component| !matches!(component, PathComponent::Normal(_)))
+    {
+        return Err("report filename cannot contain path separators or traversal".to_string());
+    }
+
+    Ok(reports_dir.join(path))
 }
 
 trait RuntimeResultExt<T> {
@@ -386,11 +432,43 @@ path_prefix = "/tmp/polyglid"
 
     #[test]
     fn dns_host_import_is_scoped_to_run_target() {
-        let mut state = RuntimeState::new("example.com");
+        let mut state = RuntimeState::new("example.com", PathBuf::from("reports"));
 
         let err = polyglid::engine::dns::Host::resolve(&mut state, "not-example.com".to_string())
             .expect_err("host is denied");
 
         assert_eq!(err, "dns-resolve is scoped to example.com");
+    }
+
+    #[test]
+    fn report_host_import_rejects_path_traversal() {
+        let err = safe_report_path(Path::new("reports"), "../escape.txt")
+            .expect_err("path traversal rejected");
+
+        assert_eq!(
+            err,
+            "report filename cannot contain path separators or traversal"
+        );
+    }
+
+    #[test]
+    fn report_host_import_writes_under_reports_dir() {
+        let dir = std::env::temp_dir().join(format!("polyglid-report-test-{}", std::process::id()));
+        let mut state = RuntimeState::new("example.com", dir.clone());
+
+        let path = polyglid::engine::reports::Host::write(
+            &mut state,
+            "demo.txt".to_string(),
+            "report body".to_string(),
+        )
+        .expect("report write");
+
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("report body"),
+            "report body"
+        );
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir(dir);
     }
 }

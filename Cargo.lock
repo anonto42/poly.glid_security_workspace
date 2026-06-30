@@ -1137,6 +1137,7 @@ version = "0.1.0"
 name = "polyglid-runtime"
 version = "0.1.0"
 dependencies = [
+ "polyglid-config",
  "polyglid-core",
  "polyglid-plugin-api",
  "serde",

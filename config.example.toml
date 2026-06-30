@@ -12,6 +12,11 @@ default_capabilities = []
 plugin_id = "polyglid.recon_probe"
 capability = "dns-resolve"
 
+[[approved_capabilities]]
+plugin_id = "polyglid.recon_probe"
+capability = "report-write"
+path_prefix = "reports"
+
 # A scoped global approval example.
 [[approved_capabilities]]
 capability = "network-connect"

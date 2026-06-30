@@ -11,6 +11,8 @@ decisions, scoped capability requests, and allowed/denied/failed capability
 audit events. Added `POLYGLID_CONFIG` persistent approval loading. Checks green.
 Added WIT `dns.resolve` as the first host capability adapter, scoped to the run
 target and gated by `dns-resolve`.
+Added WIT `reports.write` as the second host adapter, scoped to `reports_dir`
+and gated by `report-write`.
 
 NEXT: Continue Phase 2 by adding more host adapters only behind manifest
 requests, approvals, and scoped runtime checks.

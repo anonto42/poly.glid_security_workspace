@@ -1,4 +1,5 @@
 /target/
+/reports/
 
 # Local editor and OS noise
 .DS_Store
