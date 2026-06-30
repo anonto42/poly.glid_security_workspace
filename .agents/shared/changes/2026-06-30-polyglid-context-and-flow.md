@@ -51,3 +51,7 @@ Added denied-by-default permission decisions, documented capability parsing,
 plugin manifest TOML parsing, CLI `--allow <capability>` grants, and audit
 events for allowed, denied, and failed capability checks. Workspace format,
 check, test, and clippy passes were green.
+
+Added scoped capability request support so manifests can request target,
+path-prefix, or host/port scoped access while simple string capabilities remain
+supported.

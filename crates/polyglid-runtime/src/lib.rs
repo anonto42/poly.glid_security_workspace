@@ -6,8 +6,8 @@ use std::str::FromStr;
 
 use polyglid_core::{CoreError, PluginRef, PluginRunRequest, PluginRuntime};
 use polyglid_plugin_api::{
-    Capability, Issue as ApiIssue, PluginId, PluginManifest, PluginReport as ApiPluginReport,
-    Severity as ApiSeverity,
+    Capability, CapabilityRequest, CapabilityScope, Issue as ApiIssue, PluginId, PluginManifest,
+    PluginReport as ApiPluginReport, Severity as ApiSeverity,
 };
 use serde::Deserialize;
 use wasmtime::component::{Component, Linker};
@@ -88,12 +88,16 @@ fn read_manifest(path: &Path) -> Result<PluginManifest, CoreError> {
     let raw = fs::read_to_string(path).map_runtime_error()?;
     let manifest: RawPluginManifest = toml::from_str(&raw).map_runtime_error()?;
     let id = PluginId::new(manifest.id).map_err(|err| CoreError::Runtime(err.to_string()))?;
-    let requested_capabilities = manifest
+    let mut requested_capabilities = manifest
         .capabilities
         .into_iter()
         .map(|capability| Capability::from_str(&capability))
+        .map(|result| result.map(CapabilityRequest::unscoped))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|err| CoreError::Runtime(err.to_string()))?;
+    for request in manifest.capability_requests {
+        requested_capabilities.push(request.into_capability_request()?);
+    }
 
     Ok(PluginManifest {
         id,
@@ -112,6 +116,41 @@ struct RawPluginManifest {
     entry_world: Option<String>,
     #[serde(default)]
     capabilities: Vec<String>,
+    #[serde(default)]
+    capability_requests: Vec<RawCapabilityRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawCapabilityRequest {
+    capability: String,
+    #[serde(default)]
+    target: Option<String>,
+    #[serde(default)]
+    path_prefix: Option<String>,
+    #[serde(default)]
+    host: Option<String>,
+    #[serde(default)]
+    port: Option<u16>,
+}
+
+impl RawCapabilityRequest {
+    fn into_capability_request(self) -> Result<CapabilityRequest, CoreError> {
+        let capability = Capability::from_str(&self.capability)
+            .map_err(|err| CoreError::Runtime(err.to_string()))?;
+        let scope = match (self.target, self.path_prefix, self.host, self.port) {
+            (Some(target), None, None, None) => CapabilityScope::Target(target),
+            (None, Some(path_prefix), None, None) => CapabilityScope::PathPrefix(path_prefix),
+            (None, None, Some(host), Some(port)) => CapabilityScope::HostPort { host, port },
+            (None, None, None, None) => CapabilityScope::Any,
+            _ => {
+                return Err(CoreError::Runtime(
+                    "capability request must use one scope shape".to_string(),
+                ));
+            }
+        };
+
+        Ok(CapabilityRequest::new(capability, scope))
+    }
 }
 
 fn manifest_stems(plugin_path: &Path) -> Vec<String> {
@@ -256,7 +295,60 @@ capabilities = ["dns-resolve", "network-connect"]
         assert_eq!(manifest.id.as_str(), "polyglid.test");
         assert_eq!(
             manifest.requested_capabilities,
-            vec![Capability::DnsResolve, Capability::NetworkConnect]
+            vec![
+                CapabilityRequest::unscoped(Capability::DnsResolve),
+                CapabilityRequest::unscoped(Capability::NetworkConnect)
+            ]
+        );
+
+        let _ = std::fs::remove_file(manifest_path);
+        let _ = std::fs::remove_dir(dir);
+    }
+
+    #[test]
+    fn reads_scoped_plugin_manifest_requests() {
+        let dir = std::env::temp_dir().join(format!(
+            "polyglid-scoped-manifest-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let manifest_path = dir.join("polyglid.toml");
+        std::fs::write(
+            &manifest_path,
+            r#"
+id = "polyglid.test"
+name = "Test Plugin"
+version = "0.1.0"
+
+[[capability_requests]]
+capability = "network-connect"
+host = "example.com"
+port = 443
+
+[[capability_requests]]
+capability = "filesystem-read"
+path_prefix = "/tmp/polyglid"
+"#,
+        )
+        .expect("write manifest");
+
+        let manifest = read_manifest(&manifest_path).expect("manifest");
+
+        assert_eq!(
+            manifest.requested_capabilities,
+            vec![
+                CapabilityRequest::new(
+                    Capability::NetworkConnect,
+                    CapabilityScope::HostPort {
+                        host: "example.com".to_string(),
+                        port: 443,
+                    },
+                ),
+                CapabilityRequest::new(
+                    Capability::FilesystemRead,
+                    CapabilityScope::PathPrefix("/tmp/polyglid".to_string()),
+                ),
+            ]
         );
 
         let _ = std::fs::remove_file(manifest_path);

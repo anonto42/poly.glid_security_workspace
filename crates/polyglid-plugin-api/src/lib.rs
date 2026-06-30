@@ -156,7 +156,54 @@ pub struct PluginManifest {
     pub id: PluginId,
     pub name: String,
     pub version: String,
-    pub requested_capabilities: Vec<Capability>,
+    pub requested_capabilities: Vec<CapabilityRequest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapabilityRequest {
+    pub capability: Capability,
+    pub scope: CapabilityScope,
+}
+
+impl CapabilityRequest {
+    pub fn new(capability: Capability, scope: CapabilityScope) -> Self {
+        Self { capability, scope }
+    }
+
+    pub fn unscoped(capability: Capability) -> Self {
+        Self {
+            capability,
+            scope: CapabilityScope::Any,
+        }
+    }
+}
+
+impl fmt::Display for CapabilityRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.scope {
+            CapabilityScope::Any => write!(f, "{}", self.capability),
+            scope => write!(f, "{} ({scope})", self.capability),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CapabilityScope {
+    Any,
+    Target(String),
+    PathPrefix(String),
+    HostPort { host: String, port: u16 },
+}
+
+impl fmt::Display for CapabilityScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Any => f.write_str("any"),
+            Self::Target(target) => write!(f, "target={target}"),
+            Self::PathPrefix(path) => write!(f, "path-prefix={path}"),
+            Self::HostPort { host, port } => write!(f, "host={host},port={port}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,5 +238,21 @@ mod tests {
             Capability::DnsResolve
         );
         assert_eq!(Capability::FilesystemRead.to_string(), "filesystem-read");
+    }
+
+    #[test]
+    fn formats_scoped_capability_requests() {
+        let request = CapabilityRequest::new(
+            Capability::NetworkConnect,
+            CapabilityScope::HostPort {
+                host: "example.com".to_string(),
+                port: 443,
+            },
+        );
+
+        assert_eq!(
+            request.to_string(),
+            "network-connect (host=example.com,port=443)"
+        );
     }
 }

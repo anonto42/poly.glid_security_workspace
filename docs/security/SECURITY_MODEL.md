@@ -84,6 +84,19 @@ entry_world = "security-tool"
 capabilities = ["dns-resolve", "network-connect"]
 ```
 
+Scoped requests use explicit tables:
+
+```toml
+[[capability_requests]]
+capability = "network-connect"
+host = "example.com"
+port = 443
+
+[[capability_requests]]
+capability = "filesystem-read"
+path_prefix = "/tmp/polyglid"
+```
+
 The host compares requested capabilities against user-approved permissions.
 The CLI development harness grants a capability explicitly with
 `--allow <capability>`; no capability is approved by default.

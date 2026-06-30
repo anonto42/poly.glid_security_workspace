@@ -6,8 +6,8 @@ Use from the repo root unless noted.
 
 The Rust workspace exists with core/runtime/CLI/plugin crates. The CLI can
 componentize and run the demo WASM plugin through Wasmtime. Phase 2 permission
-model work has started with manifest parsing, explicit capability decisions,
-and denied-by-default checks.
+model work has started with manifest parsing, scoped capability requests,
+explicit capability decisions, and denied-by-default checks.
 
 ## Rust Quality
 
