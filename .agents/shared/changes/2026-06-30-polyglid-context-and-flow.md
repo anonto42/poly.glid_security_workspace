@@ -55,3 +55,6 @@ check, test, and clippy passes were green.
 Added scoped capability request support so manifests can request target,
 path-prefix, or host/port scoped access while simple string capabilities remain
 supported.
+
+Added persistent approval config loading through `POLYGLID_CONFIG`, with
+`config.example.toml` documenting global and plugin-specific capability grants.

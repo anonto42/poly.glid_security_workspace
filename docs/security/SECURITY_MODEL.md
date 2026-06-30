@@ -101,6 +101,11 @@ The host compares requested capabilities against user-approved permissions.
 The CLI development harness grants a capability explicitly with
 `--allow <capability>`; no capability is approved by default.
 
+Persistent approvals live in an app config loaded with `POLYGLID_CONFIG`.
+See `config.example.toml` for `[[approved_capabilities]]` examples. Temporary
+CLI `--allow` grants are useful for development but should not replace explicit
+stored approvals in real workflows.
+
 ## Runtime Controls
 
 The host runtime should enforce:

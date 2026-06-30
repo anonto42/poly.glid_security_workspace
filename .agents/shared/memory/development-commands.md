@@ -7,7 +7,8 @@ Use from the repo root unless noted.
 The Rust workspace exists with core/runtime/CLI/plugin crates. The CLI can
 componentize and run the demo WASM plugin through Wasmtime. Phase 2 permission
 model work has started with manifest parsing, scoped capability requests,
-explicit capability decisions, and denied-by-default checks.
+explicit capability decisions, persistent approval config, and denied-by-default
+checks.
 
 ## Rust Quality
 
@@ -27,6 +28,7 @@ cargo run -p polyglid-cli -- plugin inspect ./path/to/plugin.wasm
 cargo run -p polyglid-cli -- plugin componentize ./path/to/plugin.wasm ./path/to/plugin.component.wasm
 cargo run -p polyglid-cli -- plugin run ./path/to/plugin.component.wasm --target example.com
 cargo run -p polyglid-cli -- plugin run ./path/to/plugin.component.wasm --target example.com --allow dns-resolve
+POLYGLID_CONFIG=config.example.toml cargo run -p polyglid-cli -- config validate
 cargo run -p polyglid-cli -- config validate
 ```
 

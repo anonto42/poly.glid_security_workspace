@@ -36,9 +36,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         [command] if command == "doctor" => doctor(),
         [command] if command == "config" => config_help(),
         [command, subcommand] if command == "config" && subcommand == "validate" => {
-            AppConfig::development()
-                .validate()
-                .map_err(|err| err.to_string())?;
+            AppConfig::load_from_env().map_err(|err| err.to_string())?;
             println!("config: valid");
             Ok(())
         }
@@ -67,18 +65,16 @@ fn run(args: Vec<String>) -> Result<(), String> {
 }
 
 fn doctor() -> Result<(), String> {
-    AppConfig::development()
-        .validate()
-        .map_err(|err| err.to_string())?;
+    AppConfig::load_from_env().map_err(|err| err.to_string())?;
     println!("polyglid doctor");
     println!("workspace: ok");
     println!("config: ok");
-    println!("runtime: component execution pending");
+    println!("runtime: component execution available");
     Ok(())
 }
 
 fn plugin_list() -> Result<(), String> {
-    let config = AppConfig::development();
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
     println!("plugin directory: {}", config.plugin_dir.display());
     println!("installed plugin discovery is pending");
     Ok(())
@@ -151,9 +147,16 @@ fn plugin_run(path: &str, target: &str, flags: &[String]) -> Result<(), String> 
 fn engine(
     allowed_capabilities: Vec<Capability>,
 ) -> Result<CoreEngine<WasmRuntime, InMemoryPermissionStore, VecEventSink>, String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
     let mut permissions = InMemoryPermissionStore::default();
-    for capability in AppConfig::development().default_capabilities {
-        permissions.grant_for_all(capability);
+    for capability in &config.default_capabilities {
+        permissions.grant_for_all(*capability);
+    }
+    for grant in &config.approved_capabilities {
+        match &grant.plugin_id {
+            Some(plugin_id) => permissions.grant_request(plugin_id.clone(), grant.request.clone()),
+            None => permissions.grant_request_for_all(grant.request.clone()),
+        }
     }
     for capability in allowed_capabilities {
         permissions.grant_for_all(capability);
@@ -163,7 +166,7 @@ fn engine(
         WasmRuntime::new(),
         permissions,
         VecEventSink::default(),
-        AppConfig::development(),
+        config,
     )
     .map_err(|err| err.to_string())
 }
@@ -186,6 +189,7 @@ fn parse_allow_flags(flags: &[String]) -> Result<Vec<Capability>, String> {
 fn config_help() -> Result<(), String> {
     println!("config commands:");
     println!("  polyglid config validate");
+    println!("  POLYGLID_CONFIG=/path/to/config.toml polyglid config validate");
     Ok(())
 }
 

@@ -8,11 +8,11 @@ WIT host/guest bindings, WASI adapter componentization, Wasmtime execution, CLI
 `doctor/config/plugin` commands, deterministic `recon_probe` logic, plugin
 manifest parsing, capability display/parsing, denied-by-default permission
 decisions, scoped capability requests, and allowed/denied/failed capability
-audit events. Checks green.
+audit events. Added `POLYGLID_CONFIG` persistent approval loading. Checks green.
 
-NEXT: Continue Phase 2 by adding persistent approval storage and concrete host
-capability adapters. Do not expose network, filesystem, process, or env host
-functions without permission checks.
+NEXT: Continue Phase 2 by adding concrete host capability adapters. Do not
+expose network, filesystem, process, or env host functions without permission
+checks.
 
 HANDOFFS: Use `docs/development/STEP_BY_STEP_DEVELOPMENT_FLOW.md` as the build
 sequence. Use `.agents/shared/rules/polyglid-architecture.md` for Rust/WIT/
