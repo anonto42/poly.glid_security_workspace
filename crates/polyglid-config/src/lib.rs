@@ -11,6 +11,7 @@ use serde::Deserialize;
 pub struct AppConfig {
     pub plugin_dir: PathBuf,
     pub reports_dir: PathBuf,
+    pub max_wasm_fuel: u64,
     pub default_capabilities: Vec<Capability>,
     pub approved_capabilities: Vec<CapabilityGrant>,
 }
@@ -26,6 +27,7 @@ impl AppConfig {
         Self {
             plugin_dir: PathBuf::from("plugins"),
             reports_dir: PathBuf::from("reports"),
+            max_wasm_fuel: 25_000_000,
             default_capabilities: Vec::new(),
             approved_capabilities: Vec::new(),
         }
@@ -56,6 +58,7 @@ impl AppConfig {
                 .reports_dir
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("reports")),
+            max_wasm_fuel: raw_config.max_wasm_fuel.unwrap_or(25_000_000),
             default_capabilities: raw_config
                 .default_capabilities
                 .into_iter()
@@ -82,6 +85,9 @@ impl AppConfig {
         if self.reports_dir.as_os_str().is_empty() {
             return Err(ConfigError::EmptyReportsDir);
         }
+        if self.max_wasm_fuel == 0 {
+            return Err(ConfigError::EmptyFuelLimit);
+        }
         Ok(())
     }
 }
@@ -92,6 +98,8 @@ struct RawAppConfig {
     plugin_dir: Option<String>,
     #[serde(default)]
     reports_dir: Option<String>,
+    #[serde(default)]
+    max_wasm_fuel: Option<u64>,
     #[serde(default)]
     default_capabilities: Vec<String>,
     #[serde(default)]
@@ -141,6 +149,7 @@ impl RawCapabilityGrant {
 pub enum ConfigError {
     EmptyPluginDir,
     EmptyReportsDir,
+    EmptyFuelLimit,
     InvalidCapability(String),
     InvalidCapabilityScope,
     InvalidPluginId(String),
@@ -153,6 +162,7 @@ impl std::fmt::Display for ConfigError {
         match self {
             Self::EmptyPluginDir => f.write_str("plugin directory cannot be empty"),
             Self::EmptyReportsDir => f.write_str("reports directory cannot be empty"),
+            Self::EmptyFuelLimit => f.write_str("max wasm fuel must be greater than zero"),
             Self::InvalidCapability(message) => write!(f, "invalid capability: {message}"),
             Self::InvalidCapabilityScope => {
                 f.write_str("capability grant must use one scope shape")
@@ -178,6 +188,7 @@ mod tests {
             r#"
 plugin_dir = "plugins"
 reports_dir = "reports"
+max_wasm_fuel = 1000000
 default_capabilities = ["dns-resolve"]
 
 [[approved_capabilities]]
@@ -194,6 +205,7 @@ path_prefix = "/tmp/polyglid"
         .expect("config parses");
 
         assert_eq!(config.default_capabilities, vec![Capability::DnsResolve]);
+        assert_eq!(config.max_wasm_fuel, 1_000_000);
         assert_eq!(config.approved_capabilities.len(), 2);
         assert_eq!(
             config.approved_capabilities[0].request,
@@ -229,5 +241,12 @@ port = 443
         .expect_err("scope rejected");
 
         assert_eq!(err, ConfigError::InvalidCapabilityScope);
+    }
+
+    #[test]
+    fn rejects_zero_fuel_limit() {
+        let err = AppConfig::from_toml_str("max_wasm_fuel = 0").expect_err("fuel rejected");
+
+        assert_eq!(err, ConfigError::EmptyFuelLimit);
     }
 }

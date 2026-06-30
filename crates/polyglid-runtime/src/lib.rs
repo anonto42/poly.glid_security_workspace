@@ -61,6 +61,7 @@ impl PluginRuntime for WasmRuntime {
             request.plugin.path(),
             request.target.as_str(),
             config.reports_dir.clone(),
+            config.max_wasm_fuel,
         )
     }
 }
@@ -179,9 +180,11 @@ fn run_component(
     path: &Path,
     target: &str,
     reports_dir: PathBuf,
+    max_wasm_fuel: u64,
 ) -> Result<ApiPluginReport, CoreError> {
     let mut config = Config::new();
     config.wasm_component_model(true);
+    config.consume_fuel(true);
 
     let engine = Engine::new(&config).map_runtime_error()?;
     let component = Component::from_file(&engine, path).map_runtime_error()?;
@@ -198,6 +201,7 @@ fn run_component(
     )
     .map_runtime_error()?;
     let mut store = Store::new(&engine, RuntimeState::new(target, reports_dir));
+    store.set_fuel(max_wasm_fuel).map_runtime_error()?;
 
     let bindings =
         SecurityTool::instantiate(&mut store, &component, &linker).map_runtime_error()?;

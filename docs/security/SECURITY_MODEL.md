@@ -118,6 +118,10 @@ The host runtime should enforce:
 - structured error reporting
 - audit log for sensitive actions
 
+PolyGlid currently enforces a deterministic Wasmtime fuel budget through
+`max_wasm_fuel` in config. A plugin that exhausts its fuel traps instead of
+running indefinitely.
+
 ## Host Capability Adapters
 
 The first concrete adapters are narrow WIT imports:

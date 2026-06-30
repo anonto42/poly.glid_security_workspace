@@ -15,6 +15,7 @@ Added WIT `reports.write` as the second host adapter, scoped to `reports_dir`
 and gated by `report-write`.
 Added `scripts/run-mvp.sh` and `docs/development/MVP_RUNBOOK.md` so the current
 CLI MVP can be run locally with one command.
+Added Wasmtime fuel budgeting via `max_wasm_fuel`.
 
 NEXT: Continue Phase 2 by adding more host adapters only behind manifest
 requests, approvals, and scoped runtime checks.

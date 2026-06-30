@@ -10,6 +10,7 @@ model work has started with manifest parsing, scoped capability requests,
 explicit capability decisions, persistent approval config, and denied-by-default
 checks. Concrete host adapters include WIT `dns.resolve`, scoped to the run
 target, and WIT `reports.write`, scoped to `reports_dir`.
+Runtime execution is bounded by `max_wasm_fuel` in config.
 
 ## Rust Quality
 

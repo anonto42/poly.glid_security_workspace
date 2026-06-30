@@ -43,6 +43,9 @@ cargo run -p polyglid-cli -- plugin run \
 POLYGLID_CONFIG=config.example.toml cargo run -p polyglid-cli -- config validate
 ```
 
+Set `max_wasm_fuel` in `config.example.toml` or another `POLYGLID_CONFIG` file
+to tune the per-run Wasmtime fuel budget.
+
 ## Testing Strategy
 
 Unit tests:

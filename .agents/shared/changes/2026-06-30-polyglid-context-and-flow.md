@@ -69,3 +69,6 @@ named files under `reports_dir`, rejects traversal, and is gated by
 
 Added `scripts/run-mvp.sh` and `docs/development/MVP_RUNBOOK.md` to make the
 current CLI MVP runnable with one command.
+
+Added a configurable Wasmtime fuel budget through `max_wasm_fuel` to prevent
+unbounded plugin execution.

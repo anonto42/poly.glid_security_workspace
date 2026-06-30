@@ -2,6 +2,7 @@
 
 plugin_dir = "plugins"
 reports_dir = "reports"
+max_wasm_fuel = 25000000
 
 # Global capabilities granted to all plugins. Keep empty unless a local
 # development workflow truly needs a default.
