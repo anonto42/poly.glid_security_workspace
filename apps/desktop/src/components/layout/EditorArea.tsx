@@ -1,5 +1,6 @@
 import { Play, AlertCircle } from 'lucide-react';
-import { PluginInfo } from '../../types';
+import { PluginInfo, Report } from '../../types';
+import { PanelRenderer } from './PanelRenderer';
 
 interface EditorAreaProps {
   activeTab: string;
@@ -12,6 +13,7 @@ interface EditorAreaProps {
   onRunPlugin: (target: string) => Promise<void>;
   loading: boolean;
   error: string | null;
+  report: Report | null;
 }
 
 export function EditorArea({
@@ -25,6 +27,7 @@ export function EditorArea({
   onRunPlugin,
   loading,
   error,
+  report,
 }: EditorAreaProps) {
   const pluginRustCode = `//! Harmless first-party demo plugin logic.
 
@@ -61,8 +64,17 @@ impl Guest for ReconProbe {
           className={`px-4 py-2 text-sm cursor-pointer flex items-center space-x-2 border-r border-gray-800 ${activeTab === 'dashboard' ? 'bg-[#1e1e1e] text-white border-t-2 border-blue-500' : 'text-gray-400 hover:bg-[#1e1e1e]/50'}`}
         >
           <span className="text-blue-400">⚡</span>
-          <span>Scanner Dashboard</span>
+          <span>Scanner Configuration</span>
         </div>
+        {report && (
+          <div 
+            onClick={() => setActiveTab('result')}
+            className={`px-4 py-2 text-sm cursor-pointer flex items-center space-x-2 border-r border-gray-800 ${activeTab === 'result' ? 'bg-[#1e1e1e] text-white border-t-2 border-blue-500' : 'text-gray-400 hover:bg-[#1e1e1e]/50'}`}
+          >
+            <span className="text-green-400">📊</span>
+            <span>Result Dashboard</span>
+          </div>
+        )}
         <div 
           onClick={() => setActiveTab('source')}
           className={`px-4 py-2 text-sm cursor-pointer flex items-center space-x-2 border-r border-gray-800 ${activeTab === 'source' ? 'bg-[#1e1e1e] text-white border-t-2 border-blue-500' : 'text-gray-400 hover:bg-[#1e1e1e]/50'}`}
@@ -73,12 +85,16 @@ impl Guest for ReconProbe {
       </div>
       
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'source' ? (
+        {activeTab === 'source' && (
           <div className="p-4 font-mono text-xs text-gray-300 leading-relaxed overflow-x-auto">
             <div className="text-gray-500 select-none border-b border-gray-800 pb-2 mb-2">// Read-only plugin source code</div>
             <pre className="text-green-400/90">{pluginRustCode}</pre>
           </div>
-        ) : (
+        )}
+        {activeTab === 'result' && report && (
+          <PanelRenderer layout={report.panel} />
+        )}
+        {activeTab === 'dashboard' && (
           <div className="p-8 max-w-3xl mx-auto space-y-8">
             <div>
               <h1 className="text-3xl font-light text-white mb-2 text-center">Security Scanner</h1>
@@ -112,7 +128,7 @@ impl Guest for ReconProbe {
                 >
                   {plugins.map((plugin) => (
                     <option key={plugin.path} value={plugin.path}>
-                      {plugin.name} ({plugin.path})
+                      {plugin.displayName || plugin.name} ({plugin.path})
                     </option>
                   ))}
                 </select>

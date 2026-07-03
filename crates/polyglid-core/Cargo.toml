@@ -8,6 +8,9 @@ version.workspace = true
 polyglid-config = { path = "../polyglid-config" }
 polyglid-events = { path = "../polyglid-events" }
 polyglid-plugin-api = { path = "../polyglid-plugin-api" }
+tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [lib]
 path = "src/lib.rs"

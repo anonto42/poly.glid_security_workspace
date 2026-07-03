@@ -13,6 +13,8 @@ use wasi_preview1_component_adapter_provider::{
     WASI_SNAPSHOT_PREVIEW1_ADAPTER_NAME, WASI_SNAPSHOT_PREVIEW1_REACTOR_ADAPTER,
 };
 
+pub(crate) mod tui;
+
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
         Ok(()) => ExitCode::SUCCESS,
@@ -25,10 +27,7 @@ fn main() -> ExitCode {
 
 fn run(args: Vec<String>) -> Result<(), String> {
     match args.as_slice() {
-        [] => {
-            print_help();
-            Ok(())
-        }
+        [] => tui::event_loop(),
         [flag] if flag == "--help" || flag == "-h" => {
             print_help();
             Ok(())
@@ -144,7 +143,7 @@ fn plugin_run(path: &str, target: &str, flags: &[String]) -> Result<(), String> 
     Ok(())
 }
 
-fn engine(
+pub(crate) fn engine(
     allowed_capabilities: Vec<Capability>,
 ) -> Result<CoreEngine<WasmRuntime, InMemoryPermissionStore, VecEventSink>, String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
@@ -171,7 +170,7 @@ fn engine(
     .map_err(|err| err.to_string())
 }
 
-fn parse_allow_flags(flags: &[String]) -> Result<Vec<Capability>, String> {
+pub(crate) fn parse_allow_flags(flags: &[String]) -> Result<Vec<Capability>, String> {
     let mut capabilities = Vec::new();
     let mut chunks = flags.chunks_exact(2);
     for chunk in &mut chunks {

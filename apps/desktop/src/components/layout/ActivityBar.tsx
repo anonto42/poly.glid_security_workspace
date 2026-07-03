@@ -1,4 +1,4 @@
-import { FileSearch, Settings, Code2, Network } from 'lucide-react';
+import { FileSearch, Settings, Network } from 'lucide-react';
 
 interface ActivityBarProps {
   activeView: string;

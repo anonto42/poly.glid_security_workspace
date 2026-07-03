@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Report } from "./types";
 import { ActivityBar } from "./components/layout/ActivityBar";
@@ -28,6 +28,32 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Dynamic discovery on startup for initial plugins
+  useEffect(() => {
+    const fetchMetadata = async () => {
+      const updated = await Promise.all(
+        plugins.map(async (p) => {
+          try {
+            const meta: any = await invoke("inspect_plugin_wasm", { pluginPath: p.path });
+            return {
+              ...p,
+              displayName: meta.display_name,
+              version: meta.version,
+              description: meta.description,
+              author: meta.author,
+              requiredCapabilities: meta.required_capabilities,
+            };
+          } catch (e) {
+            console.error("Failed to inspect plugin metadata for path:", p.path, e);
+            return p;
+          }
+        })
+      );
+      setPlugins(updated);
+    };
+    fetchMetadata();
+  }, []);
+
   const handleTargetSelect = (tgt: string) => {
     setSelectedTarget(tgt);
     setActiveEditorTab("dashboard");
@@ -47,9 +73,22 @@ function App() {
     }
   };
 
-  const handleAddPlugin = (name: string, path: string) => {
+  const handleAddPlugin = async (name: string, path: string) => {
     if (!plugins.some(p => p.path === path)) {
-      const newPlugin = { name, path };
+      let metaDetails = {};
+      try {
+        const meta: any = await invoke("inspect_plugin_wasm", { pluginPath: path });
+        metaDetails = {
+          displayName: meta.display_name,
+          version: meta.version,
+          description: meta.description,
+          author: meta.author,
+          requiredCapabilities: meta.required_capabilities,
+        };
+      } catch (e) {
+        console.error("Failed to inspect added plugin metadata:", e);
+      }
+      const newPlugin = { name, path, ...metaDetails };
       setPlugins([...plugins, newPlugin]);
       setSelectedPlugin(path);
     }
@@ -71,6 +110,9 @@ function App() {
       const res: Report = await invoke("run_plugin", { pluginPath: selectedPlugin, target });
       setReport(res);
       setActiveBottomTab("problems");
+      if (res.panel) {
+        setActiveEditorTab("result");
+      }
     } catch (err: any) {
       setError(err.toString());
     } finally {
@@ -112,6 +154,7 @@ function App() {
             onRunPlugin={handleRunPlugin}
             loading={loading}
             error={error}
+            report={report}
           />
           <BottomPanel 
             activeTab={activeBottomTab}

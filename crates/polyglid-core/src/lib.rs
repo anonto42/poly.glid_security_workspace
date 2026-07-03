@@ -9,6 +9,8 @@ use polyglid_plugin_api::{
     Capability, CapabilityRequest, CapabilityScope, PluginId, PluginManifest, PluginReport,
 };
 
+pub mod execution;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginRef {
     path: PathBuf,
@@ -60,6 +62,25 @@ pub trait PluginRuntime {
         request: &PluginRunRequest,
         config: &AppConfig,
     ) -> Result<PluginReport, CoreError>;
+    fn cancel(&self, _job_id: uuid::Uuid) -> Result<(), CoreError> {
+        Ok(())
+    }
+}
+
+impl<R: PluginRuntime + ?Sized> PluginRuntime for std::sync::Arc<R> {
+    fn inspect(&self, plugin: &PluginRef) -> Result<PluginManifest, CoreError> {
+        (**self).inspect(plugin)
+    }
+    fn execute(
+        &self,
+        request: &PluginRunRequest,
+        config: &AppConfig,
+    ) -> Result<PluginReport, CoreError> {
+        (**self).execute(request, config)
+    }
+    fn cancel(&self, job_id: uuid::Uuid) -> Result<(), CoreError> {
+        (**self).cancel(job_id)
+    }
 }
 
 pub trait PermissionStore {
@@ -227,6 +248,14 @@ where
 
     pub fn events(&self) -> &E {
         &self.events
+    }
+
+    pub fn runtime(&self) -> &R {
+        &self.runtime
+    }
+
+    pub fn runtime_mut(&mut self) -> &mut R {
+        &mut self.runtime
     }
 }
 

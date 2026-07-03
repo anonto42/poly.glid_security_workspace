@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Shield, Globe } from 'lucide-react';
+import { Plus, Trash2, Shield, Globe, Award, Key } from 'lucide-react';
 import { PluginInfo } from '../../types';
 
 interface SideBarProps {
@@ -90,30 +90,62 @@ export function SideBar({
             </button>
           </form>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
               Loaded Plugins
             </div>
             
-            <div className="space-y-2">
+            <div className="space-y-3">
               {plugins.map((plugin) => (
-                <div key={plugin.path} className="bg-[#1e1e1e] p-2.5 rounded border border-gray-800 flex justify-between items-start group">
-                  <div className="min-w-0 flex-1 mr-2">
-                    <div className="flex items-center space-x-1.5 text-green-400 font-medium text-xs">
-                      <Shield size={12} className="shrink-0" />
-                      <span className="truncate">{plugin.name}</span>
+                <div key={plugin.path} className="bg-[#1e1e1e] p-3 rounded border border-gray-800 flex flex-col gap-2 group">
+                  <div className="flex justify-between items-start">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center space-x-1.5 text-green-400 font-medium text-xs">
+                        <Shield size={12} className="shrink-0" />
+                        <span className="truncate">{plugin.displayName || plugin.name}</span>
+                      </div>
+                      <div className="text-[9px] text-gray-500 font-mono truncate mt-0.5" title={plugin.path}>
+                        {plugin.path}
+                      </div>
                     </div>
-                    <div className="text-[9px] text-gray-500 font-mono truncate mt-0.5" title={plugin.path}>
-                      {plugin.path}
-                    </div>
+                    {plugins.length > 1 && (
+                      <button 
+                        onClick={() => onRemovePlugin(plugin.path)}
+                        className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
-                  {plugins.length > 1 && (
-                    <button 
-                      onClick={() => onRemovePlugin(plugin.path)}
-                      className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+
+                  {plugin.version && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                      <Award size={10} className="text-blue-400 shrink-0" />
+                      <span>Version {plugin.version}</span>
+                      {plugin.author && <span className="text-gray-600">by {plugin.author}</span>}
+                    </div>
+                  )}
+
+                  {plugin.description && (
+                    <p className="text-[10px] text-gray-500 leading-normal border-t border-gray-800/40 pt-1.5">
+                      {plugin.description}
+                    </p>
+                  )}
+
+                  {plugin.requiredCapabilities && plugin.requiredCapabilities.length > 0 && (
+                    <div className="border-t border-gray-800/40 pt-1.5">
+                      <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Key size={10} className="text-yellow-500" />
+                        <span>Required Scopes</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {plugin.requiredCapabilities.map((cap) => (
+                          <span key={cap} className="px-1.5 py-0.5 rounded bg-[#27273a] text-yellow-500 font-mono text-[9px] border border-yellow-500/10">
+                            {cap}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}
@@ -196,11 +228,22 @@ export function SideBar({
           <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider px-2 mb-2">
             ACTIVE PLUGINS
           </div>
-          <div className="space-y-1">
+          <div className="space-y-2">
             {plugins.map((plugin) => (
-              <div key={plugin.path} className="px-2 py-1 text-xs text-green-400 font-mono flex items-center space-x-2 truncate">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 shrink-0"></span>
-                <span className="truncate">{plugin.name}</span>
+              <div key={plugin.path} className="px-2 py-1 rounded bg-[#1c1c1c]/50 border border-gray-800/40 mx-2 flex flex-col gap-1 min-w-0">
+                <div className="text-xs text-green-400 font-mono flex items-center space-x-2 truncate">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 shrink-0"></span>
+                  <span className="truncate">{plugin.displayName || plugin.name}</span>
+                </div>
+                {plugin.requiredCapabilities && plugin.requiredCapabilities.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pl-3.5 mt-0.5">
+                    {plugin.requiredCapabilities.map((cap) => (
+                      <span key={cap} className="px-1 text-[8px] rounded bg-[#27273a] text-yellow-500 font-mono">
+                        {cap.split(' ')[0]}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

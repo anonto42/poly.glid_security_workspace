@@ -1,4 +1,11 @@
 //! Harmless first-party demo plugin logic.
+//!
+//! This plugin is a self-contained WASM component that exports:
+//! - `execute(target)` — the security analysis logic
+//! - `metadata()` — embedded plugin description
+//! - `required_capabilities()` — capability requirements
+//! - `cli_panel(report)` — structured TUI layout for results
+//! - `desktop_panel(report)` — structured desktop layout for results
 
 wit_bindgen::generate!({
     world: "security-tool",
@@ -7,7 +14,7 @@ wit_bindgen::generate!({
 
 use crate::polyglid::engine::{
     dns, reports,
-    types::{Issue, Severity},
+    types::{Issue, PanelWidget, Severity, WidgetType},
 };
 
 struct ReconProbe;
@@ -53,6 +60,81 @@ impl Guest for ReconProbe {
             issues,
             summary,
         })
+    }
+
+    fn metadata() -> PluginMetadata {
+        PluginMetadata {
+            name: "recon_probe".to_string(),
+            display_name: "Reconnaissance Probe".to_string(),
+            version: "0.1.0".to_string(),
+            description: "Performs secure DNS resolutions and reports network structure."
+                .to_string(),
+            author: "PolyGlid Core Team".to_string(),
+        }
+    }
+
+    fn required_capabilities() -> Vec<String> {
+        vec!["dns-resolve".to_string(), "report-write".to_string()]
+    }
+
+    fn cli_panel(report: PluginReport) -> PanelLayout {
+        let mut widgets = Vec::new();
+
+        // Issues table
+        let mut table_data = vec![vec![
+            "Severity".to_string(),
+            "Title".to_string(),
+            "Description".to_string(),
+        ]];
+        for issue in &report.issues {
+            table_data.push(vec![
+                format!("{:?}", issue.severity),
+                issue.title.clone(),
+                issue.description.clone(),
+            ]);
+        }
+        widgets.push(PanelWidget {
+            widget_kind: WidgetType::Table,
+            title: "Security Observations".to_string(),
+            data: table_data,
+        });
+
+        // Summary key-value
+        widgets.push(PanelWidget {
+            widget_kind: WidgetType::KeyValue,
+            title: "Scan Summary".to_string(),
+            data: vec![
+                vec!["Plugin".to_string(), report.plugin_name.clone()],
+                vec!["Target".to_string(), report.target_tested.clone()],
+                vec!["Issues Found".to_string(), report.issues.len().to_string()],
+                vec!["Summary".to_string(), report.summary.clone()],
+            ],
+        });
+
+        // Recommendations
+        let rec_data: Vec<Vec<String>> = report
+            .issues
+            .iter()
+            .map(|issue| vec![issue.recommendation.clone()])
+            .collect();
+        if !rec_data.is_empty() {
+            widgets.push(PanelWidget {
+                widget_kind: WidgetType::TextBlock,
+                title: "Recommendations".to_string(),
+                data: rec_data,
+            });
+        }
+
+        PanelLayout {
+            title: "Recon Probe Results".to_string(),
+            widgets,
+        }
+    }
+
+    fn desktop_panel(report: PluginReport) -> PanelLayout {
+        // Desktop uses the same layout as CLI for now.
+        // Plugin authors can customize this for richer rendering.
+        Self::cli_panel(report)
     }
 }
 

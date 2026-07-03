@@ -8,8 +8,9 @@ use std::str::FromStr;
 use polyglid_config::AppConfig;
 use polyglid_core::{CoreError, PluginRef, PluginRunRequest, PluginRuntime};
 use polyglid_plugin_api::{
-    Capability, CapabilityRequest, CapabilityScope, Issue as ApiIssue, PluginId, PluginManifest,
-    PluginReport as ApiPluginReport, Severity as ApiSeverity,
+    ApiPluginMetadata, Capability, CapabilityRequest, CapabilityScope, Issue as ApiIssue,
+    PanelLayout as ApiPanelLayout, PanelWidget as ApiPanelWidget, PluginId, PluginManifest,
+    PluginReport as ApiPluginReport, Severity as ApiSeverity, WidgetKind as ApiWidgetKind,
 };
 use serde::Deserialize;
 use wasmtime::component::{Component, HasSelf, Linker};
@@ -20,6 +21,35 @@ wasmtime::component::bindgen!({
     world: "security-tool",
     path: "../../wit",
 });
+
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use uuid::Uuid;
+
+pub static ACTIVE_ENGINES: OnceLock<Mutex<HashMap<Uuid, wasmtime::Engine>>> = OnceLock::new();
+
+use polyglid_core::execution::CURRENT_JOB_ID;
+
+pub fn register_engine(id: Uuid, engine: wasmtime::Engine) {
+    let map = ACTIVE_ENGINES.get_or_init(|| Mutex::new(HashMap::new()));
+    map.lock().unwrap().insert(id, engine);
+}
+
+pub fn unregister_engine(id: Uuid) {
+    if let Some(map) = ACTIVE_ENGINES.get() {
+        map.lock().unwrap().remove(&id);
+    }
+}
+
+pub fn interrupt_engine(id: Uuid) -> bool {
+    if let Some(map) = ACTIVE_ENGINES.get() {
+        if let Some(engine) = map.lock().unwrap().get(&id) {
+            engine.increment_epoch();
+            return true;
+        }
+    }
+    false
+}
 
 #[derive(Debug, Default)]
 pub struct WasmRuntime;
@@ -33,6 +63,28 @@ impl WasmRuntime {
 impl PluginRuntime for WasmRuntime {
     fn inspect(&self, plugin: &PluginRef) -> Result<PluginManifest, CoreError> {
         ensure_file_exists(plugin.path())?;
+
+        // Try to extract metadata from the WASM component itself first.
+        if let Ok((metadata, capabilities)) = inspect_from_wasm(plugin.path()) {
+            let id =
+                PluginId::new(&metadata.name).map_err(|err| CoreError::Runtime(err.to_string()))?;
+            let requested_capabilities = capabilities
+                .into_iter()
+                .map(|cap_str| {
+                    Capability::from_str(&cap_str)
+                        .map(CapabilityRequest::unscoped)
+                        .map_err(|err| CoreError::Runtime(err.to_string()))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(PluginManifest {
+                id,
+                name: metadata.display_name,
+                version: metadata.version,
+                requested_capabilities,
+            });
+        }
+
+        // Fallback: try side-car manifest file (legacy path).
         if let Some(manifest_path) = manifest_path_for(plugin.path()) {
             return read_manifest(&manifest_path);
         }
@@ -63,6 +115,37 @@ impl PluginRuntime for WasmRuntime {
             config.reports_dir.clone(),
             config.max_wasm_fuel,
         )
+    }
+
+    fn cancel(&self, job_id: uuid::Uuid) -> Result<(), CoreError> {
+        interrupt_engine(job_id);
+        Ok(())
+    }
+}
+
+impl WasmRuntime {
+    /// Call the plugin's `metadata()` export to get embedded self-description.
+    pub fn call_metadata(&self, plugin: &PluginRef) -> Result<ApiPluginMetadata, CoreError> {
+        let (metadata, _) = inspect_from_wasm(plugin.path())?;
+        Ok(metadata)
+    }
+
+    /// Call the plugin's `cli-panel(report)` export to get a TUI layout.
+    pub fn call_cli_panel(
+        &self,
+        plugin: &PluginRef,
+        report: &ApiPluginReport,
+    ) -> Result<ApiPanelLayout, CoreError> {
+        call_panel_export(plugin.path(), report, PanelKind::Cli)
+    }
+
+    /// Call the plugin's `desktop-panel(report)` export to get a desktop layout.
+    pub fn call_desktop_panel(
+        &self,
+        plugin: &PluginRef,
+        report: &ApiPluginReport,
+    ) -> Result<ApiPanelLayout, CoreError> {
+        call_panel_export(plugin.path(), report, PanelKind::Desktop)
     }
 }
 
@@ -176,18 +259,63 @@ fn manifest_stems(plugin_path: &Path) -> Vec<String> {
     stems
 }
 
-fn run_component(
+/// Instantiate the WASM component and call `metadata()` + `required-capabilities()`.
+fn inspect_from_wasm(path: &Path) -> Result<(ApiPluginMetadata, Vec<String>), CoreError> {
+    let (mut store, bindings) =
+        instantiate_plugin(path, "_inspect_", PathBuf::from("reports"), 1_000_000)?;
+    let metadata = bindings.call_metadata(&mut store).map_runtime_error()?;
+    let capabilities = bindings
+        .call_required_capabilities(&mut store)
+        .map_runtime_error()?;
+    Ok((metadata.into(), capabilities))
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PanelKind {
+    Cli,
+    Desktop,
+}
+
+/// Instantiate the WASM component and call `cli-panel(report)` or `desktop-panel(report)`.
+fn call_panel_export(
     path: &Path,
-    target: &str,
+    report: &ApiPluginReport,
+    kind: PanelKind,
+) -> Result<ApiPanelLayout, CoreError> {
+    let (mut store, bindings) =
+        instantiate_plugin(path, "_panel_", PathBuf::from("reports"), 1_000_000)?;
+    let wit_report = api_report_to_wit(report);
+    let panel = match kind {
+        PanelKind::Cli => bindings
+            .call_cli_panel(&mut store, &wit_report)
+            .map_runtime_error()?,
+        PanelKind::Desktop => bindings
+            .call_desktop_panel(&mut store, &wit_report)
+            .map_runtime_error()?,
+    };
+    Ok(panel.into())
+}
+
+/// Shared helper: build engine + linker + store + instantiate the plugin.
+fn instantiate_plugin(
+    path: &Path,
+    allowed_dns_host: &str,
     reports_dir: PathBuf,
-    max_wasm_fuel: u64,
-) -> Result<ApiPluginReport, CoreError> {
+    max_fuel: u64,
+) -> Result<(Store<RuntimeState>, SecurityTool), CoreError> {
     let mut config = Config::new();
     config.wasm_component_model(true);
     config.consume_fuel(true);
+    config.epoch_interruption(true);
 
     let engine = Engine::new(&config).map_runtime_error()?;
     let component = Component::from_file(&engine, path).map_runtime_error()?;
+    
+    // Register the engine clone under the current job ID if configured
+    if let Some(job_id) = CURRENT_JOB_ID.with(|id| id.get()) {
+        register_engine(job_id, engine.clone());
+    }
+
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_runtime_error()?;
     polyglid::engine::dns::add_to_linker::<RuntimeState, HasSelf<RuntimeState>>(
@@ -200,17 +328,58 @@ fn run_component(
         |state: &mut RuntimeState| state,
     )
     .map_runtime_error()?;
-    let mut store = Store::new(&engine, RuntimeState::new(target, reports_dir));
-    store.set_fuel(max_wasm_fuel).map_runtime_error()?;
+    
+    let mut store = Store::new(&engine, RuntimeState::new(allowed_dns_host, reports_dir));
+    store.set_fuel(max_fuel).map_runtime_error()?;
+    store.set_epoch_deadline(1);
 
     let bindings =
         SecurityTool::instantiate(&mut store, &component, &linker).map_runtime_error()?;
-    let report = bindings
+    Ok((store, bindings))
+}
+
+fn run_component(
+    path: &Path,
+    target: &str,
+    reports_dir: PathBuf,
+    max_wasm_fuel: u64,
+) -> Result<ApiPluginReport, CoreError> {
+    let (mut store, bindings) = instantiate_plugin(path, target, reports_dir, max_wasm_fuel)?;
+    let result = bindings
         .call_execute(&mut store, target)
         .map_runtime_error()?
-        .map_err(CoreError::Runtime)?;
+        .map_err(CoreError::Runtime);
 
-    Ok(report.into())
+    if let Some(job_id) = CURRENT_JOB_ID.with(|id| id.get()) {
+        unregister_engine(job_id);
+    }
+
+    result.map(Into::into)
+}
+
+/// Convert host API report back to the WIT representation (needed for panel calls).
+fn api_report_to_wit(report: &ApiPluginReport) -> PluginReport {
+    PluginReport {
+        plugin_name: report.plugin_name.clone(),
+        target_tested: report.target_tested.clone(),
+        issues: report
+            .issues
+            .iter()
+            .map(|issue| polyglid::engine::types::Issue {
+                title: issue.title.clone(),
+                severity: match issue.severity {
+                    ApiSeverity::Info => polyglid::engine::types::Severity::Info,
+                    ApiSeverity::Low => polyglid::engine::types::Severity::Low,
+                    ApiSeverity::Medium => polyglid::engine::types::Severity::Medium,
+                    ApiSeverity::High => polyglid::engine::types::Severity::High,
+                    ApiSeverity::Critical => polyglid::engine::types::Severity::Critical,
+                },
+                description: issue.description.clone(),
+                recommendation: issue.recommendation.clone(),
+            })
+            .collect(),
+        summary: report.summary.clone(),
+    }
 }
 
 struct RuntimeState {
@@ -330,6 +499,50 @@ impl From<polyglid::engine::types::Severity> for ApiSeverity {
             polyglid::engine::types::Severity::Medium => Self::Medium,
             polyglid::engine::types::Severity::High => Self::High,
             polyglid::engine::types::Severity::Critical => Self::Critical,
+        }
+    }
+}
+
+impl From<polyglid::engine::types::PluginMetadata> for ApiPluginMetadata {
+    fn from(m: polyglid::engine::types::PluginMetadata) -> Self {
+        Self {
+            name: m.name,
+            display_name: m.display_name,
+            version: m.version,
+            description: m.description,
+            author: m.author,
+        }
+    }
+}
+
+impl From<polyglid::engine::types::PanelLayout> for ApiPanelLayout {
+    fn from(layout: polyglid::engine::types::PanelLayout) -> Self {
+        Self {
+            title: layout.title,
+            widgets: layout.widgets.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<polyglid::engine::types::PanelWidget> for ApiPanelWidget {
+    fn from(widget: polyglid::engine::types::PanelWidget) -> Self {
+        Self {
+            widget_kind: widget.widget_kind.into(),
+            title: widget.title,
+            data: widget.data,
+        }
+    }
+}
+
+impl From<polyglid::engine::types::WidgetType> for ApiWidgetKind {
+    fn from(wt: polyglid::engine::types::WidgetType) -> Self {
+        match wt {
+            polyglid::engine::types::WidgetType::Table => Self::Table,
+            polyglid::engine::types::WidgetType::KeyValue => Self::KeyValue,
+            polyglid::engine::types::WidgetType::Tree => Self::Tree,
+            polyglid::engine::types::WidgetType::Log => Self::Log,
+            polyglid::engine::types::WidgetType::ChartBar => Self::ChartBar,
+            polyglid::engine::types::WidgetType::TextBlock => Self::TextBlock,
         }
     }
 }

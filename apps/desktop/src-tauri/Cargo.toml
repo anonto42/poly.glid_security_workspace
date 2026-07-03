@@ -27,4 +27,5 @@ polyglid-core = { path = "../../../crates/polyglid-core" }
 polyglid-events = { path = "../../../crates/polyglid-events" }
 polyglid-plugin-api = { path = "../../../crates/polyglid-plugin-api" }
 polyglid-runtime = { path = "../../../crates/polyglid-runtime" }
+uuid = { version = "1.0", features = ["v4"] }
 

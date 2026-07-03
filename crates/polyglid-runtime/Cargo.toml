@@ -12,6 +12,7 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
 wasmtime = { version = "46.0.1", features = ["component-model"] }
 wasmtime-wasi = "46.0.1"
+uuid = { version = "1.0", features = ["v4"] }
 
 [lib]
 path = "src/lib.rs"

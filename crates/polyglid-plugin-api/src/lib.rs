@@ -3,7 +3,65 @@
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Widget types that correspond to the `widget-type` enum in the WIT contract.
+/// The host knows how to render each of these natively in both TUI and desktop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum WidgetKind {
+    Table,
+    KeyValue,
+    Tree,
+    Log,
+    ChartBar,
+    TextBlock,
+}
+
+impl fmt::Display for WidgetKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self {
+            Self::Table => "table",
+            Self::KeyValue => "key-value",
+            Self::Tree => "tree",
+            Self::Log => "log",
+            Self::ChartBar => "chart-bar",
+            Self::TextBlock => "text-block",
+        };
+        f.write_str(label)
+    }
+}
+
+/// A single renderable widget inside a panel layout.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PanelWidget {
+    pub widget_kind: WidgetKind,
+    pub title: String,
+    /// Rows of cells. Interpretation depends on `widget_kind`:
+    /// - Table: first row is headers, rest are data rows
+    /// - KeyValue: each row is [key, value]
+    /// - Tree: each row is [indent-level, label]
+    /// - Log: each row is [timestamp, message]
+    /// - ChartBar: each row is [label, numeric-value]
+    /// - TextBlock: each row is [line-of-text]
+    pub data: Vec<Vec<String>>,
+}
+
+/// A structured panel layout returned by a plugin for host-native rendering.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PanelLayout {
+    pub title: String,
+    pub widgets: Vec<PanelWidget>,
+}
+
+/// Metadata embedded inside a plugin's WASM component.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ApiPluginMetadata {
+    pub name: String,
+    pub display_name: String,
+    pub version: String,
+    pub description: String,
+    pub author: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
     Info,
     Low,
@@ -25,7 +83,7 @@ impl fmt::Display for Severity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Issue {
     pub title: String,
     pub severity: Severity,
@@ -49,7 +107,7 @@ impl Issue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PluginReport {
     pub plugin_name: String,
     pub target_tested: String,
@@ -73,7 +131,7 @@ impl PluginReport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct PluginId(String);
 
 impl PluginId {
@@ -90,7 +148,7 @@ impl PluginId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Capability {
     NetworkConnect,
     NetworkListen,
@@ -151,7 +209,7 @@ impl FromStr for Capability {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PluginManifest {
     pub id: PluginId,
     pub name: String,
@@ -159,7 +217,7 @@ pub struct PluginManifest {
     pub requested_capabilities: Vec<CapabilityRequest>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CapabilityRequest {
     pub capability: Capability,
     pub scope: CapabilityScope,
@@ -187,7 +245,7 @@ impl fmt::Display for CapabilityRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CapabilityScope {
     Any,
     Target(String),
