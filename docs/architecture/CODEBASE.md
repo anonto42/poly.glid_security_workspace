@@ -6,7 +6,13 @@ PolyGlid should be organized as a Rust workspace with a separate frontend app. T
 
 ```text
 apps/desktop
-  Tauri application shell and frontend workspace.
+  Tauri application shell and frontend workspace. Contains React source code under `src/` organized into modular layout components representing a VS Code interface:
+  - `src/components/layout/ActivityBar.tsx`: Leftmost vertical icon menu.
+  - `src/components/layout/SideBar.tsx`: Expandable sidebar for active domains (Targets) and loaded plugins.
+  - `src/components/layout/EditorArea.tsx`: Tabbed central area showing the Scanner Dashboard or read-only plugin code.
+  - `src/components/layout/BottomPanel.tsx`: Output split pane containing Problems (security issues), Output, and Terminal.
+  - `src/components/layout/StatusBar.tsx`: Bottom status bar detailing engine statuses and active capability fuel.
+  - `src/components/layout/SettingsModal.tsx`: Comprehensive modal for System Overview, Wasmtime configs, and loaded plugin details.
 
 crates/polyglid-core
   Pure application logic. Owns use cases, workflows, scheduling decisions,

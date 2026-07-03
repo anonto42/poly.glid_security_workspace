@@ -69,35 +69,35 @@ Steps:
 
 Exit condition: a plugin cannot use a host capability unless the host grants it.
 
-## Phase 3: Desktop Shell
-
-Goal: connect the proven engine to Tauri without moving product logic into UI
-handlers.
-
-Steps:
-
-1. Create `apps/desktop`.
-2. Add Tauri commands that call `polyglid-core` use cases.
-3. Stream typed `polyglid-events` to the frontend.
-4. Persist settings through `polyglid-config`.
-5. Render the demo plugin report in the app.
-6. Keep every command path runnable from CLI or tests.
-
-Exit condition: the desktop app can run the demo plugin and display its report.
-
-## Phase 4: Workspace UI
-
-Goal: make the first operator workspace useful without hiding engine behavior.
-
-Steps:
-
-1. Build the left utility navigation, central workspace panes, and status footer.
-2. Add plugin list, run form, report viewer, and settings page.
-3. Include loading, empty, denied, running, failed, and success states.
-4. Keep dark-mode brand defaults from `docs/branding/README.md`.
-5. Verify responsive behavior before adding richer interaction.
-
-Exit condition: the UI feels like a real security workspace, not a landing page.
+## Phase 3: Desktop Shell [COMPLETE]
+ 
+ Goal: connect the proven engine to Tauri without moving product logic into UI
+ handlers.
+ 
+ Steps:
+ 
+ 1. [x] Create `apps/desktop`.
+ 2. [x] Add Tauri commands that call `polyglid-core` use cases.
+ 3. [x] Stream typed `polyglid-events` to the frontend.
+ 4. [x] Persist settings through `polyglid-config`.
+ 5. [x] Render the demo plugin report in the app.
+ 6. [x] Keep every command path runnable from CLI or tests.
+ 
+ Exit condition: the desktop app can run the demo plugin and display its report.
+ 
+ ## Phase 4: Workspace UI [COMPLETE]
+ 
+ Goal: make the first operator workspace useful without hiding engine behavior.
+ 
+ Steps:
+ 
+ 1. [x] Build the left utility navigation, central workspace panes, and status footer.
+ 2. [x] Add plugin list, run form, report viewer, and settings page.
+ 3. [x] Include loading, empty, denied, running, failed, and success states.
+ 4. [x] Keep dark-mode brand defaults from `docs/branding/README.md`.
+ 5. [x] Verify responsive behavior before adding richer interaction.
+ 
+ Exit condition: the UI feels like a real security workspace, not a landing page.
 
 ## Phase 5: Plugin Families
 
