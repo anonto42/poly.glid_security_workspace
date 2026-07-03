@@ -1,6 +1,6 @@
 # Shared Agent Workspace
 
-Canonical Claude/Codex knowledge lives in `.agents/shared/`.
+Canonical AI agent knowledge lives in `.agents/shared/`.
 
 Use:
 
@@ -10,4 +10,4 @@ Use:
 - `shared/rules/` and `shared/coders/` only as needed.
 - `shared/legacy/` for archived summaries from merged old agent roots.
 
-Do not duplicate instructions under `.claude/` or `.codex/`.
+Do not duplicate instructions under `.claude/` or `codex/` or `.gemini/` or any other AI agent configuration directories.

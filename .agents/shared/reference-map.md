@@ -19,9 +19,10 @@ Loaders only:
 - `.claude/README.md`
 - `.claude/settings*.json`
 - `.codex/README.md`
+- `.gemini/` or any other AI agent configuration directories.
 
 Do not create `memory/`, `rules/`, `skills/`, `plans/`, or `changes/` under
-`.claude/` or `.codex/`.
+`.claude/` or `.codex/` or any other AI agent configuration directories.
 
 Historical `.claude/` and `.agents-extra/` content has been merged as legacy
 summaries under `.agents/shared/legacy/`. Do not load that folder as active

@@ -1,6 +1,6 @@
 # Agent Startup
 
-Use this as the compact shared loader for Claude and Codex.
+Use this as the compact shared loader for Claude, Codex, and Gemini or any other AI agents.
 
 ## Load
 
