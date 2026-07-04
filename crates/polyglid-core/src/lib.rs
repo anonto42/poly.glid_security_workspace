@@ -13,6 +13,8 @@ pub mod execution;
 pub mod plugin_manager;
 pub mod store;
 pub mod security;
+#[cfg(test)]
+pub mod benchmarks;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginRef {

@@ -74,6 +74,18 @@ impl WorkspaceStore {
     }
 
     /// Run a set of database actions atomically inside a transaction.
+    pub fn verify_integrity(&self) -> Result<String, String> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("PRAGMA integrity_check;", [], |row| row.get::<_, String>(0))
+            .map_err(|err| format!("integrity check query failed: {err}"))
+    }
+
+    pub fn user_version(&self) -> Result<i32, String> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("PRAGMA user_version;", [], |row| row.get::<_, i32>(0))
+            .map_err(|err| format!("user version query failed: {err}"))
+    }
+
     pub fn transaction<F, T>(&self, f: F) -> Result<T, String>
     where
         F: FnOnce(&rusqlite::Transaction) -> Result<T, String>,

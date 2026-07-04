@@ -1,0 +1,74 @@
+package polyglid:engine@0.2.0;
+
+interface types {
+    enum severity {
+        info,
+        low,
+        medium,
+        high,
+        critical,
+    }
+
+    record issue {
+        title: string,
+        severity: severity,
+        description: string,
+        recommendation: string,
+    }
+
+    record plugin-report {
+        plugin-name: string,
+        target-tested: string,
+        issues: list<issue>,
+        summary: string,
+    }
+
+    record plugin-metadata {
+        name: string,
+        display-name: string,
+        version: string,
+        description: string,
+        author: string,
+    }
+
+    enum widget-type {
+        table,
+        key-value,
+        tree,
+        log,
+        chart-bar,
+        text-block,
+    }
+
+    record panel-widget {
+        widget-kind: widget-type,
+        title: string,
+        data: list<list<string>>,
+    }
+
+    record panel-layout {
+        title: string,
+        widgets: list<panel-widget>,
+    }
+}
+
+interface dns {
+    resolve: func(host: string) -> result<list<string>, string>;
+}
+
+interface reports {
+    write: func(filename: string, contents: string) -> result<string, string>;
+}
+
+world security-tool {
+    use types.{plugin-report, plugin-metadata, panel-layout};
+
+    import dns;
+    import reports;
+
+    export execute: func(target: string) -> result<plugin-report, string>;
+    export metadata: func() -> plugin-metadata;
+    export required-capabilities: func() -> list<string>;
+    export cli-panel: func(report: plugin-report) -> panel-layout;
+    export desktop-panel: func(report: plugin-report) -> panel-layout;
+}

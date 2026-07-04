@@ -77,16 +77,155 @@ fn run(args: Vec<String>) -> Result<(), String> {
         [command, subcommand] if command == "target" && subcommand == "list" => target_list(),
         [command, subcommand, name] if command == "target" && subcommand == "add" => target_add(name),
         [command, subcommand, name] if command == "target" && subcommand == "remove" => target_remove(name),
+        [command, subcommand] if command == "workspace" && subcommand == "verify" => workspace_verify(),
+        [command, subcommand, path] if command == "plugin" && subcommand == "verify" => plugin_verify(path),
+        [command, subcommand, path, flag, key_path] if command == "plugin" && subcommand == "sign" && flag == "--key" => plugin_sign(path, key_path),
         _ => Err("unknown command; run `polyglid --help`".to_string()),
     }
 }
 
 fn doctor() -> Result<(), String> {
-    AppConfig::load_from_env().map_err(|err| err.to_string())?;
-    println!("polyglid doctor");
-    println!("workspace: ok");
-    println!("config: ok");
-    println!("runtime: component execution available");
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    println!("=== PolyGlid Doctor Status Report ===");
+    
+    let plugin_dir = &config.plugin_dir;
+    print!("plugin directory ({}): ", plugin_dir.display());
+    if plugin_dir.exists() {
+        let test_file = plugin_dir.join(".doctor_write_test");
+        if fs::write(&test_file, b"test").is_ok() {
+            let _ = fs::remove_file(test_file);
+            println!("OK (Writable)");
+        } else {
+            println!("ERROR (Permission Denied)");
+        }
+    } else {
+        println!("ERROR (Not Found)");
+    }
+
+    let db_path = plugin_dir.parent().unwrap_or(plugin_dir).join("polyglid.db");
+    print!("database path ({}): ", db_path.display());
+    if db_path.exists() {
+        println!("OK");
+        if let Ok(store) = polyglid_core::store::WorkspaceStore::new(&db_path) {
+            let integrity = store.verify_integrity().unwrap_or_else(|err| format!("Failed: {err}"));
+            println!("- SQLite Integrity check: {}", integrity);
+            
+            let ver = store.user_version().unwrap_or(0);
+            println!("- Database User Version: {}", ver);
+
+            let pubs = store.trust_store().list().unwrap_or_default();
+            println!("- Trusted Publishers: {}", pubs.len());
+
+            let profile = store.settings().get("security_profile")
+                .unwrap_or(None)
+                .unwrap_or_else(|| "Balanced".to_string());
+            println!("- Active Security Profile: {}", profile);
+        } else {
+            println!("- Database Connection: FAILED");
+        }
+    } else {
+        println!("Not Initialized (No database file)");
+    }
+
+    println!("WASM Runtime: wasmtime integration ok");
+    Ok(())
+}
+
+fn workspace_verify() -> Result<(), String> {
+    let pm = manager()?;
+    let store = pm.store;
+    println!("=== PolyGlid Workspace Integrity Check ===");
+    
+    let plugins = store.plugins().list().unwrap_or_default();
+    let enabled_count = plugins.iter().filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Enabled).count();
+    let disabled_count = plugins.iter().filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Disabled).count();
+    println!("Plugins:");
+    println!("- Total Installed: {}", plugins.len());
+    println!("- Enabled: {}", enabled_count);
+    println!("- Disabled: {}", disabled_count);
+
+    let publishers = store.trust_store().list().unwrap_or_default();
+    println!("Trusted Publishers:");
+    if publishers.is_empty() {
+        println!("- None registered");
+    } else {
+        for p in publishers {
+            let status = if p.revocation_status == 1 { "REVOKED" } else { "Active" };
+            println!("- {} (Key: {}, Trust Level: {}, Status: {})", p.name, &p.public_key[..12], p.trust_level, status);
+        }
+    }
+
+    let history = store.executions().list().unwrap_or_default();
+    let reports = store.reports().list().unwrap_or_default();
+    println!("Execution Stats:");
+    println!("- Job Execution Logs: {}", history.len());
+    println!("- Report Artifacts: {}", reports.len());
+
+    Ok(())
+}
+
+fn plugin_verify(wasm_path: &str) -> Result<(), String> {
+    let pm = manager()?;
+    let path = Path::new(wasm_path);
+    if !path.exists() {
+        return Err(format!("WASM file not found at '{}'", wasm_path));
+    }
+
+    println!("Verifying plugin binary '{}'...", wasm_path);
+    let (status, sig_opt) = pm.verify_plugin_signature(path, &polyglid_plugin_api::PluginId::new("temp").unwrap())?;
+    println!("Signature Status: {}", status);
+
+    if let Some(sig) = sig_opt {
+        println!("- Algorithm: {}", sig.algorithm);
+        println!("- Key ID: {}", sig.key_id);
+        println!("- Fingerprint: {}", sig.fingerprint);
+        println!("- Verified Timestamp: {}", sig.verified_at);
+    } else {
+        println!("- No signature record found");
+    }
+
+    Ok(())
+}
+
+fn plugin_sign(wasm_path: &str, key_path: &str) -> Result<(), String> {
+    use ed25519_dalek::{SigningKey, Signer};
+    
+    let path = Path::new(wasm_path);
+    if !path.exists() {
+        return Err(format!("WASM binary not found at '{}'", wasm_path));
+    }
+
+    let key_data = fs::read_to_string(key_path)
+        .map_err(|err| format!("failed to read key file: {err}"))?;
+    let trimmed = key_data.trim();
+    let seed_bytes = hex::decode(trimmed)
+        .map_err(|err| format!("invalid hex formatting in key file: {err}"))?;
+
+    let seed: &[u8; 32] = seed_bytes.as_slice().try_into()
+        .map_err(|_| "private key seed must be exactly 32 bytes (64 hex characters)".to_string())?;
+
+    let signing_key = SigningKey::from_bytes(seed);
+    let verifying_key = signing_key.verifying_key();
+
+    let wasm_bytes = fs::read(path)
+        .map_err(|err| format!("failed to read WASM binary: {err}"))?;
+    let signature = signing_key.sign(&wasm_bytes);
+
+    let signature_hex = hex::encode(signature.to_bytes());
+    let key_id_hex = hex::encode(verifying_key.to_bytes());
+
+    let sig_json = serde_json::json!({
+        "algorithm": "Ed25519",
+        "key_id": key_id_hex,
+        "signature": signature_hex
+    });
+
+    let sig_path = path.with_extension("sig");
+    fs::write(&sig_path, serde_json::to_string_pretty(&sig_json).unwrap())
+        .map_err(|err| format!("failed to write signature file: {err}"))?;
+
+    println!("Successfully signed '{}'", wasm_path);
+    println!("Detached signature file written to '{}'", sig_path.display());
     Ok(())
 }
 

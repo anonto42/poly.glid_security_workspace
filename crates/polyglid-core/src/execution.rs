@@ -15,6 +15,8 @@ use crate::{
 };
 use crate::store::WorkspaceStore;
 
+pub mod reports;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum JobState {
     Queued,

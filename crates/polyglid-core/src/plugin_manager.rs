@@ -138,7 +138,7 @@ impl PluginRepository {
 pub struct PluginManager<R> {
     pub runtime: Arc<R>,
     repository: PluginRepository,
-    store: crate::store::WorkspaceStore,
+    pub store: crate::store::WorkspaceStore,
     plugin_dir: PathBuf,
 }
 
