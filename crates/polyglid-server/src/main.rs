@@ -69,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/plugins", get(get_plugins).post(install_plugin))
         .route("/plugins/:id", delete(uninstall_plugin))
         .route("/plugins/:id/toggle", post(toggle_plugin))
+        .route("/plugins/:id/configure", post(configure_plugin))
         // Executions
         .route("/executions", get(list_executions).post(run_execution))
         .route("/executions/:id", get(get_execution))
@@ -315,4 +316,18 @@ async fn handle_socket(mut socket: WebSocket, em: Arc<ExecutionManager<WasmRunti
             break;
         }
     }
+}
+
+async fn configure_plugin(
+    State(state): State<ServerState>,
+    AxumPath(id): AxumPath<String>,
+    Json(req): Json<std::collections::HashMap<String, String>>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let pid = PluginId::new(&id).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
+    for (k, v) in req {
+        let setting_key = format!("plugin:{}:{}", pid.as_str(), k);
+        state.settings_service.set_setting(&setting_key, &v)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))?;
+    }
+    Ok(StatusCode::OK)
 }

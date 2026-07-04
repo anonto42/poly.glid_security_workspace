@@ -42,6 +42,7 @@ pub struct JobMetrics {
     pub fuel_consumed: Option<u64>,
     pub memory_used: Option<u64>,
     pub timestamp: u64,
+    pub stage: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -116,6 +117,7 @@ where
                         fuel_consumed: Some(r.fuel_consumed),
                         memory_used: None,
                         timestamp: r.started_at,
+                        stage: None,
                     };
                     let mut report = None;
                     if state == JobState::Completed {
@@ -320,6 +322,7 @@ where
                 fuel_consumed: Some(config.fuel_limit), 
                 memory_used: None,
                 timestamp,
+                stage: Some("Finished".to_string()),
             };
 
             // Check if job timed out or cancelled during execution
@@ -471,6 +474,7 @@ fn fail_job(
         fuel_consumed: None,
         memory_used: None,
         timestamp,
+        stage: Some("Failed".to_string()),
     };
 
     {

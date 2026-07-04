@@ -1,50 +1,277 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+
+const API_BASE = window.location.port === '3000' ? 'http://127.0.0.1:8080' : window.location.origin;
+const WS_BASE = API_BASE.replace('http://', 'ws://').replace('https://', 'wss://');
+
+interface Plugin {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  description: string;
+  status: string;
+  capabilities: string[];
+}
+
+interface Execution {
+  job_id: string;
+  plugin_id: string;
+  target: string;
+  state: string;
+  started_at: number;
+  duration_ms: number;
+  error_message: string | null;
+  fuel_consumed: number;
+}
+
+interface Report {
+  id: string;
+  job_id: string;
+  plugin_id: string;
+  target: string;
+  summary: string;
+  issues: any[];
+  filepath: string;
+  created_at: number;
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [authToken, setAuthToken] = useState('');
-  const [plugins, setPlugins] = useState<any[]>([]);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('pg_auth_token') || '');
+  const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [targets, setTargets] = useState<string[]>([]);
-  const [executions, setExecutions] = useState<any[]>([]);
+  const [executions, setExecutions] = useState<Execution[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+
+  // Form states
   const [newTarget, setNewTarget] = useState('');
-  const [notification, setNotification] = useState('');
+  const [selectedPlugin, setSelectedPlugin] = useState<Plugin | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState('');
+  const [configThreads, setConfigThreads] = useState('20');
+  const [configTimeout, setConfigTimeout] = useState('5');
+  const [configPorts, setConfigPorts] = useState('common');
 
-  // Auto-connect server status mock data for demonstration
+  // Monitor states
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [liveLogs, setLiveLogs] = useState<string[]>([]);
+  const [liveStage, setLiveStage] = useState('Queued');
+  const [liveFuel, setLiveFuel] = useState<number>(0);
+  const [liveDuration, setLiveDuration] = useState<number>(0);
+
+  // Toast notification
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' | 'warning' } | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
-    // Seed mock data initially
-    setPlugins([
-      { id: 'polyglid.recon_probe', name: 'Recon Probe', version: '0.1.0', author: 'PolyGlid Team', status: 'Enabled' },
-      { id: 'polyglid.vuln_scanner', name: 'Vulnerability Scanner', version: '0.2.0', author: 'Community', status: 'Disabled' }
-    ]);
-    setTargets(['localhost', 'example.com', 'test-range-1']);
-    setExecutions([
-      { job_id: 'job-101', plugin_id: 'polyglid.recon_probe', target: 'example.com', state: 'Completed', duration_ms: 120 },
-      { job_id: 'job-102', plugin_id: 'polyglid.recon_probe', target: 'localhost', state: 'Failed', duration_ms: 45 }
-    ]);
-  }, []);
+    localStorage.setItem('pg_auth_token', authToken);
+    if (authToken) {
+      fetchData();
+      connectWebSocket();
+    }
+  }, [authToken]);
 
-  const triggerNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(''), 4000);
+  const showToast = (message: string, type: 'success' | 'info' | 'error' | 'warning' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
   };
 
-  const addTarget = () => {
-    if (!newTarget.trim()) return;
-    setTargets([...targets, newTarget.trim()]);
-    triggerNotification(`Successfully registered target: ${newTarget}`);
-    setNewTarget('');
-  };
-
-  const startScan = (pluginId: string) => {
-    triggerNotification(`Scan scheduled for ${pluginId}. Execution state queued...`);
-    const newJob = {
-      job_id: `job-${Math.floor(Math.random() * 1000)}`,
-      plugin_id: pluginId,
-      target: targets[0] || 'example.com',
-      state: 'Queued',
-      duration_ms: 0
+  const getHeaders = () => {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
     };
-    setExecutions([newJob, ...executions]);
+  };
+
+  const fetchData = async () => {
+    try {
+      // Plugins
+      const plRes = await fetch(`${API_BASE}/api/v1/plugins`, { headers: getHeaders() });
+      if (plRes.ok) {
+        const data = await plRes.json();
+        setPlugins(data.map((p: any) => ({
+          id: p.id.id,
+          name: p.name,
+          version: p.version,
+          author: p.author,
+          description: p.description,
+          status: p.status,
+          capabilities: p.capabilities
+        })));
+      }
+
+      // Targets
+      const tgRes = await fetch(`${API_BASE}/api/v1/targets`, { headers: getHeaders() });
+      if (tgRes.ok) {
+        const data = await tgRes.json();
+        setTargets(data);
+        if (data.length > 0) setSelectedTarget(data[0]);
+      }
+
+      // Executions
+      const exRes = await fetch(`${API_BASE}/api/v1/executions`, { headers: getHeaders() });
+      if (exRes.ok) {
+        setExecutions(await exRes.json());
+      }
+
+      // Reports
+      const rpRes = await fetch(`${API_BASE}/api/v1/reports`, { headers: getHeaders() });
+      if (rpRes.ok) {
+        setReports(await rpRes.json());
+      }
+    } catch (err) {
+      showToast('Connection to server failed. Verify API token.', 'error');
+    }
+  };
+
+  const connectWebSocket = () => {
+    if (wsRef.current) wsRef.current.close();
+    
+    const ws = new WebSocket(`${WS_BASE}/ws/v1/events`);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const envelope = JSON.parse(event.data);
+        const { type, payload } = envelope;
+
+        if (type.includes('jobstatechanged')) {
+          const { job_id, state } = payload;
+          setExecutions(prev => prev.map(e => e.job_id === job_id ? { ...e, state } : e));
+          
+          if (job_id === activeJobId) {
+            setLiveStage(state);
+            if (state === 'Completed' || state === 'Failed') {
+              fetchData();
+              showToast(`Scan job ${state.toLowerCase()} successfully!`, state === 'Completed' ? 'success' : 'error');
+            }
+          }
+        } else if (type.includes('joblog')) {
+          const { job_id, message } = payload;
+          if (job_id === activeJobId) {
+            if (message.startsWith('[STAGE:')) {
+              const stageName = message.substring(message.indexOf(':') + 1, message.indexOf(']')).trim();
+              setLiveStage(stageName);
+            }
+            setLiveLogs(prev => [...prev, message]);
+          }
+        }
+      } catch (e) {
+        // ignore malformed ws frames
+      }
+    };
+
+    ws.onclose = () => {
+      setTimeout(connectWebSocket, 5000);
+    };
+  };
+
+  const handleAddTarget = async () => {
+    if (!newTarget.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/targets`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ name: newTarget.trim() })
+      });
+      if (res.ok) {
+        showToast('Target registered successfully', 'success');
+        setNewTarget('');
+        fetchData();
+      } else {
+        showToast('Failed to register target', 'error');
+      }
+    } catch (err) {
+      showToast('Error registering target', 'error');
+    }
+  };
+
+  const handleRemoveTarget = async (name: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/targets/${name}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        showToast('Target removed successfully', 'success');
+        fetchData();
+      }
+    } catch (err) {
+      showToast('Error removing target', 'error');
+    }
+  };
+
+  const handleTogglePlugin = async (id: string, currentStatus: string) => {
+    const nextStatus = currentStatus === 'Enabled' ? false : true;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/plugins/${id}/toggle`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ enabled: nextStatus })
+      });
+      if (res.ok) {
+        showToast(`Plugin status ${nextStatus ? 'enabled' : 'disabled'}`, 'success');
+        fetchData();
+      }
+    } catch (err) {
+      showToast('Error toggling plugin', 'error');
+    }
+  };
+
+  const handleLaunchScan = async () => {
+    if (!selectedPlugin) {
+      showToast('Select a plugin to execute scan', 'warning');
+      return;
+    }
+    const target = selectedTarget || targets[0];
+    if (!target) {
+      showToast('Register at least one target', 'warning');
+      return;
+    }
+
+    try {
+      // 1. Configure settings
+      await fetch(`${API_BASE}/api/v1/plugins/${selectedPlugin.id}/configure`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          threads: configThreads,
+          timeout: configTimeout,
+          ports: configPorts
+        })
+      });
+
+      // 2. Launch execution
+      const runRes = await fetch(`${API_BASE}/api/v1/executions`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          plugin_id: selectedPlugin.id,
+          target
+        })
+      });
+
+      if (runRes.ok) {
+        const { job_id } = await runRes.json();
+        setActiveJobId(job_id);
+        setLiveLogs([`[SYSTEM] Job submitted. ID: ${job_id}`]);
+        setLiveStage('Queued');
+        setLiveFuel(0);
+        setLiveDuration(0);
+        setActiveTab('monitor');
+        showToast('Scan initiated. Redirecting to live monitor...', 'success');
+        fetchData();
+      } else {
+        showToast('Failed to trigger scan execution', 'error');
+      }
+    } catch (err) {
+      showToast('Error launching scan', 'error');
+    }
+  };
+
+  const handleDownload = (id: string, format: string) => {
+    window.open(`${API_BASE}/api/v1/reports/${id}/download?format=${format}&Authorization=Bearer ${authToken}`);
   };
 
   return (
@@ -56,7 +283,26 @@ function App() {
       display: 'flex',
       flexDirection: 'column'
     }}>
-      {/* Header bar */}
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '16px 24px',
+          borderRadius: '8px',
+          color: '#fff',
+          fontWeight: 'bold',
+          zIndex: 1000,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          backgroundColor: toast.type === 'success' ? '#238636' : (toast.type === 'error' ? '#da3637' : '#1f6feb'),
+          transition: 'all 0.3s ease'
+        }}>
+          {toast.message}
+        </div>
+      )}
+
+      {/* Header */}
       <header style={{
         background: 'linear-gradient(90deg, #1f2937, #111827)',
         padding: '16px 24px',
@@ -89,40 +335,31 @@ function App() {
               backgroundColor: '#161b22',
               border: '1px solid #30363d',
               borderRadius: '6px',
-              padding: '6px 12px',
+              padding: '8px 12px',
               color: '#c9d1d9',
-              fontSize: '13px'
+              fontSize: '13px',
+              width: '200px'
             }}
           />
-          <span style={{
-            fontSize: '12px',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            backgroundColor: authToken ? '#238636' : '#21262d',
-            color: '#fff'
-          }}>
-            {authToken ? 'Authenticated' : 'Read Only'}
-          </span>
+          <button
+            onClick={fetchData}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: '1px solid #30363d',
+              backgroundColor: '#21262d',
+              color: '#c9d1d9',
+              cursor: 'pointer'
+            }}
+          >
+            Refresh
+          </button>
         </div>
       </header>
 
-      {notification && (
-        <div style={{
-          backgroundColor: '#1f6feb',
-          color: '#fff',
-          padding: '12px 24px',
-          textAlign: 'center',
-          fontWeight: '500',
-          fontSize: '14px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-        }}>
-          {notification}
-        </div>
-      )}
-
-      {/* Main workspace */}
+      {/* Main Layout */}
       <div style={{ display: 'flex', flex: 1 }}>
-        {/* Sidebar Nav */}
+        {/* Sidebar */}
         <aside style={{
           width: '240px',
           backgroundColor: '#161b22',
@@ -133,18 +370,19 @@ function App() {
           gap: '8px'
         }}>
           {[
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'plugins', label: 'Plugins Registry' },
-            { id: 'targets', label: 'Scan Targets' },
-            { id: 'history', label: 'Execution History' },
-            { id: 'reports', label: 'Reports Download' }
+            { id: 'dashboard', label: 'Workspace Dashboard' },
+            { id: 'plugins', label: 'Plugin Manager' },
+            { id: 'targets', label: 'Target Manager' },
+            { id: 'execution', label: 'Scan Launcher' },
+            { id: 'monitor', label: 'Live Job Monitor' },
+            { id: 'reports', label: 'Report Viewer' }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
                 textAlign: 'left',
-                padding: '10px 16px',
+                padding: '12px 16px',
                 borderRadius: '6px',
                 border: 'none',
                 backgroundColor: activeTab === tab.id ? '#21262d' : 'transparent',
@@ -160,87 +398,106 @@ function App() {
           ))}
         </aside>
 
-        {/* Content Pane */}
-        <main style={{ flex: 1, padding: '32px' }}>
+        {/* Content Area */}
+        <main style={{ flex: 1, padding: '32px', backgroundColor: '#0d1117' }}>
+          
+          {/* Dashboard */}
           {activeTab === 'dashboard' && (
             <div>
-              <h2 style={{ color: '#fff', marginTop: 0 }}>System Metrics</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '20px', borderRadius: '8px' }}>
-                  <div style={{ color: '#8b949e', fontSize: '14px' }}>Active Plugins</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#58a6ff', marginTop: '8px' }}>{plugins.filter(p => p.status === 'Enabled').length}</div>
+              <h2 style={{ color: '#fff', marginTop: 0, marginBottom: '24px' }}>Workspace Status</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '24px', borderRadius: '8px' }}>
+                  <div style={{ color: '#8b949e', fontSize: '14px' }}>Installed Plugins</div>
+                  <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fff', marginTop: '12px' }}>
+                    {plugins.length} <span style={{ fontSize: '14px', color: '#8b949e' }}>({plugins.filter(p => p.status === 'Enabled').length} Active)</span>
+                  </div>
                 </div>
-                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '20px', borderRadius: '8px' }}>
-                  <div style={{ color: '#8b949e', fontSize: '14px' }}>Registered Targets</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#58a6ff', marginTop: '8px' }}>{targets.length}</div>
+                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '24px', borderRadius: '8px' }}>
+                  <div style={{ color: '#8b949e', fontSize: '14px' }}>Scan Targets</div>
+                  <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fff', marginTop: '12px' }}>{targets.length}</div>
                 </div>
-                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '20px', borderRadius: '8px' }}>
-                  <div style={{ color: '#8b949e', fontSize: '14px' }}>Total Jobs Executed</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#58a6ff', marginTop: '8px' }}>{executions.length}</div>
+                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '24px', borderRadius: '8px' }}>
+                  <div style={{ color: '#8b949e', fontSize: '14px' }}>Executions History</div>
+                  <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fff', marginTop: '12px' }}>
+                    {executions.length} <span style={{ fontSize: '14px', color: '#da3637' }}>({executions.filter(e => e.state === 'Failed').length} Failed)</span>
+                  </div>
                 </div>
+              </div>
+
+              <h3 style={{ color: '#fff' }}>Recent Activity Logs</h3>
+              <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '16px' }}>
+                {executions.length === 0 ? (
+                  <span style={{ color: '#8b949e' }}>No scan history recorded in database.</span>
+                ) : (
+                  executions.slice(0, 5).map(e => (
+                    <div key={e.job_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 8px', borderBottom: '1px solid #21262d' }}>
+                      <span>Plugin <code>{e.plugin_id}</code> completed execution on target <b>{e.target}</b></span>
+                      <span style={{
+                        color: e.state === 'Completed' ? '#238636' : '#da3637',
+                        fontWeight: 'bold'
+                      }}>{e.state}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
 
+          {/* Plugin Manager */}
           {activeTab === 'plugins' && (
             <div>
-              <h2 style={{ color: '#fff', marginTop: 0 }}>Plugins Registry</h2>
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid #30363d', textAlign: 'left', color: '#8b949e' }}>
-                    <th style={{ padding: '12px' }}>ID</th>
-                    <th style={{ padding: '12px' }}>Name</th>
-                    <th style={{ padding: '12px' }}>Version</th>
-                    <th style={{ padding: '12px' }}>Status</th>
-                    <th style={{ padding: '12px' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plugins.map(p => (
-                    <tr key={p.id} style={{ borderBottom: '1px solid #21262d' }}>
-                      <td style={{ padding: '12px' }}><code>{p.id}</code></td>
-                      <td style={{ padding: '12px', fontWeight: 'bold', color: '#fff' }}>{p.name}</td>
-                      <td style={{ padding: '12px' }}>{p.version}</td>
-                      <td style={{ padding: '12px' }}>
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          backgroundColor: p.status === 'Enabled' ? '#238636' : '#da3637',
+              <h2 style={{ color: '#fff', marginTop: 0 }}>Plugin Manager</h2>
+              <p style={{ color: '#8b949e' }}>Toggle local WASM plugins or configure sandbox limits.</p>
+              
+              <div style={{ display: 'grid', gap: '16px', marginTop: '24px' }}>
+                {plugins.map(p => (
+                  <div key={p.id} style={{
+                    backgroundColor: '#161b22',
+                    border: '1px solid #30363d',
+                    padding: '24px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <h4 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>{p.name} <span style={{ fontSize: '13px', color: '#8b949e' }}>v{p.version}</span></h4>
+                      <p style={{ margin: '8px 0', fontSize: '14px', color: '#8b949e' }}>{p.description}</p>
+                      <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#58a6ff' }}>
+                        <span>Author: {p.author}</span> •
+                        <span>Capabilities: {p.capabilities.join(', ') || 'none'}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <button
+                        onClick={() => handleTogglePlugin(p.id, p.status)}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          backgroundColor: p.status === 'Enabled' ? '#da3637' : '#238636',
                           color: '#fff'
-                        }}>{p.status}</span>
-                      </td>
-                      <td style={{ padding: '12px' }}>
-                        <button
-                          onClick={() => startScan(p.id)}
-                          disabled={p.status === 'Disabled'}
-                          style={{
-                            padding: '6px 12px',
-                            borderRadius: '4px',
-                            backgroundColor: p.status === 'Enabled' ? '#1f6feb' : '#21262d',
-                            color: '#fff',
-                            border: 'none',
-                            cursor: p.status === 'Enabled' ? 'pointer' : 'not-allowed',
-                            fontSize: '13px'
-                          }}
-                        >
-                          Launch Scan
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        }}
+                      >
+                        {p.status === 'Enabled' ? 'Disable' : 'Enable'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
+          {/* Target Manager */}
           {activeTab === 'targets' && (
             <div>
-              <h2 style={{ color: '#fff', marginTop: 0 }}>Register Scan Targets</h2>
+              <h2 style={{ color: '#fff', marginTop: 0 }}>Target Manager</h2>
               <div style={{ display: 'flex', gap: '12px', margin: '24px 0' }}>
                 <input
                   type="text"
-                  placeholder="Target Host/IP (e.g. example.com)"
+                  placeholder="Target domain, IP, or URL"
                   value={newTarget}
                   onChange={(e) => setNewTarget(e.target.value)}
                   style={{
@@ -248,125 +505,337 @@ function App() {
                     backgroundColor: '#161b22',
                     border: '1px solid #30363d',
                     borderRadius: '6px',
-                    padding: '8px 16px',
+                    padding: '10px 16px',
                     color: '#c9d1d9',
                     fontSize: '14px'
                   }}
                 />
                 <button
-                  onClick={addTarget}
+                  onClick={handleAddTarget}
                   style={{
                     backgroundColor: '#238636',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '6px',
-                    padding: '8px 24px',
-                    fontWeight: '600',
+                    padding: '10px 24px',
+                    fontWeight: 'bold',
                     cursor: 'pointer'
                   }}
                 >
                   Add Target
                 </button>
               </div>
+
               <ul style={{ listStyleType: 'none', padding: 0 }}>
                 {targets.map(t => (
                   <li key={t} style={{
                     backgroundColor: '#161b22',
                     border: '1px solid #30363d',
-                    padding: '12px 20px',
+                    padding: '16px 20px',
                     borderRadius: '6px',
-                    marginBottom: '8px',
+                    marginBottom: '10px',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center'
                   }}>
                     <span>{t}</span>
-                    <span style={{ color: '#8b949e', fontSize: '12px' }}>Verified</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {activeTab === 'history' && (
-            <div>
-              <h2 style={{ color: '#fff', marginTop: 0 }}>Asynchronous Job History</h2>
-              <ul style={{ listStyleType: 'none', padding: 0, marginTop: '20px' }}>
-                {executions.map(job => (
-                  <li key={job.job_id} style={{
-                    backgroundColor: '#161b22',
-                    border: '1px solid #30363d',
-                    padding: '16px 20px',
-                    borderRadius: '6px',
-                    marginBottom: '12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <div style={{ fontWeight: 'bold', color: '#fff' }}>{job.plugin_id}</div>
-                      <div style={{ color: '#8b949e', fontSize: '13px', marginTop: '4px' }}>Target: {job.target} • ID: {job.job_id}</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <span style={{ fontSize: '13px' }}>{job.duration_ms} ms</span>
-                      <span style={{
-                        padding: '4px 8px',
+                    <button
+                      onClick={() => handleRemoveTarget(t)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid #da3637',
+                        color: '#da3637',
                         borderRadius: '4px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        backgroundColor: job.state === 'Completed' ? '#238636' : (job.state === 'Queued' ? '#1f6feb' : '#da3637'),
-                        color: '#fff'
-                      }}>{job.state}</span>
-                    </div>
+                        padding: '4px 10px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      Delete
+                    </button>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {activeTab === 'reports' && (
+          {/* Scan Launcher */}
+          {activeTab === 'execution' && (
             <div>
-              <h2 style={{ color: '#fff', marginTop: 0 }}>Report Downloads</h2>
-              <p style={{ color: '#8b949e' }}>Download static scan results using content-negotiated format exporters.</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
-                {executions.filter(e => e.state === 'Completed').map(job => (
-                  <div key={job.job_id} style={{
-                    backgroundColor: '#161b22',
-                    border: '1px solid #30363d',
-                    padding: '16px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
+              <h2 style={{ color: '#fff', marginTop: 0 }}>Launch Plugin Scan</h2>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '24px' }}>
+                {/* Left Panel */}
+                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '24px', borderRadius: '8px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', color: '#8b949e' }}>Select target</label>
+                  <select
+                    value={selectedTarget}
+                    onChange={(e) => setSelectedTarget(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      backgroundColor: '#0d1117',
+                      border: '1px solid #30363d',
+                      borderRadius: '6px',
+                      color: '#c9d1d9',
+                      marginBottom: '20px'
+                    }}
+                  >
+                    {targets.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+
+                  <label style={{ display: 'block', marginBottom: '8px', color: '#8b949e' }}>Select Plugin</label>
+                  <select
+                    value={selectedPlugin?.id || ''}
+                    onChange={(e) => {
+                      const pl = plugins.find(p => p.id === e.target.value);
+                      if (pl) setSelectedPlugin(pl);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      backgroundColor: '#0d1117',
+                      border: '1px solid #30363d',
+                      borderRadius: '6px',
+                      color: '#c9d1d9',
+                      marginBottom: '20px'
+                    }}
+                  >
+                    <option value="">-- Choose Plugin --</option>
+                    {plugins.filter(p => p.status === 'Enabled').map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={handleLaunchScan}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#1f6feb',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      fontSize: '15px'
+                    }}
+                  >
+                    Execute Scan Pipeline
+                  </button>
+                </div>
+
+                {/* Right Panel: Dynamic settings form */}
+                <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '24px', borderRadius: '8px' }}>
+                  <h4 style={{ color: '#fff', margin: '0 0 16px 0' }}>Plugin Settings (Dynamic)</h4>
+                  {selectedPlugin ? (
                     <div>
-                      <div style={{ fontWeight: 'bold', color: '#fff' }}>{job.plugin_id}</div>
-                      <div style={{ fontSize: '12px', color: '#8b949e', marginTop: '4px' }}>Job ID: {job.job_id}</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {['JSON', 'HTML', 'Markdown', 'SARIF'].map(fmt => (
-                        <button
-                          key={fmt}
-                          onClick={() => triggerNotification(`Downloading report in ${fmt} format...`)}
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#8b949e', fontSize: '13px' }}>Threads limit</label>
+                        <input
+                          type="number"
+                          value={configThreads}
+                          onChange={(e) => setConfigThreads(e.target.value)}
                           style={{
-                            padding: '6px 12px',
+                            width: '100%',
+                            backgroundColor: '#0d1117',
                             border: '1px solid #30363d',
-                            backgroundColor: '#21262d',
+                            padding: '8px',
                             color: '#c9d1d9',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
+                            borderRadius: '6px'
+                          }}
+                        />
+                      </div>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#8b949e', fontSize: '13px' }}>Timeout (seconds)</label>
+                        <input
+                          type="number"
+                          value={configTimeout}
+                          onChange={(e) => setConfigTimeout(e.target.value)}
+                          style={{
+                            width: '100%',
+                            backgroundColor: '#0d1117',
+                            border: '1px solid #30363d',
+                            padding: '8px',
+                            color: '#c9d1d9',
+                            borderRadius: '6px'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '6px', color: '#8b949e', fontSize: '13px' }}>Port configuration</label>
+                        <select
+                          value={configPorts}
+                          onChange={(e) => setConfigPorts(e.target.value)}
+                          style={{
+                            width: '100%',
+                            backgroundColor: '#0d1117',
+                            border: '1px solid #30363d',
+                            padding: '8px',
+                            color: '#c9d1d9',
+                            borderRadius: '6px'
                           }}
                         >
-                          {fmt}
-                        </button>
-                      ))}
+                          <option value="common">Common Ports Only</option>
+                          <option value="full">Full 65535 Scan</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ) : (
+                    <span style={{ color: '#8b949e', fontSize: '14px' }}>Select a plugin on the left to configure settings.</span>
+                  )}
+                </div>
               </div>
             </div>
           )}
+
+          {/* Live Monitor */}
+          {activeTab === 'monitor' && (
+            <div>
+              <h2 style={{ color: '#fff', marginTop: 0 }}>Live Job Monitor</h2>
+              {activeJobId ? (
+                <div style={{ marginTop: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <div>
+                      <span>Job ID: <code>{activeJobId}</code></span>
+                      <div style={{ marginTop: '8px' }}>Stage: <b style={{ color: '#58a6ff' }}>{liveStage}</b></div>
+                    </div>
+                    <span style={{
+                      backgroundColor: liveStage === 'Completed' ? '#238636' : '#1f6feb',
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      alignSelf: 'flex-start'
+                    }}>{liveStage}</span>
+                  </div>
+
+                  <div style={{
+                    backgroundColor: '#161b22',
+                    border: '1px solid #30363d',
+                    padding: '20px',
+                    borderRadius: '8px',
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    maxHeight: '400px',
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    {liveLogs.map((log, i) => <div key={i} style={{ color: log.includes('error') ? '#da3637' : '#c9d1d9' }}>{log}</div>)}
+                  </div>
+                </div>
+              ) : (
+                <span style={{ color: '#8b949e', display: 'block', marginTop: '24px' }}>No active running scan pipeline log to monitor.</span>
+              )}
+            </div>
+          )}
+
+          {/* Report Viewer */}
+          {activeTab === 'reports' && (
+            <div>
+              <h2 style={{ color: '#fff', marginTop: 0 }}>Report Viewer</h2>
+              
+              {!selectedReport ? (
+                <div style={{ display: 'grid', gap: '12px', marginTop: '24px' }}>
+                  {reports.map(r => (
+                    <div key={r.id} style={{
+                      backgroundColor: '#161b22',
+                      border: '1px solid #30363d',
+                      padding: '20px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <h4 style={{ color: '#fff', margin: 0 }}>Report for {r.target}</h4>
+                        <span style={{ fontSize: '12px', color: '#8b949e' }}>Executed by {r.plugin_id} • Findings: {r.issues.length}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => setSelectedReport(r)}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#1f6feb',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          View Details
+                        </button>
+                        <button
+                          onClick={() => handleDownload(r.id, 'sarif')}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#21262d',
+                            color: '#c9d1d9',
+                            border: '1px solid #30363d',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          SARIF
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ marginTop: '24px' }}>
+                  <button
+                    onClick={() => setSelectedReport(null)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#21262d',
+                      color: '#c9d1d9',
+                      border: '1px solid #30363d',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      marginBottom: '20px'
+                    }}
+                  >
+                    ← Back to reports
+                  </button>
+
+                  <div style={{ backgroundColor: '#161b22', border: '1px solid #30363d', padding: '24px', borderRadius: '8px' }}>
+                    <h3 style={{ color: '#fff', margin: 0 }}>Summary Details</h3>
+                    <p style={{ margin: '12px 0 24px 0', fontSize: '15px' }}>{selectedReport.summary}</p>
+
+                    <h4 style={{ color: '#fff', borderBottom: '1px solid #30363d', paddingBottom: '8px' }}>Findings List ({selectedReport.issues.length})</h4>
+                    {selectedReport.issues.map((issue, idx) => (
+                      <div key={idx} style={{
+                        padding: '16px',
+                        border: '1px solid #30363d',
+                        borderRadius: '6px',
+                        marginBottom: '12px',
+                        backgroundColor: '#0d1117'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 'bold', color: '#fff' }}>{issue.title}</span>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            backgroundColor: '#da3637',
+                            color: '#fff'
+                          }}>{issue.severity}</span>
+                        </div>
+                        <p style={{ margin: '8px 0', fontSize: '14px' }}>{issue.description}</p>
+                        <div style={{ fontSize: '13px', color: '#58a6ff', marginTop: '8px' }}>
+                          <b>Recommendation:</b> {issue.recommendation}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         </main>
       </div>
     </div>
