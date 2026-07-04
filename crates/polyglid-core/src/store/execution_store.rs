@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use rusqlite::{params, Connection};
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DbJobRecord {
     pub job_id: Uuid,
     pub plugin_id: String,

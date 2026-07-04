@@ -56,7 +56,7 @@ pub struct Job {
     pub report: Option<PluginReport>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ExecutionEvent {
     JobStateChanged {
         job_id: Uuid,
@@ -89,6 +89,10 @@ impl<R> ExecutionManager<R>
 where
     R: PluginRuntime + Send + Sync + 'static,
 {
+    pub fn runtime(&self) -> &Arc<R> {
+        &self.runtime
+    }
+
     pub fn new(runtime: R, store: Option<WorkspaceStore>) -> Self {
         let (tx, _) = broadcast::channel(100);
         let mut jobs_list = Vec::new();

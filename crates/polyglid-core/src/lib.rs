@@ -13,6 +13,7 @@ pub mod execution;
 pub mod plugin_manager;
 pub mod store;
 pub mod security;
+pub mod services;
 #[cfg(test)]
 pub mod benchmarks;
 

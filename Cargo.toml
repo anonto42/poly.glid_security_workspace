@@ -8,6 +8,7 @@ members = [
   "crates/polyglid-runtime",
   "plugins/recon_probe",
   "apps/desktop/src-tauri",
+  "crates/polyglid-server",
 ]
 resolver = "2"
 

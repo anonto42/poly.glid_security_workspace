@@ -3,6 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use polyglid_plugin_api::{Issue, PluginId};
 use uuid::Uuid;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DbReportRecord {
     pub id: String,
     pub job_id: Uuid,
