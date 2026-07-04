@@ -1,11 +1,13 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::str::FromStr;
 
 use polyglid_config::AppConfig;
-use polyglid_core::{CoreEngine, InMemoryPermissionStore, PluginRef, PluginRunRequest, Target};
+use polyglid_core::{
+    CoreEngine, InMemoryPermissionStore, PluginRef, PluginRunRequest, PluginRuntime, Target,
+};
 use polyglid_events::VecEventSink;
 use polyglid_plugin_api::Capability;
 use polyglid_runtime::WasmRuntime;
@@ -44,6 +46,18 @@ fn run(args: Vec<String>) -> Result<(), String> {
         [command, subcommand, path] if command == "plugin" && subcommand == "inspect" => {
             plugin_inspect(path)
         }
+        [command, subcommand, path] if command == "plugin" && subcommand == "install" => {
+            plugin_install(path)
+        }
+        [command, subcommand, id] if command == "plugin" && subcommand == "remove" => {
+            plugin_remove(id)
+        }
+        [command, subcommand, id] if command == "plugin" && subcommand == "enable" => {
+            plugin_enable(id, true)
+        }
+        [command, subcommand, id] if command == "plugin" && subcommand == "disable" => {
+            plugin_enable(id, false)
+        }
         [command, subcommand, input, output]
             if command == "plugin" && subcommand == "componentize" =>
         {
@@ -72,30 +86,127 @@ fn doctor() -> Result<(), String> {
     Ok(())
 }
 
-fn plugin_list() -> Result<(), String> {
+fn manager() -> Result<polyglid_core::plugin_manager::PluginManager<WasmRuntime>, String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
-    println!("plugin directory: {}", config.plugin_dir.display());
-    println!("installed plugin discovery is pending");
+    let runtime = std::sync::Arc::new(WasmRuntime::new());
+    let storage = polyglid_config::plugin_registry::JsonRegistryStorage;
+    let pm = polyglid_core::plugin_manager::PluginManager::new(runtime, &config, storage)?;
+    let _ = pm.sync_directory();
+    Ok(pm)
+}
+
+fn plugin_list() -> Result<(), String> {
+    let pm = manager()?;
+    let plugins = pm.get_plugins();
+    if plugins.is_empty() {
+        println!("No plugins currently installed in workspace.");
+    } else {
+        println!(
+            "{:<28} {:<10} {:<10} {:<25}",
+            "ID", "Version", "Status", "Name"
+        );
+        println!("{:-<75}", "");
+        for p in plugins {
+            println!(
+                "{:<28} {:<10} {:<10} {:<25}",
+                p.id.as_str(),
+                p.version.to_string(),
+                p.status.to_string(),
+                p.name
+            );
+        }
+    }
     Ok(())
 }
 
-fn plugin_inspect(path: &str) -> Result<(), String> {
-    let mut engine = engine(Vec::new())?;
-    let manifest = engine
-        .inspect_plugin(PluginRef::from_path(PathBuf::from(path)))
-        .map_err(|err| err.to_string())?;
+fn plugin_inspect(id_or_path: &str) -> Result<(), String> {
+    let pm = manager()?;
 
-    println!("id: {}", manifest.id.as_str());
-    println!("name: {}", manifest.name);
-    println!("version: {}", manifest.version);
-    if manifest.requested_capabilities.is_empty() {
-        println!("requested capabilities: none");
-    } else {
-        println!("requested capabilities:");
-        for capability in manifest.requested_capabilities {
-            println!("- {capability}");
+    // Try registry lookup first
+    if let Ok(id) = polyglid_plugin_api::PluginId::new(id_or_path) {
+        if let Some(entry) = pm.get_plugin(&id) {
+            println!("id: {}", entry.id.as_str());
+            println!("name: {}", entry.name);
+            println!("version: {}", entry.version);
+            println!("author: {}", entry.author);
+            println!("description: {}", entry.description);
+            println!("status: {}", entry.status.to_string());
+            println!("source: {}", entry.source.to_string());
+            println!("checksum: {}", entry.checksum);
+            println!("size: {} bytes", entry.file_size);
+            if entry.capabilities.is_empty() {
+                println!("requested capabilities: none");
+            } else {
+                println!("requested capabilities:");
+                for cap in entry.capabilities {
+                    println!("- {cap}");
+                }
+            }
+            return Ok(());
         }
     }
+
+    // Fallback to inspecting raw local WASM file path
+    let path = PathBuf::from(id_or_path);
+    if path.exists() {
+        let runtime = WasmRuntime::new();
+        let plugin_ref = PluginRef::from_path(path);
+        let manifest = runtime
+            .inspect(&plugin_ref)
+            .map_err(|err| err.to_string())?;
+        let metadata = runtime
+            .call_metadata(&plugin_ref)
+            .map_err(|err| err.to_string())?;
+        println!("id: {}", manifest.id.as_str());
+        println!("name: {}", metadata.display_name);
+        println!("version: {}", metadata.version);
+        println!("author: {}", metadata.author);
+        println!("description: {}", metadata.description);
+        if manifest.requested_capabilities.is_empty() {
+            println!("requested capabilities: none");
+        } else {
+            println!("requested capabilities:");
+            for cap in manifest.requested_capabilities {
+                println!("- {cap}");
+            }
+        }
+        return Ok(());
+    }
+
+    Err(format!(
+        "Plugin '{}' not found in registry and is not a valid wasm file path",
+        id_or_path
+    ))
+}
+
+fn plugin_install(wasm_path: &str) -> Result<(), String> {
+    let pm = manager()?;
+    let entry = pm.install_plugin(
+        Path::new(wasm_path),
+        polyglid_config::plugin_registry::PluginSource::LocalPath(PathBuf::from(wasm_path)),
+    )?;
+    println!(
+        "successfully installed plugin '{}' (version {})",
+        entry.id.as_str(),
+        entry.version
+    );
+    Ok(())
+}
+
+fn plugin_remove(plugin_id: &str) -> Result<(), String> {
+    let pm = manager()?;
+    let id = polyglid_plugin_api::PluginId::new(plugin_id).map_err(|err| err.to_string())?;
+    pm.uninstall_plugin(&id)?;
+    println!("successfully uninstalled plugin '{plugin_id}'");
+    Ok(())
+}
+
+fn plugin_enable(plugin_id: &str, enabled: bool) -> Result<(), String> {
+    let pm = manager()?;
+    let id = polyglid_plugin_api::PluginId::new(plugin_id).map_err(|err| err.to_string())?;
+    pm.toggle_plugin_enabled(&id, enabled)?;
+    let state = if enabled { "enabled" } else { "disabled" };
+    println!("successfully {state} plugin '{plugin_id}'");
     Ok(())
 }
 
@@ -118,11 +229,20 @@ fn plugin_componentize(input: &str, output: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn plugin_run(path: &str, target: &str, flags: &[String]) -> Result<(), String> {
+fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), String> {
+    let pm = manager()?;
+    let mut resolved_path = PathBuf::from(id_or_path);
+
+    if let Ok(id) = polyglid_plugin_api::PluginId::new(id_or_path) {
+        if let Some(entry) = pm.get_plugin(&id) {
+            resolved_path = entry.path;
+        }
+    }
+
     let mut engine = engine(parse_allow_flags(flags)?)?;
     let report = engine
         .run_plugin(PluginRunRequest {
-            plugin: PluginRef::from_path(PathBuf::from(path)),
+            plugin: PluginRef::from_path(resolved_path),
             target: Target::parse(target).map_err(|err| err.to_string())?,
         })
         .map_err(|err| err.to_string())?;
@@ -195,9 +315,13 @@ fn config_help() -> Result<(), String> {
 fn plugin_help() -> Result<(), String> {
     println!("plugin commands:");
     println!("  polyglid plugin list");
-    println!("  polyglid plugin inspect <plugin.wasm>");
+    println!("  polyglid plugin inspect <plugin_id_or_wasm_path>");
+    println!("  polyglid plugin install <wasm_path>");
+    println!("  polyglid plugin remove <plugin_id>");
+    println!("  polyglid plugin enable <plugin_id>");
+    println!("  polyglid plugin disable <plugin_id>");
     println!("  polyglid plugin componentize <module.wasm> <component.wasm>");
-    println!("  polyglid plugin run <plugin.wasm> --target <target> [--allow <capability>...]");
+    println!("  polyglid plugin run <plugin_id_or_wasm_path> --target <target> [--allow <capability>...]");
     Ok(())
 }
 
@@ -208,7 +332,11 @@ fn print_help() {
     println!("  polyglid doctor");
     println!("  polyglid config validate");
     println!("  polyglid plugin list");
-    println!("  polyglid plugin inspect <plugin.wasm>");
+    println!("  polyglid plugin inspect <plugin_id_or_wasm_path>");
+    println!("  polyglid plugin install <wasm_path>");
+    println!("  polyglid plugin remove <plugin_id>");
+    println!("  polyglid plugin enable <plugin_id>");
+    println!("  polyglid plugin disable <plugin_id>");
     println!("  polyglid plugin componentize <module.wasm> <component.wasm>");
-    println!("  polyglid plugin run <plugin.wasm> --target <target> [--allow <capability>...]");
+    println!("  polyglid plugin run <plugin_id_or_wasm_path> --target <target> [--allow <capability>...]");
 }

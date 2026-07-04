@@ -27,11 +27,17 @@ export interface Report {
 }
 
 export interface PluginInfo {
+  id: string;
   name: string;
+  version: string;
+  author: string;
+  description: string;
+  capabilities: string[];
+  checksum: string;
+  status: 'Enabled' | 'Disabled' | 'Invalid' | 'UpdateAvailable';
+  source: string;
+  file_size: number;
+  installed_at: number;
+  last_updated: number;
   path: string;
-  displayName?: string;
-  version?: string;
-  description?: string;
-  author?: string;
-  requiredCapabilities?: string[];
 }

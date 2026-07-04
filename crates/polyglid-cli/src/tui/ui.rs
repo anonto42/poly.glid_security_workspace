@@ -120,8 +120,10 @@ fn draw_scan_table(f: &mut Frame, area: Rect, app: &App) {
                 };
                 let status_style = match &job.state {
                     polyglid_core::execution::JobState::Completed => Style::default().fg(GREEN),
-                    polyglid_core::execution::JobState::Running | polyglid_core::execution::JobState::Starting => Style::default().fg(YELLOW),
-                    polyglid_core::execution::JobState::Failed | polyglid_core::execution::JobState::TimedOut => Style::default().fg(RED),
+                    polyglid_core::execution::JobState::Running
+                    | polyglid_core::execution::JobState::Starting => Style::default().fg(YELLOW),
+                    polyglid_core::execution::JobState::Failed
+                    | polyglid_core::execution::JobState::TimedOut => Style::default().fg(RED),
                     polyglid_core::execution::JobState::Cancelled => Style::default().fg(TEXT_DIM),
                     polyglid_core::execution::JobState::Queued => Style::default().fg(TEXT_DIM),
                 };

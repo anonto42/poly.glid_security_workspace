@@ -9,6 +9,9 @@ use polyglid_core::execution::{ExecutionManager, Job};
 use polyglid_plugin_api::PanelLayout;
 use polyglid_runtime::WasmRuntime;
 
+use polyglid_config::AppConfig;
+use polyglid_core::plugin_manager::PluginManager;
+
 /// Which pane currently has focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
@@ -73,12 +76,19 @@ pub struct App {
     pub status: String,
     pub quit: bool,
     pub start_time: Instant,
-    pub execution_manager: Arc<ExecutionManager<WasmRuntime>>,
+    pub execution_manager: Arc<ExecutionManager<Arc<WasmRuntime>>>,
     pub panels: HashMap<Uuid, PanelLayout>,
+    pub plugin_manager: Arc<PluginManager<WasmRuntime>>,
 }
 
 impl App {
     pub fn new() -> Self {
+        let runtime = Arc::new(WasmRuntime::new());
+        let config = AppConfig::load_from_env().unwrap_or_else(|_| AppConfig::development());
+        let storage = polyglid_config::plugin_registry::JsonRegistryStorage;
+        let pm = Arc::new(PluginManager::new(Arc::clone(&runtime), &config, storage).unwrap());
+        let _ = pm.sync_directory();
+
         Self {
             focus: Focus::PluginTable,
             mode: Mode::Normal,
@@ -94,8 +104,9 @@ impl App {
             status: "Ready".to_string(),
             quit: false,
             start_time: Instant::now(),
-            execution_manager: Arc::new(ExecutionManager::new(WasmRuntime::new())),
+            execution_manager: Arc::new(ExecutionManager::new(runtime)),
             panels: HashMap::new(),
+            plugin_manager: pm,
         }
     }
 

@@ -103,6 +103,13 @@ impl PluginRuntime for WasmRuntime {
         })
     }
 
+    fn inspect_metadata(
+        &self,
+        plugin: &PluginRef,
+    ) -> Result<polyglid_plugin_api::ApiPluginMetadata, CoreError> {
+        self.call_metadata(plugin)
+    }
+
     fn execute(
         &self,
         request: &PluginRunRequest,
@@ -310,7 +317,7 @@ fn instantiate_plugin(
 
     let engine = Engine::new(&config).map_runtime_error()?;
     let component = Component::from_file(&engine, path).map_runtime_error()?;
-    
+
     // Register the engine clone under the current job ID if configured
     if let Some(job_id) = CURRENT_JOB_ID.with(|id| id.get()) {
         register_engine(job_id, engine.clone());
@@ -328,7 +335,7 @@ fn instantiate_plugin(
         |state: &mut RuntimeState| state,
     )
     .map_runtime_error()?;
-    
+
     let mut store = Store::new(&engine, RuntimeState::new(allowed_dns_host, reports_dir));
     store.set_fuel(max_fuel).map_runtime_error()?;
     store.set_epoch_deadline(1);

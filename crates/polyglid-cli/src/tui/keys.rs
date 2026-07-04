@@ -117,7 +117,28 @@ fn execute_command(app: &mut App, cmd: &str) {
             }
             let path = tokens[1];
             app.log_info(format!("Inspecting plugin: {path}"));
-            
+
+            // Try lookup from manager registry first
+            if let Ok(id) = polyglid_plugin_api::PluginId::new(path) {
+                if let Some(entry) = app.plugin_manager.get_plugin(&id) {
+                    app.log_info(format!("Plugin ID: {}", entry.id.as_str()));
+                    app.log_info(format!("Display Name: {}", entry.name));
+                    app.log_info(format!("Version: {}", entry.version));
+                    app.log_info(format!("Status: {}", entry.status.to_string()));
+                    app.log_info(format!("Source: {}", entry.source.to_string()));
+                    app.log_info(format!("Checksum: {}", entry.checksum));
+                    if entry.capabilities.is_empty() {
+                        app.log_info("Requested capabilities: none");
+                    } else {
+                        app.log_info("Requested capabilities:");
+                        for cap in &entry.capabilities {
+                            app.log_info(format!("  - {cap}"));
+                        }
+                    }
+                    return;
+                }
+            }
+
             let runtime = WasmRuntime::new();
             let plugin_ref = polyglid_core::PluginRef::from_path(PathBuf::from(path));
             match runtime.inspect(&plugin_ref) {
@@ -202,6 +223,21 @@ fn execute_command(app: &mut App, cmd: &str) {
 }
 
 fn run_scan(app: &mut App, plugin_path: &str, target_domain: &str, allowed_caps: Vec<Capability>) {
+    let mut resolved_path = plugin_path.to_string();
+
+    if let Ok(id) = polyglid_plugin_api::PluginId::new(plugin_path) {
+        if let Some(entry) = app.plugin_manager.get_plugin(&id) {
+            if entry.status == polyglid_config::plugin_registry::PluginStatus::Disabled {
+                app.log_error(format!(
+                    "Plugin '{}' is currently disabled in the workspace",
+                    id.as_str()
+                ));
+                return;
+            }
+            resolved_path = entry.path.to_string_lossy().to_string();
+        }
+    }
+
     app.log_info(format!(
         "Submitting scan job for {plugin_path} on {target_domain}"
     ));
@@ -213,11 +249,9 @@ fn run_scan(app: &mut App, plugin_path: &str, target_domain: &str, allowed_caps:
         allowed_capabilities: allowed_caps,
     };
 
-    let job_id = app.execution_manager.submit_job(
-        plugin_path.to_string(),
-        target_domain.to_string(),
-        config,
-    );
+    let job_id = app
+        .execution_manager
+        .submit_job(resolved_path, target_domain.to_string(), config);
 
     app.log_info(format!("Submitted job ID: {job_id}"));
 }

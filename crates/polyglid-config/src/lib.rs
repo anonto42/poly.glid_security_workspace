@@ -7,6 +7,8 @@ use std::str::FromStr;
 use polyglid_plugin_api::{Capability, CapabilityRequest, CapabilityScope, PluginId};
 use serde::Deserialize;
 
+pub mod plugin_registry;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub plugin_dir: PathBuf,
@@ -89,6 +91,13 @@ impl AppConfig {
             return Err(ConfigError::EmptyFuelLimit);
         }
         Ok(())
+    }
+
+    pub fn registry_path(&self) -> PathBuf {
+        self.plugin_dir
+            .parent()
+            .unwrap_or(&self.plugin_dir)
+            .join("config/registry.json")
     }
 }
 

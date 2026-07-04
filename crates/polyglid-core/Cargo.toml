@@ -11,6 +11,8 @@ polyglid-plugin-api = { path = "../polyglid-plugin-api" }
 tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "time"] }
 serde = { version = "1.0", features = ["derive"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
+sha2 = "0.10"
+semver = "1.0"
 
 [lib]
 path = "src/lib.rs"

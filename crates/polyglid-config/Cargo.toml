@@ -8,6 +8,8 @@ version.workspace = true
 polyglid-plugin-api = { path = "../polyglid-plugin-api" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
+semver = { version = "1.0", features = ["serde"] }
+serde_json = "1"
 
 [lib]
 path = "src/lib.rs"

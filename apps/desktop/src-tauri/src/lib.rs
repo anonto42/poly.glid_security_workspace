@@ -1,10 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use polyglid_core::execution::{
-    ExecutionConfig, ExecutionEvent, ExecutionManager, JobState,
-};
+use polyglid_config::AppConfig;
+use polyglid_core::execution::{ExecutionConfig, ExecutionEvent, ExecutionManager, JobState};
+use polyglid_core::plugin_manager::PluginManager;
 use polyglid_core::{PluginRef, PluginRuntime};
+use polyglid_plugin_api::PluginId;
 use polyglid_runtime::WasmRuntime;
 use serde::Serialize;
 
@@ -48,6 +50,23 @@ struct SerializablePanelWidget {
     data: Vec<Vec<String>>,
 }
 
+#[derive(Serialize)]
+struct SerializablePluginRegistryEntry {
+    id: String,
+    name: String,
+    version: String,
+    author: String,
+    description: String,
+    capabilities: Vec<String>,
+    checksum: String,
+    status: String,
+    source: String,
+    file_size: u64,
+    installed_at: u64,
+    last_updated: u64,
+    path: String,
+}
+
 fn map_panel_layout(layout: polyglid_plugin_api::PanelLayout) -> SerializablePanelLayout {
     SerializablePanelLayout {
         title: layout.title,
@@ -68,6 +87,26 @@ fn map_panel_layout(layout: polyglid_plugin_api::PanelLayout) -> SerializablePan
                 data: w.data,
             })
             .collect(),
+    }
+}
+
+fn map_registry_entry(
+    entry: polyglid_config::plugin_registry::PluginRegistryEntry,
+) -> SerializablePluginRegistryEntry {
+    SerializablePluginRegistryEntry {
+        id: entry.id.as_str().to_string(),
+        name: entry.name,
+        version: entry.version.to_string(),
+        author: entry.author,
+        description: entry.description,
+        capabilities: entry.capabilities.iter().map(|c| c.to_string()).collect(),
+        checksum: entry.checksum,
+        status: entry.status.to_string(),
+        source: entry.source.to_string(),
+        file_size: entry.file_size,
+        installed_at: entry.installed_at,
+        last_updated: entry.last_updated,
+        path: entry.path.to_string_lossy().to_string(),
     }
 }
 
@@ -97,7 +136,7 @@ fn inspect_plugin_wasm(plugin_path: String) -> Result<SerializablePluginMetadata
 
 #[tauri::command]
 fn cancel_scan_job(
-    state: tauri::State<'_, ExecutionManager<WasmRuntime>>,
+    state: tauri::State<'_, ExecutionManager<Arc<WasmRuntime>>>,
     job_id: String,
 ) -> Result<(), String> {
     let uuid = uuid::Uuid::parse_str(&job_id).map_err(|e| e.to_string())?;
@@ -105,14 +144,71 @@ fn cancel_scan_job(
 }
 
 #[tauri::command]
+fn get_installed_plugins(
+    pm: tauri::State<'_, PluginManager<WasmRuntime>>,
+) -> Result<Vec<SerializablePluginRegistryEntry>, String> {
+    Ok(pm
+        .get_plugins()
+        .into_iter()
+        .map(map_registry_entry)
+        .collect())
+}
+
+#[tauri::command]
+fn install_plugin(
+    pm: tauri::State<'_, PluginManager<WasmRuntime>>,
+    src_path: String,
+) -> Result<SerializablePluginRegistryEntry, String> {
+    let entry = pm.install_plugin(
+        Path::new(&src_path),
+        polyglid_config::plugin_registry::PluginSource::LocalPath(PathBuf::from(&src_path)),
+    )?;
+    Ok(map_registry_entry(entry))
+}
+
+#[tauri::command]
+fn uninstall_plugin(
+    pm: tauri::State<'_, PluginManager<WasmRuntime>>,
+    plugin_id: String,
+) -> Result<(), String> {
+    let id = PluginId::new(&plugin_id).map_err(|e| e.to_string())?;
+    pm.uninstall_plugin(&id)
+}
+
+#[tauri::command]
+fn toggle_plugin_enabled(
+    pm: tauri::State<'_, PluginManager<WasmRuntime>>,
+    plugin_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let id = PluginId::new(&plugin_id).map_err(|e| e.to_string())?;
+    pm.toggle_plugin_enabled(&id, enabled)
+}
+
+#[tauri::command]
 fn run_plugin(
-    state: tauri::State<'_, ExecutionManager<WasmRuntime>>,
+    state: tauri::State<'_, ExecutionManager<Arc<WasmRuntime>>>,
+    pm: tauri::State<'_, PluginManager<WasmRuntime>>,
     plugin_path: String,
     target: String,
 ) -> Result<SerializableReport, String> {
     let runtime = WasmRuntime::new();
-    let plugin_ref = PluginRef::from_path(PathBuf::from(&plugin_path));
 
+    // Resolve run component path from registry if the input is a registered plugin ID
+    let mut resolved_path = PathBuf::from(&plugin_path);
+    if let Ok(id) = PluginId::new(&plugin_path) {
+        if let Some(entry) = pm.get_plugin(&id) {
+            if entry.status == polyglid_config::plugin_registry::PluginStatus::Disabled {
+                return Err(format!(
+                    "Plugin '{}' is currently disabled in this workspace",
+                    id.as_str()
+                ));
+            }
+            resolved_path = entry.path;
+        }
+    }
+
+    let plugin_ref = PluginRef::from_path(&resolved_path);
     let manifest = runtime.inspect(&plugin_ref).map_err(|e| e.to_string())?;
     let allowed_caps = manifest
         .requested_capabilities
@@ -128,7 +224,7 @@ fn run_plugin(
     };
 
     let mut rx = state.subscribe();
-    let job_id = state.submit_job(plugin_path, target, config);
+    let job_id = state.submit_job(resolved_path.to_string_lossy().to_string(), target, config);
 
     // Wait for the job to complete in the background execution pipeline
     let start = Instant::now();
@@ -136,9 +232,7 @@ fn run_plugin(
         if let Ok(event) = rx.blocking_recv() {
             match event {
                 ExecutionEvent::JobFinished {
-                    job_id: id,
-                    report,
-                    ..
+                    job_id: id, report, ..
                 } if id == job_id => {
                     let jobs = state.get_jobs();
                     let job = jobs.iter().find(|j| j.id == job_id).unwrap();
@@ -166,9 +260,7 @@ fn run_plugin(
                     });
                 }
                 ExecutionEvent::JobFailed {
-                    job_id: id,
-                    error,
-                    ..
+                    job_id: id, error, ..
                 } if id == job_id => {
                     return Err(format!("Scan execution failed: {error}"));
                 }
@@ -194,13 +286,25 @@ fn run_plugin(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let runtime = Arc::new(WasmRuntime::new());
+    let config = AppConfig::load_from_env().unwrap_or_else(|_| AppConfig::development());
+    let storage = polyglid_config::plugin_registry::JsonRegistryStorage;
+    let pm = PluginManager::new(Arc::clone(&runtime), &config, storage)
+        .expect("failed to init PluginManager");
+    let _ = pm.sync_directory();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(ExecutionManager::new(WasmRuntime::new()))
+        .manage(pm)
+        .manage(ExecutionManager::new(runtime))
         .invoke_handler(tauri::generate_handler![
             run_plugin,
             inspect_plugin_wasm,
-            cancel_scan_job
+            cancel_scan_job,
+            get_installed_plugins,
+            install_plugin,
+            uninstall_plugin,
+            toggle_plugin_enabled
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

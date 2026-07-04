@@ -10,8 +10,7 @@ use polyglid_events::VecEventSink;
 use polyglid_plugin_api::{Capability, PluginReport};
 
 use crate::{
-    CoreEngine, InMemoryPermissionStore, PluginRef, PluginRunRequest, PluginRuntime,
-    Target,
+    CoreEngine, InMemoryPermissionStore, PluginRef, PluginRunRequest, PluginRuntime, Target,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -198,7 +197,14 @@ where
                 Ok(eng) => eng,
                 Err(err) => {
                     let err_msg = format!("Failed to create core engine: {err}");
-                    fail_job(job_id, &jobs_clone, &tx_clone, err_msg, start_time, timestamp);
+                    fail_job(
+                        job_id,
+                        &jobs_clone,
+                        &tx_clone,
+                        err_msg,
+                        start_time,
+                        timestamp,
+                    );
                     return;
                 }
             };
@@ -207,7 +213,14 @@ where
                 Ok(t) => t,
                 Err(err) => {
                     let err_msg = format!("Invalid target: {err}");
-                    fail_job(job_id, &jobs_clone, &tx_clone, err_msg, start_time, timestamp);
+                    fail_job(
+                        job_id,
+                        &jobs_clone,
+                        &tx_clone,
+                        err_msg,
+                        start_time,
+                        timestamp,
+                    );
                     return;
                 }
             };
@@ -261,7 +274,14 @@ where
                 }
                 Err(err) => {
                     let err_msg = format!("Run failed: {err}");
-                    fail_job(job_id, &jobs_clone, &tx_clone, err_msg, start_time, timestamp);
+                    fail_job(
+                        job_id,
+                        &jobs_clone,
+                        &tx_clone,
+                        err_msg,
+                        start_time,
+                        timestamp,
+                    );
                 }
             }
         });
@@ -276,7 +296,10 @@ where
             std::thread::sleep(timeout);
             let mut jobs = jobs_clone_to.lock().unwrap();
             if let Some(j) = jobs.iter_mut().find(|j| j.id == job_id) {
-                if j.state == JobState::Running || j.state == JobState::Starting || j.state == JobState::Queued {
+                if j.state == JobState::Running
+                    || j.state == JobState::Starting
+                    || j.state == JobState::Queued
+                {
                     j.state = JobState::TimedOut;
                     j.error = Some("Job execution timed out".to_string());
                     let _ = runtime_clone_to.cancel(job_id);
@@ -374,6 +397,19 @@ mod tests {
             })
         }
 
+        fn inspect_metadata(
+            &self,
+            _plugin: &PluginRef,
+        ) -> Result<polyglid_plugin_api::ApiPluginMetadata, CoreError> {
+            Ok(polyglid_plugin_api::ApiPluginMetadata {
+                name: "mock".to_string(),
+                display_name: "Mock Plugin".to_string(),
+                version: "1.0.0".to_string(),
+                description: "mocked runtime".to_string(),
+                author: "mock author".to_string(),
+            })
+        }
+
         fn execute(
             &self,
             request: &PluginRunRequest,
@@ -403,7 +439,8 @@ mod tests {
             allowed_capabilities: vec![],
         };
 
-        let job_id = manager.submit_job("plugin.wasm".to_string(), "example.com".to_string(), config);
+        let job_id =
+            manager.submit_job("plugin.wasm".to_string(), "example.com".to_string(), config);
 
         // Track events
         let mut states = Vec::new();
@@ -448,7 +485,8 @@ mod tests {
             allowed_capabilities: vec![],
         };
 
-        let job_id = manager.submit_job("plugin.wasm".to_string(), "example.com".to_string(), config);
+        let job_id =
+            manager.submit_job("plugin.wasm".to_string(), "example.com".to_string(), config);
 
         let mut timed_out = false;
         let start = Instant::now();
@@ -485,7 +523,8 @@ mod tests {
             allowed_capabilities: vec![],
         };
 
-        let job_id = manager.submit_job("plugin.wasm".to_string(), "example.com".to_string(), config);
+        let job_id =
+            manager.submit_job("plugin.wasm".to_string(), "example.com".to_string(), config);
 
         // Cancel immediately
         std::thread::sleep(Duration::from_millis(10));

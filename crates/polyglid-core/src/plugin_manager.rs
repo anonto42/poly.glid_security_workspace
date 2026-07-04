@@ -1,0 +1,578 @@
+//! Workspace plugin lifecyle manager, validator, and repository abstraction.
+
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::{PluginRef, PluginRuntime};
+use polyglid_config::plugin_registry::{
+    JsonRegistryStorage, PluginRegistryEntry, PluginSource, PluginStatus, RegistryStorage,
+};
+use polyglid_config::AppConfig;
+use polyglid_plugin_api::{PluginId, PluginManifest};
+use semver::Version;
+
+/// Checks structure, headers, magic bytes, and export footprints of WASM components.
+pub struct PluginValidator;
+
+impl PluginValidator {
+    /// Inspect and validate a WASM plugin component.
+    pub fn validate<R: PluginRuntime>(
+        runtime: &R,
+        path: &Path,
+    ) -> Result<(PluginManifest, polyglid_plugin_api::ApiPluginMetadata), String> {
+        // 1. Basic file check
+        if !path.exists() {
+            return Err("file does not exist".to_string());
+        }
+        let metadata =
+            fs::metadata(path).map_err(|err| format!("failed to read file metadata: {err}"))?;
+        if metadata.len() == 0 {
+            return Err("file is empty".to_string());
+        }
+
+        // 2. WASM magic bytes check
+        let mut file = fs::File::open(path)
+            .map_err(|err| format!("failed to open file for validation: {err}"))?;
+        let mut header = [0; 4];
+        use std::io::Read;
+        file.read_exact(&mut header)
+            .map_err(|err| format!("failed to read file headers: {err}"))?;
+        if header != [0x00, 0x61, 0x73, 0x6d] {
+            return Err("invalid WebAssembly file header".to_string());
+        }
+
+        // 3. Inspect component structure and WIT declarations
+        let plugin_ref = PluginRef::from_path(path);
+        let manifest = runtime
+            .inspect(&plugin_ref)
+            .map_err(|err| format!("WASM component validation failed: {err}"))?;
+
+        // 4. Query metadata export to ensure required exports exist
+        // Note: WasmRuntime in polyglid-runtime has call_metadata method, but since PluginRuntime trait
+        // does not declare call_metadata (it is WasmRuntime specific), we can try to downcast or
+        // since we are generic over R: PluginRuntime, we can call a custom inspection method or let the manager
+        // handle metadata queries. To keep it clean, let's query metadata if R implements or exposes it.
+        // Wait, how can a generic PluginRuntime call WasmRuntime specific methods?
+        // We can inspect the WASM component's metadata by reading its component bindings.
+        // Actually, in our current workspace, polyglid-runtime's WasmRuntime implements call_metadata.
+        // We can define a trait method on PluginRuntime, or since PluginRuntime is owned by polyglid-core,
+        // we can just add `inspect_metadata` to the `PluginRuntime` trait!
+        // Yes! Adding a default method `inspect_metadata` to the `PluginRuntime` trait is extremely clean
+        // and preserves trait decoupling!
+        // Let's check: WasmRuntime has `call_metadata` which does this. We can map `inspect_metadata` in the trait
+        // to call it!
+        // Let's add:
+        // `fn inspect_metadata(&self, plugin: &PluginRef) -> Result<polyglid_plugin_api::ApiPluginMetadata, CoreError>`
+        // to the `PluginRuntime` trait!
+        let api_metadata = runtime
+            .inspect_metadata(&plugin_ref)
+            .map_err(|err| format!("failed to query plugin metadata export: {err}"))?;
+
+        // Ensure plugin ID matches metadata name
+        let metadata_id = PluginId::new(&api_metadata.name)
+            .map_err(|err| format!("invalid metadata name: {err}"))?;
+        if metadata_id != manifest.id {
+            return Err(format!(
+                "plugin ID mismatch: manifest expects '{}', metadata returns '{}'",
+                manifest.id.as_str(),
+                metadata_id.as_str()
+            ));
+        }
+
+        Ok((manifest, api_metadata))
+    }
+}
+
+/// Handles copying, deleting, and discovering files inside workspace/plugins/
+pub struct PluginRepository;
+
+impl PluginRepository {
+    pub fn install(
+        &self,
+        id: &PluginId,
+        src_path: &Path,
+        plugin_dir: &Path,
+    ) -> Result<PathBuf, String> {
+        fs::create_dir_all(plugin_dir)
+            .map_err(|err| format!("failed to create plugin directory: {err}"))?;
+
+        let dest_path = plugin_dir.join(format!("{}.wasm", id.as_str()));
+        fs::copy(src_path, &dest_path)
+            .map_err(|err| format!("failed to copy plugin to workspace: {err}"))?;
+
+        Ok(dest_path)
+    }
+
+    pub fn remove(&self, id: &PluginId, plugin_dir: &Path) -> Result<(), String> {
+        let path = plugin_dir.join(format!("{}.wasm", id.as_str()));
+        if path.exists() {
+            fs::remove_file(&path)
+                .map_err(|err| format!("failed to delete plugin file from workspace: {err}"))?;
+        }
+        Ok(())
+    }
+
+    pub fn discover(&self, plugin_dir: &Path) -> Result<Vec<PathBuf>, String> {
+        if !plugin_dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut files = Vec::new();
+        let entries = fs::read_dir(plugin_dir)
+            .map_err(|err| format!("failed to read plugin directory: {err}"))?;
+        for entry in entries {
+            let entry = entry.map_err(|err| format!("failed to read entry: {err}"))?;
+            let path = entry.path();
+            if path.is_file() && path.extension().map_or(false, |ext| ext == "wasm") {
+                files.push(path);
+            }
+        }
+        Ok(files)
+    }
+}
+
+/// Orchestrator for validations, installations, and active registry configurations.
+pub struct PluginManager<R, S = JsonRegistryStorage> {
+    runtime: Arc<R>,
+    repository: PluginRepository,
+    registry: Arc<Mutex<HashMap<PluginId, PluginRegistryEntry>>>,
+    storage: S,
+    storage_path: PathBuf,
+    plugin_dir: PathBuf,
+}
+
+impl<R, S> PluginManager<R, S>
+where
+    R: PluginRuntime,
+    S: RegistryStorage,
+{
+    pub fn new(runtime: Arc<R>, config: &AppConfig, storage: S) -> Result<Self, String> {
+        let storage_path = config.registry_path();
+        let registry_entries = storage.load(&storage_path)?;
+
+        Ok(Self {
+            runtime,
+            repository: PluginRepository,
+            registry: Arc::new(Mutex::new(registry_entries)),
+            storage,
+            storage_path,
+            plugin_dir: config.plugin_dir.clone(),
+        })
+    }
+
+    pub fn get_plugins(&self) -> Vec<PluginRegistryEntry> {
+        let map = self.registry.lock().unwrap();
+        let mut list: Vec<PluginRegistryEntry> = map.values().cloned().collect();
+        list.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        list
+    }
+
+    pub fn get_plugin(&self, id: &PluginId) -> Option<PluginRegistryEntry> {
+        self.registry.lock().unwrap().get(id).cloned()
+    }
+
+    pub fn is_enabled(&self, id: &PluginId) -> bool {
+        let map = self.registry.lock().unwrap();
+        if let Some(entry) = map.get(id) {
+            entry.status == PluginStatus::Enabled
+        } else {
+            false
+        }
+    }
+
+    pub fn validate_plugin(
+        &self,
+        src_path: &Path,
+    ) -> Result<(PluginManifest, polyglid_plugin_api::ApiPluginMetadata), String> {
+        PluginValidator::validate(self.runtime.as_ref(), src_path)
+    }
+
+    pub fn install_plugin(
+        &self,
+        src_path: &Path,
+        source: PluginSource,
+    ) -> Result<PluginRegistryEntry, String> {
+        // 1. Validation step
+        let (manifest, metadata) = self.validate_plugin(src_path)?;
+
+        // 2. Check for duplicate IDs or version conflicts in registry
+        let new_ver = Version::parse(&metadata.version)
+            .map_err(|err| format!("invalid semantic version '{}': {err}", metadata.version))?;
+
+        {
+            let map = self.registry.lock().unwrap();
+            if let Some(existing) = map.get(&manifest.id) {
+                if existing.version >= new_ver {
+                    return Err(format!(
+                        "version conflict: workspace already contains equal or newer version '{}' for plugin '{}'",
+                        existing.version, manifest.id.as_str()
+                    ));
+                }
+            }
+        }
+
+        // 3. Compute size and SHA-256 checksum
+        let file_size = fs::metadata(src_path)
+            .map_err(|err| format!("failed to read source size: {err}"))?
+            .len();
+        let checksum = compute_sha256(src_path)?;
+
+        // 4. Copy file using Repository
+        let dest_path = self
+            .repository
+            .install(&manifest.id, src_path, &self.plugin_dir)?;
+
+        // 5. Build Registry Entry
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let capabilities = manifest
+            .requested_capabilities
+            .iter()
+            .map(|req| req.capability)
+            .collect();
+
+        let entry = PluginRegistryEntry {
+            id: manifest.id.clone(),
+            name: metadata.display_name,
+            version: new_ver,
+            author: metadata.author,
+            description: metadata.description,
+            capabilities,
+            checksum,
+            status: PluginStatus::Enabled,
+            source,
+            file_size,
+            installed_at: now,
+            last_updated: now,
+            path: dest_path,
+        };
+
+        // 6. Save registry
+        {
+            let mut map = self.registry.lock().unwrap();
+            map.insert(manifest.id.clone(), entry.clone());
+            self.storage.save(&self.storage_path, &map)?;
+        }
+
+        Ok(entry)
+    }
+
+    pub fn uninstall_plugin(&self, id: &PluginId) -> Result<(), String> {
+        // 1. Remove file
+        self.repository.remove(id, &self.plugin_dir)?;
+
+        // 2. Remove registry entry
+        {
+            let mut map = self.registry.lock().unwrap();
+            map.remove(id);
+            self.storage.save(&self.storage_path, &map)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn toggle_plugin_enabled(&self, id: &PluginId, enabled: bool) -> Result<(), String> {
+        let mut map = self.registry.lock().unwrap();
+        if let Some(entry) = map.get_mut(id) {
+            entry.status = if enabled {
+                PluginStatus::Enabled
+            } else {
+                PluginStatus::Disabled
+            };
+            self.storage.save(&self.storage_path, &map)?;
+            Ok(())
+        } else {
+            Err(format!("plugin '{}' not found in workspace", id.as_str()))
+        }
+    }
+
+    /// Discover new/deleted files on disk and synchronize the registry database.
+    pub fn sync_directory(&self) -> Result<(), String> {
+        let discovered_paths = self.repository.discover(&self.plugin_dir)?;
+        let mut discovered_ids = HashMap::new();
+
+        for path in discovered_paths {
+            if let Ok((manifest, metadata)) =
+                PluginValidator::validate(self.runtime.as_ref(), &path)
+            {
+                discovered_ids.insert(manifest.id.clone(), (path, manifest, metadata));
+            }
+        }
+
+        let mut map = self.registry.lock().unwrap();
+        let mut changed = false;
+
+        // Clean up registry entries whose files no longer exist on disk
+        let mut to_remove = Vec::new();
+        for (id, entry) in map.iter() {
+            if !entry.path.exists() {
+                to_remove.push(id.clone());
+            }
+        }
+        for id in to_remove {
+            map.remove(&id);
+            changed = true;
+        }
+
+        // Register any discovered wasm files not currently in registry
+        for (id, (path, manifest, metadata)) in discovered_ids {
+            if !map.contains_key(&id) {
+                let file_size = fs::metadata(&path).map_or(0, |m| m.len());
+                let checksum = compute_sha256(&path).unwrap_or_default();
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
+                let capabilities = manifest
+                    .requested_capabilities
+                    .iter()
+                    .map(|req| req.capability)
+                    .collect();
+
+                let entry = PluginRegistryEntry {
+                    id: id.clone(),
+                    name: metadata.display_name,
+                    version: Version::parse(&metadata.version)
+                        .unwrap_or_else(|_| Version::new(0, 1, 0)),
+                    author: metadata.author,
+                    description: metadata.description,
+                    capabilities,
+                    checksum,
+                    status: PluginStatus::Enabled,
+                    source: PluginSource::LocalPath(path.clone()),
+                    file_size,
+                    installed_at: now,
+                    last_updated: now,
+                    path,
+                };
+                map.insert(id, entry);
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.storage.save(&self.storage_path, &map)?;
+        }
+
+        Ok(())
+    }
+}
+
+fn compute_sha256(path: &Path) -> Result<String, String> {
+    use std::io::Read;
+    let mut file =
+        fs::File::open(path).map_err(|err| format!("failed to open file for hashing: {err}"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0; 4096];
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|err| format!("failed to read file for hashing: {err}"))?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    let result = hasher.finalize();
+    Ok(result.iter().map(|b| format!("{:02x}", b)).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::PluginManifest;
+    use polyglid_config::plugin_registry::JsonRegistryStorage;
+    use polyglid_plugin_api::{ApiPluginMetadata, PluginId};
+
+    struct TestManagerRuntime;
+
+    impl PluginRuntime for TestManagerRuntime {
+        fn inspect(&self, _plugin: &PluginRef) -> Result<PluginManifest, crate::CoreError> {
+            Ok(PluginManifest {
+                id: PluginId::new("manager.test").unwrap(),
+                name: "Manager Test Plugin".to_string(),
+                version: "0.2.0".to_string(),
+                requested_capabilities: vec![],
+            })
+        }
+
+        fn inspect_metadata(
+            &self,
+            _plugin: &PluginRef,
+        ) -> Result<ApiPluginMetadata, crate::CoreError> {
+            Ok(ApiPluginMetadata {
+                name: "manager.test".to_string(),
+                display_name: "Manager Test Plugin".to_string(),
+                version: "0.2.0".to_string(),
+                description: "for manager testing".to_string(),
+                author: "manager tester".to_string(),
+            })
+        }
+
+        fn execute(
+            &self,
+            _request: &crate::PluginRunRequest,
+            _config: &AppConfig,
+        ) -> Result<crate::PluginReport, crate::CoreError> {
+            Err(crate::CoreError::Runtime("cancelled".to_string()))
+        }
+    }
+
+    #[test]
+    fn test_validator_invalid_magic() {
+        let temp_dir = std::env::temp_dir();
+        let dummy_path = temp_dir.join(format!(
+            "invalid_magic_{}.wasm",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::write(&dummy_path, b"not_wasm_header_stuff").unwrap();
+
+        let runtime = TestManagerRuntime;
+        let res = PluginValidator::validate(&runtime, &dummy_path);
+        assert!(res.is_err());
+        assert!(res
+            .err()
+            .unwrap()
+            .contains("invalid WebAssembly file header"));
+
+        let _ = fs::remove_file(&dummy_path);
+    }
+
+    #[test]
+    fn test_validator_valid_magic_calls_runtime() {
+        let temp_dir = std::env::temp_dir();
+        let dummy_path = temp_dir.join(format!(
+            "valid_magic_{}.wasm",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::write(&dummy_path, b"\x00asm_more_data").unwrap();
+
+        let runtime = TestManagerRuntime;
+        let res = PluginValidator::validate(&runtime, &dummy_path);
+        assert!(res.is_ok());
+        let (manifest, metadata) = res.unwrap();
+        assert_eq!(manifest.id.as_str(), "manager.test");
+        assert_eq!(metadata.name, "manager.test");
+
+        let _ = fs::remove_file(&dummy_path);
+    }
+
+    #[test]
+    fn test_repository_lifecycle() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let src_path = temp_dir.join(format!("src_plugin_{timestamp}.wasm"));
+        let dest_dir = temp_dir.join(format!("dest_dir_{timestamp}"));
+
+        fs::write(&src_path, b"\x00asmdummy").unwrap();
+
+        let repo = PluginRepository;
+        let id = PluginId::new("repo.test").unwrap();
+
+        // 1. Install
+        let installed_path = repo.install(&id, &src_path, &dest_dir).unwrap();
+        assert!(installed_path.exists());
+        assert_eq!(installed_path.file_name().unwrap(), "repo.test.wasm");
+
+        // 2. Discover
+        let discovered = repo.discover(&dest_dir).unwrap();
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0], installed_path);
+
+        // 3. Remove
+        repo.remove(&id, &dest_dir).unwrap();
+        assert!(!installed_path.exists());
+
+        // Clean up
+        let _ = fs::remove_file(&src_path);
+        let _ = fs::remove_dir_all(&dest_dir);
+    }
+
+    #[test]
+    fn test_plugin_manager_lifecycle() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let workspace_dir = temp_dir.join(format!("workspace_{timestamp}"));
+        let plugin_dir = workspace_dir.join("plugins");
+        let config_dir = workspace_dir.join("config");
+        fs::create_dir_all(&plugin_dir).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let mut app_config = AppConfig::development();
+        app_config.plugin_dir = plugin_dir.clone();
+
+        // 1. Create a dummy source WASM plugin file with valid header
+        let src_path = workspace_dir.join("test_src.wasm");
+        fs::write(&src_path, b"\x00asm_dummy_data_goes_here").unwrap();
+
+        let runtime = Arc::new(TestManagerRuntime);
+        let storage = JsonRegistryStorage;
+        let manager = PluginManager::new(runtime, &app_config, storage).unwrap();
+
+        // Check initially empty
+        assert!(manager.get_plugins().is_empty());
+        let test_id = PluginId::new("manager.test").unwrap();
+        assert!(!manager.is_enabled(&test_id));
+
+        // 2. Install plugin
+        let entry = manager
+            .install_plugin(&src_path, PluginSource::LocalPath(src_path.clone()))
+            .unwrap();
+        assert_eq!(entry.id, test_id);
+        assert_eq!(entry.name, "Manager Test Plugin");
+        assert_eq!(entry.version, semver::Version::new(0, 2, 0));
+        assert!(entry.path.exists());
+        assert_eq!(entry.status, PluginStatus::Enabled);
+
+        // Check manager registry holds it
+        assert_eq!(manager.get_plugins().len(), 1);
+        assert!(manager.is_enabled(&test_id));
+        let plugin_entry = manager.get_plugin(&test_id).unwrap();
+        assert_eq!(plugin_entry.author, "manager tester");
+
+        // 3. Toggle disable
+        manager.toggle_plugin_enabled(&test_id, false).unwrap();
+        assert!(!manager.is_enabled(&test_id));
+        assert_eq!(
+            manager.get_plugin(&test_id).unwrap().status,
+            PluginStatus::Disabled
+        );
+
+        // 4. Directory Sync - remove file and sync should clean registry
+        fs::remove_file(&entry.path).unwrap();
+        manager.sync_directory().unwrap();
+        assert!(manager.get_plugins().is_empty());
+
+        // 5. Uninstall plugin (when file is already removed/does not exist)
+        // Re-install first
+        fs::write(&src_path, b"\x00asm_dummy_data_goes_here").unwrap();
+        manager
+            .install_plugin(&src_path, PluginSource::LocalPath(src_path.clone()))
+            .unwrap();
+        assert_eq!(manager.get_plugins().len(), 1);
+        manager.uninstall_plugin(&test_id).unwrap();
+        assert!(manager.get_plugins().is_empty());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&workspace_dir);
+    }
+}

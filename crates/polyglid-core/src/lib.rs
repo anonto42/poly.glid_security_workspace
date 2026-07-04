@@ -10,6 +10,7 @@ use polyglid_plugin_api::{
 };
 
 pub mod execution;
+pub mod plugin_manager;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginRef {
@@ -57,6 +58,10 @@ impl Target {
 
 pub trait PluginRuntime {
     fn inspect(&self, plugin: &PluginRef) -> Result<PluginManifest, CoreError>;
+    fn inspect_metadata(
+        &self,
+        plugin: &PluginRef,
+    ) -> Result<polyglid_plugin_api::ApiPluginMetadata, CoreError>;
     fn execute(
         &self,
         request: &PluginRunRequest,
@@ -70,6 +75,12 @@ pub trait PluginRuntime {
 impl<R: PluginRuntime + ?Sized> PluginRuntime for std::sync::Arc<R> {
     fn inspect(&self, plugin: &PluginRef) -> Result<PluginManifest, CoreError> {
         (**self).inspect(plugin)
+    }
+    fn inspect_metadata(
+        &self,
+        plugin: &PluginRef,
+    ) -> Result<polyglid_plugin_api::ApiPluginMetadata, CoreError> {
+        (**self).inspect_metadata(plugin)
     }
     fn execute(
         &self,
@@ -188,6 +199,24 @@ where
 
     pub fn run_plugin(&mut self, request: PluginRunRequest) -> Result<PluginReport, CoreError> {
         let manifest = self.runtime.inspect(&request.plugin)?;
+
+        // Enforce Phase 8 lifecycle enabled status
+        let registry_path = self.config.registry_path();
+        if registry_path.exists() {
+            let storage = polyglid_config::plugin_registry::JsonRegistryStorage;
+            use polyglid_config::plugin_registry::RegistryStorage;
+            if let Ok(reg) = storage.load(&registry_path) {
+                if let Some(entry) = reg.get(&manifest.id) {
+                    if entry.status == polyglid_config::plugin_registry::PluginStatus::Disabled {
+                        return Err(CoreError::Runtime(format!(
+                            "Plugin '{}' is currently disabled in the workspace",
+                            manifest.id.as_str()
+                        )));
+                    }
+                }
+            }
+        }
+
         for request in &manifest.requested_capabilities {
             match self.permissions.decide(&manifest.id, request) {
                 Ok(PermissionDecision::Allow) => {
@@ -313,6 +342,19 @@ mod tests {
                 name: "Demo".to_string(),
                 version: "0.1.0".to_string(),
                 requested_capabilities: self.capabilities.clone(),
+            })
+        }
+
+        fn inspect_metadata(
+            &self,
+            _plugin: &PluginRef,
+        ) -> Result<polyglid_plugin_api::ApiPluginMetadata, CoreError> {
+            Ok(polyglid_plugin_api::ApiPluginMetadata {
+                name: "demo".to_string(),
+                display_name: "Demo".to_string(),
+                version: "0.1.0".to_string(),
+                description: "mocked runtime".to_string(),
+                author: "mock author".to_string(),
             })
         }
 

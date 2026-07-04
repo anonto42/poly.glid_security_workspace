@@ -127,16 +127,21 @@ impl Guest for ReconProbe {
                   className="w-full bg-[#3c3c3c] border border-gray-700 rounded p-2 text-white focus:outline-none focus:border-blue-500 text-sm"
                 >
                   {plugins.map((plugin) => (
-                    <option key={plugin.path} value={plugin.path}>
-                      {plugin.displayName || plugin.name} ({plugin.path})
+                    <option key={plugin.id} value={plugin.id}>
+                      {plugin.name} ({plugin.id})
                     </option>
                   ))}
                 </select>
+                {plugins.find(p => p.id === selectedPlugin)?.status === 'Disabled' && (
+                  <p className="text-xs text-red-400 mt-1">
+                    This plugin is currently disabled in the workspace. Enable it in the Plugins side panel before running.
+                  </p>
+                )}
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || plugins.find(p => p.id === selectedPlugin)?.status === 'Disabled'}
                 className="flex items-center justify-center space-x-2 w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white p-2.5 rounded transition-colors mt-4 font-semibold text-sm cursor-pointer"
               >
                 <Play size={16} />

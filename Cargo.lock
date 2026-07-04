@@ -3207,7 +3207,9 @@ name = "polyglid-config"
 version = "0.1.0"
 dependencies = [
  "polyglid-plugin-api",
+ "semver",
  "serde",
+ "serde_json",
  "toml 0.9.12+spec-1.1.0",
 ]
 
@@ -3218,7 +3220,9 @@ dependencies = [
  "polyglid-config",
  "polyglid-events",
  "polyglid-plugin-api",
+ "semver",
  "serde",
+ "sha2",
  "tokio",
  "uuid",
 ]

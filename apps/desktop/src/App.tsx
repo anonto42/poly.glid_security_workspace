@@ -19,39 +19,27 @@ function App() {
   const [selectedTarget, setSelectedTarget] = useState("example.com");
   const [fuelLimit, setFuelLimit] = useState(25000000);
 
-  const [plugins, setPlugins] = useState<PluginInfo[]>([
-    { name: "recon_probe.wasm", path: "../../../target/wasm32-wasip1/debug/recon_probe.component.wasm" }
-  ]);
-  const [selectedPlugin, setSelectedPlugin] = useState(plugins[0].path);
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [selectedPlugin, setSelectedPlugin] = useState("");
 
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Dynamic discovery on startup for initial plugins
+  const refreshPlugins = async () => {
+    try {
+      const list = await invoke<PluginInfo[]>("get_installed_plugins");
+      setPlugins(list);
+      if (list.length > 0 && !list.some(p => p.id === selectedPlugin)) {
+        setSelectedPlugin(list[0].id);
+      }
+    } catch (e) {
+      console.error("Failed to load installed plugins from registry:", e);
+    }
+  };
+
   useEffect(() => {
-    const fetchMetadata = async () => {
-      const updated = await Promise.all(
-        plugins.map(async (p) => {
-          try {
-            const meta: any = await invoke("inspect_plugin_wasm", { pluginPath: p.path });
-            return {
-              ...p,
-              displayName: meta.display_name,
-              version: meta.version,
-              description: meta.description,
-              author: meta.author,
-              requiredCapabilities: meta.required_capabilities,
-            };
-          } catch (e) {
-            console.error("Failed to inspect plugin metadata for path:", p.path, e);
-            return p;
-          }
-        })
-      );
-      setPlugins(updated);
-    };
-    fetchMetadata();
+    refreshPlugins();
   }, []);
 
   const handleTargetSelect = (tgt: string) => {
@@ -74,31 +62,41 @@ function App() {
   };
 
   const handleAddPlugin = async (name: string, path: string) => {
-    if (!plugins.some(p => p.path === path)) {
-      let metaDetails = {};
-      try {
-        const meta: any = await invoke("inspect_plugin_wasm", { pluginPath: path });
-        metaDetails = {
-          displayName: meta.display_name,
-          version: meta.version,
-          description: meta.description,
-          author: meta.author,
-          requiredCapabilities: meta.required_capabilities,
-        };
-      } catch (e) {
-        console.error("Failed to inspect added plugin metadata:", e);
-      }
-      const newPlugin = { name, path, ...metaDetails };
-      setPlugins([...plugins, newPlugin]);
-      setSelectedPlugin(path);
+    try {
+      setLoading(true);
+      setError(null);
+      const entry = await invoke<PluginInfo>("install_plugin", { srcPath: path });
+      await refreshPlugins();
+      setSelectedPlugin(entry.id);
+    } catch (e: any) {
+      console.error("Failed to install plugin:", e);
+      setError(e.toString());
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRemovePlugin = (path: string) => {
-    const nextPlugins = plugins.filter(p => p.path !== path);
-    setPlugins(nextPlugins);
-    if (selectedPlugin === path && nextPlugins.length > 0) {
-      setSelectedPlugin(nextPlugins[0].path);
+  const handleRemovePlugin = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await invoke("uninstall_plugin", { pluginId: id });
+      await refreshPlugins();
+    } catch (e: any) {
+      console.error("Failed to uninstall plugin:", e);
+      setError(e.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTogglePluginEnabled = async (id: string, enabled: boolean) => {
+    try {
+      await invoke("toggle_plugin_enabled", { pluginId: id, enabled });
+      await refreshPlugins();
+    } catch (e: any) {
+      console.error("Failed to toggle plugin:", e);
+      setError(e.toString());
     }
   };
 
@@ -138,6 +136,7 @@ function App() {
           plugins={plugins}
           onAddPlugin={handleAddPlugin}
           onRemovePlugin={handleRemovePlugin}
+          onTogglePluginEnabled={handleTogglePluginEnabled}
           fuelLimit={fuelLimit}
           setFuelLimit={setFuelLimit}
         />
