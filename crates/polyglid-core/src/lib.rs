@@ -11,6 +11,7 @@ use polyglid_plugin_api::{
 
 pub mod execution;
 pub mod plugin_manager;
+pub mod store;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginRef {
@@ -200,14 +201,16 @@ where
     pub fn run_plugin(&mut self, request: PluginRunRequest) -> Result<PluginReport, CoreError> {
         let manifest = self.runtime.inspect(&request.plugin)?;
 
-        // Enforce Phase 8 lifecycle enabled status
-        let registry_path = self.config.registry_path();
-        if registry_path.exists() {
-            let storage = polyglid_config::plugin_registry::JsonRegistryStorage;
-            use polyglid_config::plugin_registry::RegistryStorage;
-            if let Ok(reg) = storage.load(&registry_path) {
-                if let Some(entry) = reg.get(&manifest.id) {
-                    if entry.status == polyglid_config::plugin_registry::PluginStatus::Disabled {
+        // Enforce Phase 9 lifecycle enabled status via SQLite
+        let db_path = self.config.plugin_dir.parent().unwrap_or(&self.config.plugin_dir).join("polyglid.db");
+        if db_path.exists() {
+            if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                if let Ok(status) = conn.query_row(
+                    "SELECT status FROM plugins WHERE id = ?",
+                    [manifest.id.as_str()],
+                    |row| row.get::<_, String>(0)
+                ) {
+                    if status == "Disabled" {
                         return Err(CoreError::Runtime(format!(
                             "Plugin '{}' is currently disabled in the workspace",
                             manifest.id.as_str()

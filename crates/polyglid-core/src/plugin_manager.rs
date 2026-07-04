@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{PluginRef, PluginRuntime};
@@ -135,48 +135,61 @@ impl PluginRepository {
 }
 
 /// Orchestrator for validations, installations, and active registry configurations.
-pub struct PluginManager<R, S = JsonRegistryStorage> {
+pub struct PluginManager<R> {
     runtime: Arc<R>,
     repository: PluginRepository,
-    registry: Arc<Mutex<HashMap<PluginId, PluginRegistryEntry>>>,
-    storage: S,
-    storage_path: PathBuf,
+    store: crate::store::WorkspaceStore,
     plugin_dir: PathBuf,
 }
 
-impl<R, S> PluginManager<R, S>
+impl<R> PluginManager<R>
 where
     R: PluginRuntime,
-    S: RegistryStorage,
 {
-    pub fn new(runtime: Arc<R>, config: &AppConfig, storage: S) -> Result<Self, String> {
-        let storage_path = config.registry_path();
-        let registry_entries = storage.load(&storage_path)?;
-
-        Ok(Self {
+    pub fn new(
+        runtime: Arc<R>,
+        config: &AppConfig,
+        store: crate::store::WorkspaceStore,
+    ) -> Result<Self, String> {
+        let pm = Self {
             runtime,
             repository: PluginRepository,
-            registry: Arc::new(Mutex::new(registry_entries)),
-            storage,
-            storage_path,
+            store,
             plugin_dir: config.plugin_dir.clone(),
-        })
+        };
+
+        // Automatic migration path: registry.json -> SQLite
+        let registry_json_path = config.registry_path();
+        if registry_json_path.exists() {
+            let json_storage = JsonRegistryStorage;
+            if let Ok(entries) = json_storage.load(&registry_json_path) {
+                // Bulk insert inside a transaction
+                pm.store.transaction(|tx| {
+                    let plugin_store = pm.store.plugins();
+                    for entry in entries.values() {
+                        plugin_store.insert_with_conn(tx, entry)?;
+                    }
+                    Ok(())
+                })?;
+                // Rename registry.json to registry.json.bak
+                let backup_path = registry_json_path.with_extension("json.bak");
+                let _ = fs::rename(&registry_json_path, &backup_path);
+            }
+        }
+
+        Ok(pm)
     }
 
     pub fn get_plugins(&self) -> Vec<PluginRegistryEntry> {
-        let map = self.registry.lock().unwrap();
-        let mut list: Vec<PluginRegistryEntry> = map.values().cloned().collect();
-        list.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        list
+        self.store.plugins().list().unwrap_or_default()
     }
 
     pub fn get_plugin(&self, id: &PluginId) -> Option<PluginRegistryEntry> {
-        self.registry.lock().unwrap().get(id).cloned()
+        self.store.plugins().get(id).unwrap_or(None)
     }
 
     pub fn is_enabled(&self, id: &PluginId) -> bool {
-        let map = self.registry.lock().unwrap();
-        if let Some(entry) = map.get(id) {
+        if let Some(entry) = self.get_plugin(id) {
             entry.status == PluginStatus::Enabled
         } else {
             false
@@ -198,13 +211,20 @@ where
         // 1. Validation step
         let (manifest, metadata) = self.validate_plugin(src_path)?;
 
-        // 2. Check for duplicate IDs or version conflicts in registry
-        let new_ver = Version::parse(&metadata.version)
-            .map_err(|err| format!("invalid semantic version '{}': {err}", metadata.version))?;
+        // 2. Compute size and checksum
+        let file_size = fs::metadata(src_path)
+            .map_err(|err| format!("failed to read source size: {err}"))?
+            .len();
+        let checksum = compute_sha256(src_path)?;
 
-        {
-            let map = self.registry.lock().unwrap();
-            if let Some(existing) = map.get(&manifest.id) {
+        // 3. Start Transaction and verify/copy/insert atomically
+        self.store.transaction(|tx| {
+            let plugin_store = self.store.plugins();
+
+            let new_ver = Version::parse(&metadata.version)
+                .map_err(|err| format!("invalid semantic version '{}': {err}", metadata.version))?;
+
+            if let Some(existing) = self.get_plugin(&manifest.id) {
                 if existing.version >= new_ver {
                     return Err(format!(
                         "version conflict: workspace already contains equal or newer version '{}' for plugin '{}'",
@@ -212,55 +232,41 @@ where
                     ));
                 }
             }
-        }
 
-        // 3. Compute size and SHA-256 checksum
-        let file_size = fs::metadata(src_path)
-            .map_err(|err| format!("failed to read source size: {err}"))?
-            .len();
-        let checksum = compute_sha256(src_path)?;
+            // Copy file (using repository)
+            let dest_path = self.repository.install(&manifest.id, src_path, &self.plugin_dir)?;
 
-        // 4. Copy file using Repository
-        let dest_path = self
-            .repository
-            .install(&manifest.id, src_path, &self.plugin_dir)?;
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
 
-        // 5. Build Registry Entry
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+            let capabilities = manifest
+                .requested_capabilities
+                .iter()
+                .map(|req| req.capability)
+                .collect();
 
-        let capabilities = manifest
-            .requested_capabilities
-            .iter()
-            .map(|req| req.capability)
-            .collect();
+            let entry = PluginRegistryEntry {
+                id: manifest.id.clone(),
+                name: metadata.display_name.clone(),
+                version: new_ver,
+                author: metadata.author.clone(),
+                description: metadata.description.clone(),
+                capabilities,
+                checksum,
+                status: PluginStatus::Enabled,
+                source,
+                file_size,
+                installed_at: now,
+                last_updated: now,
+                path: dest_path,
+            };
 
-        let entry = PluginRegistryEntry {
-            id: manifest.id.clone(),
-            name: metadata.display_name,
-            version: new_ver,
-            author: metadata.author,
-            description: metadata.description,
-            capabilities,
-            checksum,
-            status: PluginStatus::Enabled,
-            source,
-            file_size,
-            installed_at: now,
-            last_updated: now,
-            path: dest_path,
-        };
+            plugin_store.insert_with_conn(tx, &entry)?;
 
-        // 6. Save registry
-        {
-            let mut map = self.registry.lock().unwrap();
-            map.insert(manifest.id.clone(), entry.clone());
-            self.storage.save(&self.storage_path, &map)?;
-        }
-
-        Ok(entry)
+            Ok(entry)
+        })
     }
 
     pub fn uninstall_plugin(&self, id: &PluginId) -> Result<(), String> {
@@ -268,31 +274,15 @@ where
         self.repository.remove(id, &self.plugin_dir)?;
 
         // 2. Remove registry entry
-        {
-            let mut map = self.registry.lock().unwrap();
-            map.remove(id);
-            self.storage.save(&self.storage_path, &map)?;
-        }
+        self.store.plugins().remove(id)?;
 
         Ok(())
     }
 
     pub fn toggle_plugin_enabled(&self, id: &PluginId, enabled: bool) -> Result<(), String> {
-        let mut map = self.registry.lock().unwrap();
-        if let Some(entry) = map.get_mut(id) {
-            entry.status = if enabled {
-                PluginStatus::Enabled
-            } else {
-                PluginStatus::Disabled
-            };
-            self.storage.save(&self.storage_path, &map)?;
-            Ok(())
-        } else {
-            Err(format!("plugin '{}' not found in workspace", id.as_str()))
-        }
+        self.store.plugins().toggle_enabled(id, enabled)
     }
 
-    /// Discover new/deleted files on disk and synchronize the registry database.
     pub fn sync_directory(&self) -> Result<(), String> {
         let discovered_paths = self.repository.discover(&self.plugin_dir)?;
         let mut discovered_ids = HashMap::new();
@@ -305,24 +295,17 @@ where
             }
         }
 
-        let mut map = self.registry.lock().unwrap();
-        let mut changed = false;
-
         // Clean up registry entries whose files no longer exist on disk
-        let mut to_remove = Vec::new();
-        for (id, entry) in map.iter() {
+        let entries = self.get_plugins();
+        for entry in entries {
             if !entry.path.exists() {
-                to_remove.push(id.clone());
+                self.store.plugins().remove(&entry.id)?;
             }
-        }
-        for id in to_remove {
-            map.remove(&id);
-            changed = true;
         }
 
         // Register any discovered wasm files not currently in registry
         for (id, (path, manifest, metadata)) in discovered_ids {
-            if !map.contains_key(&id) {
+            if self.get_plugin(&id).is_none() {
                 let file_size = fs::metadata(&path).map_or(0, |m| m.len());
                 let checksum = compute_sha256(&path).unwrap_or_default();
                 let now = SystemTime::now()
@@ -352,13 +335,8 @@ where
                     last_updated: now,
                     path,
                 };
-                map.insert(id, entry);
-                changed = true;
+                self.store.plugins().insert(&entry)?;
             }
-        }
-
-        if changed {
-            self.storage.save(&self.storage_path, &map)?;
         }
 
         Ok(())
@@ -388,6 +366,7 @@ fn compute_sha256(path: &Path) -> Result<String, String> {
 mod tests {
     use super::*;
     use crate::PluginManifest;
+    use crate::store::WorkspaceStore;
     use polyglid_config::plugin_registry::JsonRegistryStorage;
     use polyglid_plugin_api::{ApiPluginMetadata, PluginId};
 
@@ -524,9 +503,10 @@ mod tests {
         let src_path = workspace_dir.join("test_src.wasm");
         fs::write(&src_path, b"\x00asm_dummy_data_goes_here").unwrap();
 
+        let db_path = workspace_dir.join("polyglid.db");
+        let store = WorkspaceStore::new(&db_path).unwrap();
         let runtime = Arc::new(TestManagerRuntime);
-        let storage = JsonRegistryStorage;
-        let manager = PluginManager::new(runtime, &app_config, storage).unwrap();
+        let manager = PluginManager::new(runtime, &app_config, store).unwrap();
 
         // Check initially empty
         assert!(manager.get_plugins().is_empty());

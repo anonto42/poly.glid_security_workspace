@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use polyglid_config::AppConfig;
 use polyglid_core::execution::{ExecutionConfig, ExecutionEvent, ExecutionManager, JobState};
 use polyglid_core::plugin_manager::PluginManager;
+use polyglid_core::store::WorkspaceStore;
 use polyglid_core::{PluginRef, PluginRuntime};
 use polyglid_plugin_api::PluginId;
 use polyglid_runtime::WasmRuntime;
@@ -288,15 +289,15 @@ fn run_plugin(
 pub fn run() {
     let runtime = Arc::new(WasmRuntime::new());
     let config = AppConfig::load_from_env().unwrap_or_else(|_| AppConfig::development());
-    let storage = polyglid_config::plugin_registry::JsonRegistryStorage;
-    let pm = PluginManager::new(Arc::clone(&runtime), &config, storage)
-        .expect("failed to init PluginManager");
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = WorkspaceStore::new(&db_path).expect("failed to init WorkspaceStore");
+    let pm = PluginManager::new(Arc::clone(&runtime), &config, store.clone()).expect("failed to init PluginManager");
     let _ = pm.sync_directory();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(pm)
-        .manage(ExecutionManager::new(runtime))
+        .manage(ExecutionManager::new(runtime, Some(store.clone())))
         .invoke_handler(tauri::generate_handler![
             run_plugin,
             inspect_plugin_wasm,

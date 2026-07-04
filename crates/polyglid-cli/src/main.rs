@@ -73,6 +73,10 @@ fn run(args: Vec<String>) -> Result<(), String> {
         {
             plugin_run(path, target, rest)
         }
+        [command] if command == "target" => target_help(),
+        [command, subcommand] if command == "target" && subcommand == "list" => target_list(),
+        [command, subcommand, name] if command == "target" && subcommand == "add" => target_add(name),
+        [command, subcommand, name] if command == "target" && subcommand == "remove" => target_remove(name),
         _ => Err("unknown command; run `polyglid --help`".to_string()),
     }
 }
@@ -89,8 +93,9 @@ fn doctor() -> Result<(), String> {
 fn manager() -> Result<polyglid_core::plugin_manager::PluginManager<WasmRuntime>, String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
     let runtime = std::sync::Arc::new(WasmRuntime::new());
-    let storage = polyglid_config::plugin_registry::JsonRegistryStorage;
-    let pm = polyglid_core::plugin_manager::PluginManager::new(runtime, &config, storage)?;
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    let pm = polyglid_core::plugin_manager::PluginManager::new(runtime, &config, store)?;
     let _ = pm.sync_directory();
     Ok(pm)
 }
@@ -325,6 +330,49 @@ fn plugin_help() -> Result<(), String> {
     Ok(())
 }
 
+fn target_help() -> Result<(), String> {
+    println!("target commands:");
+    println!("  polyglid target list");
+    println!("  polyglid target add <name>");
+    println!("  polyglid target remove <name>");
+    Ok(())
+}
+
+fn target_list() -> Result<(), String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    let targets = store.targets().list()?;
+    if targets.is_empty() {
+        println!("No targets saved in workspace.");
+    } else {
+        println!("{:<30}", "Target Name");
+        println!("{:-<30}", "");
+        for (name, _) in targets {
+            println!("{name}");
+        }
+    }
+    Ok(())
+}
+
+fn target_add(name: &str) -> Result<(), String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    store.targets().add(name, None)?;
+    println!("Target '{name}' added successfully.");
+    Ok(())
+}
+
+fn target_remove(name: &str) -> Result<(), String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    store.targets().remove(name)?;
+    println!("Target '{name}' removed successfully.");
+    Ok(())
+}
+
 fn print_help() {
     println!("PolyGlid development CLI");
     println!();
@@ -339,4 +387,7 @@ fn print_help() {
     println!("  polyglid plugin disable <plugin_id>");
     println!("  polyglid plugin componentize <module.wasm> <component.wasm>");
     println!("  polyglid plugin run <plugin_id_or_wasm_path> --target <target> [--allow <capability>...]");
+    println!("  polyglid target list");
+    println!("  polyglid target add <name>");
+    println!("  polyglid target remove <name>");
 }
