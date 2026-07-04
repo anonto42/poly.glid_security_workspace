@@ -15,6 +15,7 @@ tokio = { version = "1", features = ["sync"] }
 uuid = { version = "1.0", features = ["v4"] }
 wasi-preview1-component-adapter-provider = "46.0.1"
 wit-component = "0.252.0"
+serde_json = "1"
 
 [[bin]]
 name = "polyglid"

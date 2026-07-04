@@ -7,6 +7,7 @@ pub mod settings_store;
 pub mod target_store;
 pub mod permission_store;
 pub mod report_store;
+pub mod signature_store;
 
 pub use workspace::WorkspaceStore;
 pub use plugin_store::PluginStore;

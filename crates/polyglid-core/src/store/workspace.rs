@@ -22,6 +22,12 @@ impl WorkspaceStore {
 
         MigrationManager::run(&mut conn)?;
 
+        let profile_default = if cfg!(test) { "Development" } else { "Balanced" };
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value, scope, created_at, updated_at) VALUES ('security_profile', ?, 'Workspace', 0, 0)",
+            [profile_default],
+        );
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -49,6 +55,22 @@ impl WorkspaceStore {
 
     pub fn reports(&self) -> crate::store::report_store::ReportStore {
         crate::store::report_store::ReportStore::new(Arc::clone(&self.conn))
+    }
+
+    pub fn signatures(&self) -> crate::store::signature_store::PluginSignatureStore {
+        crate::store::signature_store::PluginSignatureStore::new(Arc::clone(&self.conn))
+    }
+
+    pub fn trust_store(&self) -> crate::security::trust_store::DbTrustStore {
+        crate::security::trust_store::DbTrustStore::new(Arc::clone(&self.conn))
+    }
+
+    pub fn permission_engine(&self) -> crate::security::permission_engine::PermissionEngine {
+        crate::security::permission_engine::PermissionEngine::new(Arc::clone(&self.conn))
+    }
+
+    pub fn audit_logger(&self) -> crate::security::audit::AuditLogger {
+        crate::security::audit::AuditLogger::new(Arc::clone(&self.conn))
     }
 
     /// Run a set of database actions atomically inside a transaction.

@@ -285,6 +285,93 @@ fn run_plugin(
     Err("Scan execution timed out".to_string())
 }
 
+#[tauri::command]
+fn get_targets(store: tauri::State<'_, WorkspaceStore>) -> Result<Vec<String>, String> {
+    let targets = store.targets().list()?;
+    Ok(targets.into_iter().map(|(name, _)| name).collect())
+}
+
+#[tauri::command]
+fn add_target(store: tauri::State<'_, WorkspaceStore>, name: String) -> Result<(), String> {
+    store.targets().add(&name, None)
+}
+
+#[tauri::command]
+fn remove_target(store: tauri::State<'_, WorkspaceStore>, name: String) -> Result<(), String> {
+    store.targets().remove(&name)
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct SerializableExecution {
+    job_id: String,
+    plugin_id: String,
+    target: String,
+    state: String,
+    duration_ms: u64,
+    fuel_consumed: u64,
+    started_at: u64,
+    error_message: Option<String>,
+}
+
+#[tauri::command]
+fn get_execution_history(store: tauri::State<'_, WorkspaceStore>) -> Result<Vec<SerializableExecution>, String> {
+    let list = store.executions().list()?;
+    Ok(list
+        .into_iter()
+        .map(|r| SerializableExecution {
+            job_id: r.job_id.to_string(),
+            plugin_id: r.plugin_id,
+            target: r.target,
+            state: r.state,
+            duration_ms: r.duration_ms,
+            fuel_consumed: r.fuel_consumed,
+            started_at: r.started_at,
+            error_message: r.error_message,
+        })
+        .collect())
+}
+
+#[tauri::command]
+fn request_permissions(
+    store: tauri::State<'_, WorkspaceStore>,
+    plugin_id: String,
+    capability: String,
+    allow: bool,
+) -> Result<(), String> {
+    use std::str::FromStr;
+    let pid = PluginId::new(&plugin_id).map_err(|e| e.to_string())?;
+    let cap = polyglid_plugin_api::Capability::from_str(&capability).map_err(|e| e.to_string())?;
+
+    let decision = if allow {
+        polyglid_core::PermissionDecision::Allow
+    } else {
+        polyglid_core::PermissionDecision::Deny {
+            reason: "Denied by user in Tauri Desktop UI".to_string(),
+        }
+    };
+
+    store.permission_engine().record_decision(
+        &pid,
+        &cap,
+        "",
+        "Workspace",
+        decision,
+        None
+    )?;
+
+    let event_type = if allow { "PermissionGranted" } else { "PermissionDenied" };
+    store.audit_logger().log(
+        event_type,
+        Some(&plugin_id),
+        serde_json::json!({
+            "capability": capability,
+            "scope": "Workspace"
+        })
+    )?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let runtime = Arc::new(WasmRuntime::new());
@@ -297,6 +384,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(pm)
+        .manage(store.clone())
         .manage(ExecutionManager::new(runtime, Some(store.clone())))
         .invoke_handler(tauri::generate_handler![
             run_plugin,
@@ -305,7 +393,12 @@ pub fn run() {
             get_installed_plugins,
             install_plugin,
             uninstall_plugin,
-            toggle_plugin_enabled
+            toggle_plugin_enabled,
+            get_targets,
+            add_target,
+            remove_target,
+            get_execution_history,
+            request_permissions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

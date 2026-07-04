@@ -99,5 +99,65 @@ pub const MIGRATIONS: &[Migration] = &[
             CREATE INDEX IF NOT EXISTS idx_reports_job ON reports(job_id);
             "#,
         ],
-    }
+    },
+    Migration {
+        version: 2,
+        sqls: &[
+            r#"
+            CREATE TABLE IF NOT EXISTS trusted_publishers (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                public_key TEXT NOT NULL,
+                fingerprint TEXT NOT NULL UNIQUE,
+                created_at INTEGER NOT NULL,
+                last_verified_at INTEGER NOT NULL,
+                trust_level TEXT NOT NULL,
+                revocation_status INTEGER NOT NULL DEFAULT 0
+            );
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS plugin_signatures (
+                plugin_id TEXT PRIMARY KEY,
+                algorithm TEXT NOT NULL,
+                key_id TEXT NOT NULL,
+                signature TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                verified_at INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('Verified', 'Invalid', 'Missing', 'UnknownPublisher', 'Revoked')),
+                FOREIGN KEY(plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
+            );
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                plugin_id TEXT,
+                details TEXT NOT NULL,
+                timestamp INTEGER NOT NULL
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_plugin ON audit_logs(plugin_id);
+            "#,
+            r#"
+            DROP TABLE IF EXISTS permissions;
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS permissions (
+                id TEXT PRIMARY KEY,
+                plugin_id TEXT NOT NULL,
+                capability TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                workspace TEXT NOT NULL,
+                decision TEXT NOT NULL CHECK(decision IN ('Allow', 'Deny')),
+                timestamp INTEGER NOT NULL,
+                expiration INTEGER,
+                FOREIGN KEY(plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_permissions_plugin ON permissions(plugin_id);
+            "#,
+        ],
+    },
 ];

@@ -15,6 +15,8 @@ sha2 = "0.10"
 semver = "1.0"
 serde_json = "1"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
+ed25519-dalek = "2.0"
+hex = "0.4"
 
 [lib]
 path = "src/lib.rs"

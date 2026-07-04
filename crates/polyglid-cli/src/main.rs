@@ -236,11 +236,100 @@ fn plugin_componentize(input: &str, output: &str) -> Result<(), String> {
 
 fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), String> {
     let pm = manager()?;
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
     let mut resolved_path = PathBuf::from(id_or_path);
 
     if let Ok(id) = polyglid_plugin_api::PluginId::new(id_or_path) {
         if let Some(entry) = pm.get_plugin(&id) {
             resolved_path = entry.path;
+        }
+    }
+
+    let plugin_ref = PluginRef::from_path(&resolved_path);
+    let manifest = pm.runtime.inspect(&plugin_ref).map_err(|err| err.to_string())?;
+
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    if db_path.exists() {
+        let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+        let active_profile_name = store.settings()
+            .get("security_profile")
+            .unwrap_or(None)
+            .unwrap_or_else(|| "Balanced".to_string());
+
+        let profile = match active_profile_name.as_str() {
+            "Strict" => polyglid_core::security::profiles::SecurityProfile::strict(),
+            "Development" => polyglid_core::security::profiles::SecurityProfile::development(),
+            _ => polyglid_core::security::profiles::SecurityProfile::balanced(),
+        };
+
+        for request in &manifest.requested_capabilities {
+            if profile.allowed_capabilities.contains(&request.capability) {
+                continue;
+            }
+
+            let permission_engine = store.permission_engine();
+            let decision_opt = permission_engine.evaluate(
+                &manifest.id,
+                &request.capability,
+                "",
+                "Workspace"
+            )?;
+
+            let approved = match decision_opt {
+                Some(polyglid_core::PermissionDecision::Allow) => true,
+                Some(polyglid_core::PermissionDecision::Deny { .. }) => false,
+                None => {
+                    print!("Plugin '{}' requests capability '{}'. Approve? (y/N): ", manifest.id.as_str(), request.capability);
+                    use std::io::Write;
+                    let _ = std::io::stdout().flush();
+                    let mut input = String::new();
+                    let _ = std::io::stdin().read_line(&mut input);
+                    let input_trimmed = input.trim().to_lowercase();
+                    if input_trimmed == "y" || input_trimmed == "yes" {
+                        let _ = permission_engine.record_decision(
+                            &manifest.id,
+                            &request.capability,
+                            "",
+                            "Workspace",
+                            polyglid_core::PermissionDecision::Allow,
+                            None
+                        );
+                        let _ = store.audit_logger().log(
+                            "PermissionGranted",
+                            Some(manifest.id.as_str()),
+                            serde_json::json!({
+                                "capability": request.capability.to_string(),
+                                "scope": "Workspace"
+                            })
+                        );
+                        true
+                    } else {
+                        let _ = permission_engine.record_decision(
+                            &manifest.id,
+                            &request.capability,
+                            "",
+                            "Workspace",
+                            polyglid_core::PermissionDecision::Deny {
+                                reason: "Explicitly denied by user in CLI".to_string(),
+                            },
+                            None
+                        );
+                        let _ = store.audit_logger().log(
+                            "PermissionDenied",
+                            Some(manifest.id.as_str()),
+                            serde_json::json!({
+                                "capability": request.capability.to_string(),
+                                "scope": "Workspace"
+                            })
+                        );
+                        false
+                    }
+                }
+            };
+
+            if !approved {
+                return Err(format!("Permission denied for capability: {}", request.capability));
+            }
         }
     }
 

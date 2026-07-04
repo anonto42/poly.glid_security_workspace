@@ -12,6 +12,7 @@ use polyglid_plugin_api::{
 pub mod execution;
 pub mod plugin_manager;
 pub mod store;
+pub mod security;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginRef {
@@ -163,6 +164,7 @@ fn grant_covers(grant: &CapabilityRequest, request: &CapabilityRequest) -> bool 
 
 pub struct CoreEngine<R, P, E> {
     runtime: R,
+    #[allow(dead_code)]
     permissions: P,
     events: E,
     config: AppConfig,
@@ -201,7 +203,6 @@ where
     pub fn run_plugin(&mut self, request: PluginRunRequest) -> Result<PluginReport, CoreError> {
         let manifest = self.runtime.inspect(&request.plugin)?;
 
-        // Enforce Phase 9 lifecycle enabled status via SQLite
         let db_path = self.config.plugin_dir.parent().unwrap_or(&self.config.plugin_dir).join("polyglid.db");
         if db_path.exists() {
             if let Ok(conn) = rusqlite::Connection::open(&db_path) {
@@ -218,58 +219,197 @@ where
                     }
                 }
             }
-        }
 
-        for request in &manifest.requested_capabilities {
-            match self.permissions.decide(&manifest.id, request) {
-                Ok(PermissionDecision::Allow) => {
-                    self.events.emit(PolyGlidEvent::CapabilityAllowed {
-                        plugin_id: manifest.id.clone(),
-                        capability: request.to_string(),
-                    });
+            let active_profile_name = {
+                let mut profile_name = "Balanced".to_string();
+                if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                    if let Ok(val) = conn.query_row(
+                        "SELECT value FROM settings WHERE key = 'security_profile' AND scope = 'Workspace'",
+                        [],
+                        |row| row.get::<_, String>(0)
+                    ) {
+                        profile_name = val;
+                    }
                 }
-                Ok(PermissionDecision::Deny { reason }) => {
+                profile_name
+            };
+
+            let profile = match active_profile_name.as_str() {
+                "Strict" => crate::security::profiles::SecurityProfile::strict(),
+                "Development" => crate::security::profiles::SecurityProfile::development(),
+                _ => crate::security::profiles::SecurityProfile::balanced(),
+            };
+
+            let (sig_status, plugin_source) = {
+                let mut status = "Missing".to_string();
+                let mut source = "Local".to_string();
+                if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                    if let Ok((s, src)) = conn.query_row(
+                        "SELECT status, source FROM plugin_signatures LEFT JOIN plugins ON plugin_signatures.plugin_id = plugins.id WHERE plugins.id = ?",
+                        [manifest.id.as_str()],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    ) {
+                        status = s;
+                        source = src;
+                    } else if let Ok(src) = conn.query_row(
+                        "SELECT source FROM plugins WHERE id = ?",
+                        [manifest.id.as_str()],
+                        |row| row.get::<_, String>(0)
+                    ) {
+                        source = src;
+                    }
+                }
+                (status, source)
+            };
+
+            let require_sig = if plugin_source == "Local" {
+                profile.name == "Strict"
+            } else {
+                profile.require_signature
+            };
+
+            if require_sig && (sig_status == "Missing" || sig_status == "Invalid") {
+                return Err(CoreError::Runtime(format!(
+                    "Signature check failed: plugin signature is {}", sig_status
+                )));
+            }
+
+            if profile.require_trusted_publisher && sig_status == "UnknownPublisher" {
+                return Err(CoreError::Runtime(format!(
+                    "Signature check failed: publisher is untrusted"
+                )));
+            }
+
+            if sig_status == "Revoked" {
+                return Err(CoreError::Runtime(format!(
+                    "Signature check failed: publisher key is revoked"
+                )));
+            }
+
+            let mut actual_config = self.config.clone();
+            if let Some(fuel) = profile.max_fuel {
+                actual_config.max_wasm_fuel = fuel;
+            }
+
+            for request_cap in &manifest.requested_capabilities {
+                let mut approved = false;
+                if profile.allowed_capabilities.contains(&request_cap.capability) {
+                    approved = true;
+                } else {
+                    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+
+                        if let Ok((decision, expiration)) = conn.query_row(
+                            "SELECT decision, expiration FROM permissions WHERE plugin_id = ? AND capability = ?",
+                            [manifest.id.as_str(), &request_cap.capability.to_string()],
+                            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<u64>>(1)?))
+                        ) {
+                            let expired = match expiration {
+                                Some(exp) => exp < now,
+                                None => false,
+                            };
+                            if decision == "Allow" && !expired {
+                                approved = true;
+                            }
+                        }
+                    }
+                }
+
+                if !approved {
                     self.events.emit(PolyGlidEvent::CapabilityDenied {
                         plugin_id: manifest.id.clone(),
-                        capability: request.to_string(),
-                        reason: reason.clone(),
+                        capability: request_cap.to_string(),
+                        reason: "Not approved in permission engine or profile policy".to_string(),
                     });
                     return Err(CoreError::CapabilityDenied {
                         plugin_id: manifest.id,
-                        request: request.clone(),
-                        reason,
+                        request: request_cap.clone(),
+                        reason: "Permission not approved in Workspace".to_string(),
                     });
+                } else {
+                    self.events.emit(PolyGlidEvent::CapabilityAllowed {
+                        plugin_id: manifest.id.clone(),
+                        capability: request_cap.to_string(),
+                    });
+                }
+            }
+
+            self.events.emit(PolyGlidEvent::PluginRunStarted {
+                plugin_id: manifest.id.clone(),
+                target: request.target.as_str().to_string(),
+            });
+
+            match self.runtime.execute(&request, &actual_config) {
+                Ok(report) => {
+                    self.events.emit(PolyGlidEvent::PluginRunCompleted {
+                        plugin_id: manifest.id,
+                        report: report.clone(),
+                    });
+                    Ok(report)
                 }
                 Err(err) => {
-                    self.events.emit(PolyGlidEvent::CapabilityCheckFailed {
-                        plugin_id: manifest.id.clone(),
-                        capability: request.to_string(),
+                    self.events.emit(PolyGlidEvent::PluginRunFailed {
+                        plugin_id: manifest.id,
                         message: err.to_string(),
                     });
-                    return Err(err);
+                    Err(err)
                 }
             }
-        }
-
-        self.events.emit(PolyGlidEvent::PluginRunStarted {
-            plugin_id: manifest.id.clone(),
-            target: request.target.as_str().to_string(),
-        });
-
-        match self.runtime.execute(&request, &self.config) {
-            Ok(report) => {
-                self.events.emit(PolyGlidEvent::PluginRunCompleted {
-                    plugin_id: manifest.id,
-                    report: report.clone(),
-                });
-                Ok(report)
+        } else {
+            for request_cap in &manifest.requested_capabilities {
+                match self.permissions.decide(&manifest.id, request_cap) {
+                    Ok(PermissionDecision::Allow) => {
+                        self.events.emit(PolyGlidEvent::CapabilityAllowed {
+                            plugin_id: manifest.id.clone(),
+                            capability: request_cap.to_string(),
+                        });
+                    }
+                    Ok(PermissionDecision::Deny { reason }) => {
+                        self.events.emit(PolyGlidEvent::CapabilityDenied {
+                            plugin_id: manifest.id.clone(),
+                            capability: request_cap.to_string(),
+                            reason: reason.clone(),
+                        });
+                        return Err(CoreError::CapabilityDenied {
+                            plugin_id: manifest.id,
+                            request: request_cap.clone(),
+                            reason,
+                        });
+                    }
+                    Err(err) => {
+                        self.events.emit(PolyGlidEvent::CapabilityCheckFailed {
+                            plugin_id: manifest.id.clone(),
+                            capability: request_cap.to_string(),
+                            message: err.to_string(),
+                        });
+                        return Err(err);
+                    }
+                }
             }
-            Err(err) => {
-                self.events.emit(PolyGlidEvent::PluginRunFailed {
-                    plugin_id: manifest.id,
-                    message: err.to_string(),
-                });
-                Err(err)
+
+            self.events.emit(PolyGlidEvent::PluginRunStarted {
+                plugin_id: manifest.id.clone(),
+                target: request.target.as_str().to_string(),
+            });
+
+            match self.runtime.execute(&request, &self.config) {
+                Ok(report) => {
+                    self.events.emit(PolyGlidEvent::PluginRunCompleted {
+                        plugin_id: manifest.id,
+                        report: report.clone(),
+                    });
+                    Ok(report)
+                }
+                Err(err) => {
+                    self.events.emit(PolyGlidEvent::PluginRunFailed {
+                        plugin_id: manifest.id,
+                        message: err.to_string(),
+                    });
+                    Err(err)
+                }
             }
         }
     }
