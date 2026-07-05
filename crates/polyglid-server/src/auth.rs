@@ -4,6 +4,7 @@ use axum::{
     middleware::Next,
 };
 use polyglid_core::store::WorkspaceStore;
+use polyglid_core::store::collaboration_store::DbUser;
 
 pub fn initialize_auth_token(store: &WorkspaceStore) -> Result<String, String> {
     if let Some(token) = store.settings().get("api_admin_token").unwrap_or(None) {
@@ -28,22 +29,45 @@ pub fn initialize_auth_token(store: &WorkspaceStore) -> Result<String, String> {
 #[derive(Clone)]
 pub struct AuthState {
     pub expected_token: String,
+    pub collaboration_service: std::sync::Arc<polyglid_core::services::CollaborationService>,
 }
 
 pub async fn auth_middleware(
     axum::extract::State(state): axum::extract::State<AuthState>,
-    req: Request<Body>,
+    mut req: Request<Body>,
     next: Next,
 ) -> Result<Response<Body>, StatusCode> {
     if let Some(auth_header) = req.headers().get("authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
             if auth_str.starts_with("Bearer ") {
                 let token = &auth_str["Bearer ".len()..];
+                
+                // 1. Check if token is the bootstrap admin token
                 if token == state.expected_token {
+                    let admin_user = DbUser {
+                        id: "bootstrap-admin".to_string(),
+                        username: "admin".to_string(),
+                        password_hash: "".to_string(),
+                        salt: "".to_string(),
+                        role: "Owner".to_string(),
+                        created_at: 0,
+                        updated_at: 0,
+                    };
+                    req.extensions_mut().insert(admin_user);
                     return Ok(next.run(req).await);
+                }
+
+                // 2. Validate token against database
+                match state.collaboration_service.validate_token(token) {
+                    Ok(Some(user)) => {
+                        req.extensions_mut().insert(user);
+                        return Ok(next.run(req).await);
+                    }
+                    _ => {}
                 }
             }
         }
     }
     Err(StatusCode::UNAUTHORIZED)
 }
+

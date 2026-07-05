@@ -160,4 +160,140 @@ pub const MIGRATIONS: &[Migration] = &[
             "#,
         ],
     },
+    Migration {
+        version: 3,
+        sqls: &[
+            r#"
+            CREATE TABLE IF NOT EXISTS publisher_profiles (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                bio TEXT,
+                website TEXT,
+                public_key TEXT NOT NULL,
+                fingerprint TEXT NOT NULL UNIQUE,
+                verified INTEGER NOT NULL DEFAULT 0,
+                plugin_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_publisher_profiles_name ON publisher_profiles(name);
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS marketplace_packages (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                description TEXT NOT NULL,
+                author TEXT NOT NULL,
+                publisher_id TEXT,
+                categories TEXT NOT NULL DEFAULT '[]',
+                tags TEXT NOT NULL DEFAULT '[]',
+                capabilities TEXT NOT NULL DEFAULT '[]',
+                download_url TEXT NOT NULL,
+                checksum TEXT NOT NULL,
+                download_count INTEGER NOT NULL DEFAULT 0,
+                rating_avg REAL NOT NULL DEFAULT 0.0,
+                rating_count INTEGER NOT NULL DEFAULT 0,
+                license TEXT NOT NULL DEFAULT 'MIT',
+                repository_url TEXT,
+                documentation_url TEXT,
+                published_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                is_featured INTEGER NOT NULL DEFAULT 0,
+                is_verified INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(publisher_id) REFERENCES publisher_profiles(id) ON DELETE SET NULL
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_marketplace_packages_name ON marketplace_packages(name);
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_marketplace_packages_publisher ON marketplace_packages(publisher_id);
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_marketplace_packages_featured ON marketplace_packages(is_featured);
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS marketplace_ratings (
+                id TEXT PRIMARY KEY,
+                package_id TEXT NOT NULL,
+                rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+                review TEXT,
+                reviewer_id TEXT,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(package_id) REFERENCES marketplace_packages(id) ON DELETE CASCADE
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_marketplace_ratings_package ON marketplace_ratings(package_id);
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS marketplace_installs (
+                id TEXT PRIMARY KEY,
+                package_id TEXT NOT NULL,
+                plugin_id TEXT,
+                installed_at INTEGER NOT NULL,
+                FOREIGN KEY(package_id) REFERENCES marketplace_packages(id) ON DELETE CASCADE,
+                FOREIGN KEY(plugin_id) REFERENCES plugins(id) ON DELETE SET NULL
+            );
+            "#,
+        ],
+    },
+    Migration {
+        version: 4,
+        sqls: &[
+            r#"
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('Owner', 'Editor', 'Viewer')),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS teams (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS team_members (
+                team_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('Owner', 'Editor', 'Viewer')),
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (team_id, user_id),
+                FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS user_tokens (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_user_tokens_user ON user_tokens(user_id);
+            "#,
+        ],
+    },
 ];

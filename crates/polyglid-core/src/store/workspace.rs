@@ -73,6 +73,14 @@ impl WorkspaceStore {
         crate::security::audit::AuditLogger::new(Arc::clone(&self.conn))
     }
 
+    pub fn marketplace(&self) -> crate::store::marketplace_store::MarketplaceStore {
+        crate::store::marketplace_store::MarketplaceStore::new(Arc::clone(&self.conn))
+    }
+
+    pub fn collaboration(&self) -> crate::store::collaboration_store::CollaborationStore {
+        crate::store::collaboration_store::CollaborationStore::new(Arc::clone(&self.conn))
+    }
+
     /// Run a set of database actions atomically inside a transaction.
     pub fn verify_integrity(&self) -> Result<String, String> {
         let conn = self.conn.lock().unwrap();

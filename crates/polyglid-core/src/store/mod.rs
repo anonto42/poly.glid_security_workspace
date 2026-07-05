@@ -8,6 +8,8 @@ pub mod target_store;
 pub mod permission_store;
 pub mod report_store;
 pub mod signature_store;
+pub mod marketplace_store;
+pub mod collaboration_store;
 
 pub use workspace::WorkspaceStore;
 pub use plugin_store::PluginStore;
@@ -16,3 +18,5 @@ pub use settings_store::SettingsStore;
 pub use target_store::TargetStore;
 pub use permission_store::DbPermissionStore;
 pub use report_store::ReportStore;
+pub use marketplace_store::MarketplaceStore;
+pub use collaboration_store::CollaborationStore;
