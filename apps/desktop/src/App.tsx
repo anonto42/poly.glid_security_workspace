@@ -61,7 +61,7 @@ function App() {
     }
   };
 
-  const handleAddPlugin = async (name: string, path: string) => {
+  const handleAddPlugin = async (_name: string, path: string) => {
     try {
       setLoading(true);
       setError(null);

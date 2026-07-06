@@ -6,3 +6,9 @@
 
 # Local agent working history
 .agents/shared/history/
+
+# Package dependencies & builds
+node_modules/
+dist/
+*.db
+

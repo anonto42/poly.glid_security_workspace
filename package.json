@@ -1,0 +1,13 @@
+{
+  "name": "polyglid-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.31.0",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "dev:desktop": "pnpm --filter desktop dev",
+    "build:desktop": "pnpm --filter desktop build",
+    "tauri": "pnpm --filter desktop tauri"
+  }
+}

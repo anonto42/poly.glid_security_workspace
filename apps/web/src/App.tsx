@@ -89,8 +89,6 @@ function App() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [liveLogs, setLiveLogs] = useState<string[]>([]);
   const [liveStage, setLiveStage] = useState('Queued');
-  const [liveFuel, setLiveFuel] = useState<number>(0);
-  const [liveDuration, setLiveDuration] = useState<number>(0);
 
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' | 'warning' } | null>(null);
@@ -487,8 +485,6 @@ function App() {
         setActiveJobId(job_id);
         setLiveLogs([`[SYSTEM] Job submitted. ID: ${job_id}`]);
         setLiveStage('Queued');
-        setLiveFuel(0);
-        setLiveDuration(0);
         setActiveTab('monitor');
         showToast('Scan initiated. Redirecting to live monitor...', 'success');
         fetchData();

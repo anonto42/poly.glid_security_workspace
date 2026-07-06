@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Shield, Globe, Award, Key, Hash } from 'lucide-react';
+import { Plus, Trash2, Globe, Award, Key, Hash } from 'lucide-react';
 import { PluginInfo } from '../../types';
 
 interface SideBarProps {
