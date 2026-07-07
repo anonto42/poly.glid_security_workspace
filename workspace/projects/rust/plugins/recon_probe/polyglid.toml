@@ -1,9 +1,0 @@
-id = "polyglid.recon_probe"
-name = "Recon Probe"
-version = "0.1.0"
-entry_world = "security-tool"
-capabilities = ["dns-resolve"]
-
-[[capability_requests]]
-capability = "report-write"
-path_prefix = "reports"
