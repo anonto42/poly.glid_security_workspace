@@ -8,6 +8,7 @@ pub trait Provider {
     async fn analyze_code(&self, code: &str, language: &str) -> Result<CodeAnalysis>;
     async fn generate_tests(&self, code: &str, language: &str) -> Result<String>;
     async fn generate_documentation(&self, code: &str, language: &str) -> Result<String>;
+    async fn embed(&self, input: &str) -> Result<Vec<f32>>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

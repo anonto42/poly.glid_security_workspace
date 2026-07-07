@@ -1,5 +1,3 @@
-//! PolyGlid AI CLI - Main Entry Point
-
 use clap::{Parser, Subcommand};
 use colored::*;
 use anyhow::Result;
@@ -9,11 +7,13 @@ mod providers;
 mod features;
 mod cache;
 mod cli;
+mod tools;
+mod feedback;
+mod pipelines;
 
 use crate::core::engine::AIEngine;
 use crate::cli::commands::*;
 
-/// PolyGlid AI Command Line Interface
 #[derive(Parser)]
 #[command(name = "polyglid-ai")]
 #[command(about = "AI Assistant for PolyGlid Workspace")]
@@ -25,90 +25,84 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Analyze workspace or files
     Analyze {
-        /// Specific file to analyze
         #[arg(long)]
         file: Option<String>,
-        
-        /// Output format (json, table)
         #[arg(long, default_value = "table")]
         format: String,
     },
-    
-    /// Generate code, tests, or documentation
     Generate {
         #[command(subcommand)]
         generate_type: GenerateType,
     },
-    
-    /// Review code
     Review {
-        /// File to review
         #[arg()]
         file: String,
     },
-    
-    /// Get AI suggestions
     Suggest {
-        /// Number of suggestions
         #[arg(long, default_value = "10")]
         limit: usize,
     },
-    
-    /// Optimize builds
     Optimize {
-        /// Target to optimize
         #[arg(default_value = "build")]
         target: String,
     },
-    
-    /// Security analysis
     Security {
-        /// File to scan
         #[arg(long)]
         file: Option<String>,
     },
-    
-    /// Get workspace status
     Status,
+    /// Ingest workspace code into vector search index
+    Ingest {
+        #[arg(long)]
+        force: bool,
+    },
+    /// Search the code index by semantic similarity
+    Search {
+        #[arg()]
+        query: String,
+        #[arg(long, default_value = "5")]
+        limit: usize,
+    },
+    /// Execute a workspace tool (read_file, search_code, etc.)
+    Tool {
+        #[arg()]
+        name: String,
+        #[arg()]
+        args: Vec<String>,
+    },
+    /// List available tools
+    Tools,
+    /// Manage prediction feedback (list, show, accept, dismiss)
+    Feedback {
+        #[arg()]
+        action: String,
+        #[arg()]
+        id_or_category: Option<String>,
+    },
+    /// Start the background pipeline daemon (file watcher + scheduler + auto-suggest)
+    Daemon,
 }
 
 #[derive(Subcommand)]
 enum GenerateType {
-    /// Generate code
     Code {
-        /// Description of code to generate
         #[arg()]
         description: String,
-        
-        /// Programming language
         #[arg(long)]
         language: String,
-        
-        /// Output file
         #[arg(long)]
         output: Option<String>,
     },
-    
-    /// Generate tests
     Tests {
-        /// File to generate tests for
         #[arg()]
         file: String,
-        
-        /// Output file
         #[arg(long)]
         output: Option<String>,
     },
-    
-    /// Generate documentation
     Docs {
-        /// File to generate docs for
         #[arg()]
         file: String,
-        
-        /// Output file
         #[arg(long)]
         output: Option<String>,
     },
@@ -116,80 +110,62 @@ enum GenerateType {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
     tracing_subscriber::fmt::init();
-    
-    // Parse CLI
     let cli = Cli::parse();
-    
-    // Initialize AI Engine
     let workspace_path = std::env::current_dir()?;
     let engine = AIEngine::new(&workspace_path).await?;
-    
-    // Execute command
+
     match cli.command {
         Commands::Analyze { file, format } => {
-            if let Some(file_path) = file {
-                analyze_file(&engine, &file_path).await?;
-            } else {
-                analyze_workspace(&engine, &format).await?;
+            if let Some(f) = file { analyze_file(&engine, &f).await?; }
+            else { analyze_workspace(&engine, &format).await?; }
+        }
+        Commands::Generate { generate_type } => match generate_type {
+            GenerateType::Code { description, language, output } => {
+                generate_code(&engine, &description, &language, output).await?
             }
-        }
-        
-        Commands::Generate { generate_type } => {
-            match generate_type {
-                GenerateType::Code { description, language, output } => {
-                    generate_code(&engine, &description, &language, output).await?;
-                }
-                GenerateType::Tests { file, output } => {
-                    generate_tests(&engine, &file, output).await?;
-                }
-                GenerateType::Docs { file, output } => {
-                    generate_docs(&engine, &file, output).await?;
-                }
+            GenerateType::Tests { file, output } => {
+                generate_tests(&engine, &file, output).await?
             }
-        }
-        
-        Commands::Review { file } => {
-            review_code(&engine, &file).await?;
-        }
-        
-        Commands::Suggest { limit } => {
-            get_suggestions(&engine, limit).await?;
-        }
-        
-        Commands::Optimize { target } => {
-            optimize_build(&engine, &target).await?;
-        }
-        
+            GenerateType::Docs { file, output } => {
+                generate_docs(&engine, &file, output).await?
+            }
+        },
+        Commands::Review { file } => review_code(&engine, &file).await?,
+        Commands::Suggest { limit } => get_suggestions(&engine, limit).await?,
+        Commands::Optimize { target } => optimize_build(&engine, &target).await?,
         Commands::Security { file } => {
-            if let Some(file_path) = file {
-                security_scan_file(&engine, &file_path).await?;
-            } else {
-                security_scan_workspace(&engine).await?;
-            }
+            if let Some(f) = file { security_scan_file(&engine, &f).await?; }
+            else { security_scan_workspace(&engine).await?; }
         }
-        
-        Commands::Status => {
-            show_status(&engine).await?;
-        }
+        Commands::Status => show_status(&engine).await?,
+        Commands::Ingest { force: _ } => ingest_workspace(&engine).await?,
+        Commands::Search { query, limit } => search_index(&engine, &query, limit).await?,
+        Commands::Tool { name, args } => run_tool(&engine, &name, &args).await?,
+        Commands::Tools => list_tools(&engine).await?,
+        Commands::Feedback { action, id_or_category } => handle_feedback(&engine, &action, id_or_category.as_deref()).await?,
+        Commands::Daemon => start_daemon(&engine).await?,
     }
-    
+
     Ok(())
 }
 
-/// Show workspace status
 async fn show_status(engine: &AIEngine) -> Result<()> {
     println!("{}", "\n📊 AI Workspace Status".bold().cyan());
     println!("{}", "═".repeat(50).cyan());
-    
-    let context = engine.context.read().await;
-    let projects = context.get_projects().await?;
-    
-    println!("  {}: {}", "Workspace".green(), context.workspace_path().display());
+    let ctx = engine.context.read().await;
+    let projects = ctx.get_projects().await?;
+    println!("  {}: {}", "Workspace".green(), ctx.workspace_path().display());
     println!("  {}: {}", "Projects".green(), projects.len());
-    println!("  {}: {}", "AI Provider".green(), "OpenAI"); // TODO: Get from config
+    println!("  {}: {:?}", "Provider".green(), engine.config.provider_type);
+    println!("  {}: {}", "Model".green(), engine.config.model);
+    println!("  {}: {}", "API Base".green(), engine.config.api_base.as_deref().unwrap_or("default"));
     println!("  {}: {}", "Cache".green(), if engine.config.cache_enabled { "Enabled" } else { "Disabled" });
-    
+    let index = crate::features::ingest::check_index_exists(&workspace_path());
+    println!("  {}: {}", "Code Index".green(), if index { "Ready" } else { "Not built (run: polyglid-ai ingest)" });
     Ok(())
+}
+
+fn workspace_path() -> std::path::PathBuf {
+    std::env::current_dir().unwrap_or_default()
 }

@@ -1,0 +1,9 @@
+{
+  "id": "pred_2b3c4d5e",
+  "timestamp": "2026-07-07T11:30:00+00:00",
+  "category": "security",
+  "input": "Review auth/mod.rs for security issues",
+  "output": "## Security Analysis\n1. **OWASP Top 10 — A01 Broken Access Control**: The `is_admin` check in `require_role()` is missing a fallback — if the claims deserialize fails, access is granted by default.\n2. **Timing Attack**: Password comparison uses `==` instead of constant-time `subtle::ConstantEq`.\n3. **No Rate Limiting**: Login endpoint has no throttling — vulnerable to brute force.",
+  "status": "Pending",
+  "metadata": {"file": "auth/mod.rs", "risk_level": "high"}
+}

@@ -2637,6 +2637,7 @@ dependencies = [
  "anyhow",
  "async-openai",
  "async-trait",
+ "bincode",
  "candle-core",
  "candle-transformers",
  "chrono",

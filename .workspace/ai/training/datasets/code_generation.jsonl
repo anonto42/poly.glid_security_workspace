@@ -1,0 +1,20 @@
+[
+  {
+    "instruction": "Generate a JWT auth middleware for actix-web",
+    "input": "Language: Rust, Framework: actix-web 4",
+    "output": "```rust\npub async fn jwt_middleware(req: HttpRequest, next: Next<Body>) -> impl Responder {\n    let token = req.headers()\n        .get(\"Authorization\")\n        .and_then(|v| v.to_str().ok())\n        .and_then(|v| v.strip_prefix(\"Bearer \"))\n        .ok_or(HttpResponse::Unauthorized().body(\"Missing token\"))?;\n    // ...\n}\n```",
+    "metadata": {"domain": "authentication", "difficulty": "intermediate"}
+  },
+  {
+    "instruction": "Write a rate limiter using a sliding window counter",
+    "input": "Language: Rust, Storage: in-memory HashMap",
+    "output": "```rust\nuse std::collections::HashMap;\nuse std::time::{Instant, Duration};\n\npub struct SlidingWindowRateLimiter {\n    windows: HashMap<String, Vec<Instant>>,\n    max_requests: usize,\n    window_size: Duration,\n}\n\nimpl SlidingWindowRateLimiter {\n    pub fn new(max_requests: usize, window_secs: u64) -> Self {\n        Self {\n            windows: HashMap::new(),\n            max_requests,\n            window_size: Duration::from_secs(window_secs),\n        }\n    }\n\n    pub fn check(&mut self, key: &str) -> bool {\n        let now = Instant::now();\n        let entries = self.windows.entry(key.to_string()).or_default();\n        entries.retain(|t| now.duration_since(*t) < self.window_size);\n        if entries.len() >= self.max_requests {\n            false\n        } else {\n            entries.push(now);\n            true\n        }\n    }\n}\n```",
+    "metadata": {"domain": "networking", "difficulty": "advanced"}
+  },
+  {
+    "instruction": "Parse a Cargo.toml and extract all dependency names",
+    "input": "Language: Python",
+    "output": "```python\nimport tomllib\n\ndef get_dependencies(cargo_toml_path: str) -> list[str]:\n    with open(cargo_toml_path, \"rb\") as f:\n        data = tomllib.load(f)\n    deps = []\n    for section in [\"dependencies\", \"dev-dependencies\", \"build-dependencies\"]:\n        for name in data.get(section, {}):\n            deps.append(name)\n    return deps\n```",
+    "metadata": {"domain": "tooling", "difficulty": "beginner"}
+  }
+]

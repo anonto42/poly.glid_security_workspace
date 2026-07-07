@@ -1,0 +1,9 @@
+{
+  "id": "pred_4d5e6f7g",
+  "timestamp": "2026-07-07T14:00:00+00:00",
+  "category": "build_optimization",
+  "input": "Optimize Makefile build times",
+  "output": "## Build Optimizations\n1. **Enable sccache**: Add `export RUSTC_WRAPPER=sccache` — reduces rebuilds by 60%\n2. **Parallel test jobs**: `cargo test -- --test-threads=$(nproc)`\n3. **Incremental builds**: Already enabled via `CARGO_INCREMENTAL=1`\n4. **Linker**: Switch from default to `mold` or `lld` — cuts link time by 5x",
+  "status": "Accepted",
+  "metadata": {"file": "Makefile"}
+}

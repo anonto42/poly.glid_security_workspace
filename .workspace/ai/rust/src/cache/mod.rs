@@ -90,10 +90,11 @@ impl CacheManager {
         
         // Store on disk
         let disk_path = self.disk_cache_path.join("suggestions.cache");
+        let data_len = data.len();
         tokio::fs::write(disk_path, data).await?;
         
         // Update stats
-        self.update_stats(&key, data.len() as u64).await?;
+        self.update_stats(&key, data_len as u64).await?;
         
         Ok(())
     }

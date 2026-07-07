@@ -9,17 +9,26 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{info, warn, error, debug};
 
+#[derive(Debug, Clone, Deserialize)]
+struct PerDomainFile {
+    model: String,
+    temperature: Option<f32>,
+    max_tokens: Option<usize>,
+}
+
 use crate::core::context::WorkspaceContext;
 use crate::core::models::{
     Suggestion, Analysis, CodeReview, SecurityReport,
-    BuildOptimization, TestGeneration, Documentation
+    BuildOptimization, TestGeneration, Documentation, CodeQualityAnalysis
 };
 use crate::providers::{Provider, ProviderFactory};
 use crate::features::{
     CodeAnalyzer, DependencyAdvisor, BuildOptimizer,
-    TestGenerator, SecurityAnalyzer
+    TestGenerator, SecurityAnalyzer, IngestService
 };
 use crate::cache::CacheManager;
+use crate::tools::ToolExecutor;
+use crate::feedback::FeedbackTracker;
 
 /// Main AI Engine
 pub struct AIEngine {
@@ -38,27 +47,46 @@ pub struct AIEngine {
     pub build_optimizer: Arc<BuildOptimizer>,
     pub test_generator: Arc<TestGenerator>,
     pub security_analyzer: Arc<SecurityAnalyzer>,
+    pub ingest_service: Arc<IngestService>,
+    pub tool_executor: ToolExecutor,
+    pub feedback_tracker: FeedbackTracker,
     
     /// Configuration
     pub config: EngineConfig,
+
+    /// Workspace root path
+    pub workspace_path: PathBuf,
 }
 
 /// Engine configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct EngineConfig {
     pub provider_type: ProviderType,
+    pub api_base: Option<String>,
+    pub api_key: Option<String>,
     pub model: String,
     pub temperature: f32,
     pub max_tokens: usize,
     pub cache_enabled: bool,
     pub auto_suggestions: bool,
     pub suggestion_interval: u64, // seconds
+    pub models: Option<DomainModels>,
+}
+
+/// Per-domain model overrides
+#[derive(Debug, Clone, Deserialize)]
+pub struct DomainModels {
+    pub code: Option<String>,
+    pub security: Option<String>,
+    pub build: Option<String>,
+    pub suggest: Option<String>,
 }
 
 /// Provider types
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum ProviderType {
     OpenAI,
+    Ollama,
     Anthropic,
     Local,
     Hybrid,
@@ -67,13 +95,16 @@ pub enum ProviderType {
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
-            provider_type: ProviderType::OpenAI,
-            model: "gpt-4".to_string(),
+            provider_type: ProviderType::Ollama,
+            api_base: Some("http://localhost:11434/v1".to_string()),
+            api_key: None,
+            model: "codellama:7b".to_string(),
             temperature: 0.7,
-            max_tokens: 2000,
+            max_tokens: 4096,
             cache_enabled: true,
             auto_suggestions: true,
             suggestion_interval: 3600,
+            models: None,
         }
     }
 }
@@ -114,7 +145,12 @@ impl AIEngine {
         let security_analyzer = Arc::new(SecurityAnalyzer::new(
             provider.clone(), cache.clone()
         ));
-        
+        let ingest_service = Arc::new(IngestService::new(
+            provider.clone(), cache.clone()
+        ));
+        let tool_executor = ToolExecutor::new(workspace_path);
+        let feedback_tracker = FeedbackTracker::new(workspace_path);
+
         let engine = Self {
             context,
             provider,
@@ -124,7 +160,11 @@ impl AIEngine {
             build_optimizer,
             test_generator,
             security_analyzer,
+            ingest_service,
+            tool_executor,
+            feedback_tracker,
             config,
+            workspace_path: workspace_path.to_path_buf(),
         };
         
         let duration = start.elapsed();
@@ -135,19 +175,56 @@ impl AIEngine {
     
     /// Load configuration from file
     async fn load_config(workspace_path: &Path) -> Result<EngineConfig> {
-        let config_path = workspace_path
+        let config_dir = workspace_path
             .join(".workspace")
             .join("ai")
-            .join("configs")
-            .join("ai-config.toml");
+            .join("configs");
+        let config_path = config_dir.join("ai-config.toml");
         
-        if config_path.exists() {
+        let mut config = if config_path.exists() {
             let content = tokio::fs::read_to_string(&config_path).await?;
             let config: EngineConfig = toml::from_str(&content)?;
-            Ok(config)
+            config
         } else {
-            Ok(EngineConfig::default())
+            EngineConfig::default()
+        };
+
+        // Load per-domain model configs from model-configs/ directory
+        let model_configs_dir = config_dir.join("model-configs");
+        if model_configs_dir.exists() {
+            let domains = vec![
+                ("code", "code-model.toml"),
+                ("security", "security-model.toml"),
+                ("build", "build-model.toml"),
+                ("suggest", "suggest-model.toml"),
+            ];
+            let mut code = config.models.as_ref().and_then(|m| m.code.clone());
+            let mut security = config.models.as_ref().and_then(|m| m.security.clone());
+            let mut build = config.models.as_ref().and_then(|m| m.build.clone());
+            let mut suggest = config.models.as_ref().and_then(|m| m.suggest.clone());
+
+            for (domain, filename) in &domains {
+                let path = model_configs_dir.join(filename);
+                if path.exists() {
+                    if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                        if let Ok(domain_cfg) = toml::from_str::<PerDomainFile>(&content) {
+                            let model_name = Some(domain_cfg.model);
+                            match *domain {
+                                "code" => code = code.or(model_name),
+                                "security" => security = security.or(model_name),
+                                "build" => build = build.or(model_name),
+                                "suggest" => suggest = suggest.or(model_name),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            config.models = Some(DomainModels { code, security, build, suggest });
         }
+
+        Ok(config)
     }
     
     /// Analyze the entire workspace
@@ -162,11 +239,36 @@ impl AIEngine {
         // Analyze dependencies
         let dependencies = self.dependency_advisor.analyze_all().await?;
         
-        // Analyze code quality
-        let code_quality = self.code_analyzer.analyze_all().await?;
-        
-        // Analyze security
-        let security = self.security_analyzer.analyze_workspace().await?;
+        // Analyze code quality & security across real files
+        let source_files = self.discover_source_files(&context).await?;
+        let file_count = source_files.len();
+
+        let code_quality = if file_count > 0 {
+            let mut total_score = 0.0;
+            for path in &source_files[..file_count.min(20)] {
+                if let Ok(result) = self.code_analyzer.analyze_file(path).await {
+                    total_score += result.score;
+                }
+            }
+            CodeQualityAnalysis {
+                average_score: total_score / file_count.min(20) as f32,
+                files_analyzed: file_count,
+            }
+        } else {
+            CodeQualityAnalysis { average_score: 0.0, files_analyzed: 0 }
+        };
+
+        let security = if file_count > 0 {
+            let mut all_vulns = Vec::new();
+            for path in &source_files[..file_count.min(10)] {
+                if let Ok(report) = self.security_analyzer.analyze_file(path).await {
+                    all_vulns.extend(report.vulnerabilities);
+                }
+            }
+            SecurityReport { vulnerabilities: all_vulns }
+        } else {
+            SecurityReport { vulnerabilities: vec![] }
+        };
         
         // Generate recommendations
         let recommendations = self.generate_recommendations(
@@ -199,8 +301,12 @@ impl AIEngine {
     ) -> Result<String> {
         info!("🤖 Generating {} code: {}", language, description);
         
+        let context = self.workspace_context_prompt().await;
+        let context = self.rag_augment(description, &context).await;
+        
         let prompt = format!(
-            "Generate {language} code for: {description}\n\n\
+            "{context}\n\n\
+            Generate {language} code for: {description}\n\n\
             Include:\n\
             1. Complete implementation\n\
             2. Error handling\n\
@@ -220,7 +326,10 @@ impl AIEngine {
         let content = tokio::fs::read_to_string(file_path).await?;
         let language = Self::detect_language(file_path)?;
         
-        let tests = self.test_generator.generate(&content, &language).await?;
+        let context = self.workspace_context_prompt().await;
+        let enriched = format!("{}\n\nGenerate tests for this {} file:\n```{}\n{}\n```", context, language, language, content);
+        
+        let tests = self.test_generator.generate(&enriched, &language).await?;
         Ok(tests)
     }
     
@@ -231,10 +340,12 @@ impl AIEngine {
         let content = tokio::fs::read_to_string(file_path).await?;
         let language = Self::detect_language(file_path)?;
         
-        // Get analysis from provider
-        let analysis = self.provider.analyze_code(&content, &language).await?;
+        let context = self.workspace_context_prompt().await;
+        let context = self.rag_augment("code review patterns", &context).await;
+        let enriched = format!("{}\n\nReview this {} code:\n```{}\n{}\n```", context, language, language, content);
         
-        // Enhance with local analysis
+        let analysis = self.provider.analyze_code(&enriched, &language).await?;
+        
         let local_analysis = self.code_analyzer.analyze_file(file_path).await?;
         
         Ok(CodeReview {
@@ -400,7 +511,94 @@ impl AIEngine {
         
         Ok(language.to_string())
     }
-    
+
+    /// Discover source files in the workspace
+    async fn discover_source_files(&self, context: &WorkspaceContext) -> Result<Vec<PathBuf>> {
+        let ws = context.workspace_path();
+        let mut files = Vec::new();
+        let mut stack = vec![ws.join("projects")];
+
+        while let Some(dir) = stack.pop() {
+            if !dir.is_dir() { continue; }
+            let mut read_dir = tokio::fs::read_dir(&dir).await?;
+            while let Some(entry) = read_dir.next_entry().await? {
+                let path = entry.path();
+                if path.is_dir() {
+                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if !name.starts_with('.') && name != "node_modules" && name != "target" {
+                        stack.push(path);
+                    }
+                } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    match ext {
+                        "rs" | "py" | "js" | "ts" | "go" | "java" | "c" | "h" | "cpp" | "hpp" => {
+                            files.push(path);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Ok(files)
+    }
+
+    /// Build a context string describing the workspace
+    pub async fn workspace_context_prompt(&self) -> String {
+        let ctx = self.context.read().await;
+        let ws = ctx.workspace_path().to_string_lossy().to_string();
+
+        let mut lines = vec![
+            format!("You are analyzing the PolyGlid workspace at: {}", ws),
+        ];
+
+        if let Ok(files) = self.discover_source_files(&ctx).await {
+            use std::collections::HashMap;
+            let mut by_lang: HashMap<String, usize> = HashMap::new();
+            for p in &files {
+                if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                    *by_lang.entry(ext.to_string()).or_insert(0) += 1;
+                }
+            }
+            let mut parts: Vec<String> = by_lang.iter()
+                .map(|(ext, count)| format!("*.{}: {} files", ext, count))
+                .collect();
+            parts.sort();
+            lines.push(format!("Source files: {}", parts.join(", ")));
+            lines.push(format!("Total files: {}", files.len()));
+        }
+
+        if let Ok(deps) = self.dependency_advisor.analyze_all().await {
+            if !deps.outdated.is_empty() {
+                let names: Vec<String> = deps.outdated.keys().cloned().collect();
+                lines.push(format!("Outdated deps: {}", names.join(", ")));
+            }
+        }
+
+        lines.join("\n")
+    }
+
+    /// Augment a prompt with RAG context from the code index
+    pub async fn rag_augment(&self, query: &str, context: &str) -> String {
+        let ws = {
+            let ctx = self.context.read().await;
+            ctx.workspace_path().to_path_buf()
+        };
+
+        let chunks = self.ingest_service.search(query, &ws, 5).await.unwrap_or_default();
+        if chunks.is_empty() {
+            return context.to_string();
+        }
+
+        let mut parts = vec![context.to_string()];
+        parts.push("\n--- Relevant code from workspace ---".to_string());
+        for c in &chunks {
+            let snippet: String = c.chunk.content.lines().take(10).collect::<Vec<_>>().join("\n");
+            parts.push(format!("\n{}:{}\n{}", c.chunk.file, c.chunk.start_line, snippet));
+        }
+
+        parts.join("\n")
+    }
+
     /// Save analysis results
     async fn save_analysis(&self, analysis: &Analysis) -> Result<()> {
         let output_dir = self.context.read().await

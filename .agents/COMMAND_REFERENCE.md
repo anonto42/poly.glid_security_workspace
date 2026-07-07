@@ -218,11 +218,11 @@ k8s-delete:
 
 | Command | Status | Notes |
 |---------|--------|-------|
-| `make ai-analyze` | ❌ Missing | AI binary exists at `.workspace/ai/rust/` but no Makefile target |
-| `make ai-security` | ❌ Missing | `polyglid-ai security` works directly but no make wrapper |
-| `make ai-suggest` | ❌ Missing | `polyglid-ai suggest` works directly but no make wrapper |
-| `make deploy` | ❌ Missing | No deploy pipeline exists |
-| `make new-project` | ❌ Missing | No scaffolding script |
+| `make ai-analyze` | ✅ Live | Makefile wrapper checking for compiled binary at `.workspace/ai/rust/target/release/polyglid-ai` |
+| `make ai-security` | ✅ Live | Makefile wrapper calling `polyglid-ai security` |
+| `make ai-suggest` | ✅ Live | Makefile wrapper calling `polyglid-ai suggest --limit 10` |
+| `make deploy` | ⚠️ Stub | Runs `build` → `docker-up` → `k8s-apply` (stub chain depends on Docker + K8s being ready) |
+| `make new-project` | ✅ Live | Interactive prompt for language + name, scaffolds dir under `projects/` |
 | `make test-node` | ❌ Missing | Target defined in `languages.mk` but never called |
 
 ---
@@ -255,23 +255,31 @@ make test        ⚠️ Partial  make clean       ✅ Live
 make graph       ⚠️ Broken   make docker-up   ⚠️ Stub
 make docker-down ⚠️ Stub     make k8s-apply   ⚠️ Stub
 make k8s-delete  ⚠️ Stub     make ci-build    ⚠️ Stub
-make ci-test     ⚠️ Stub     make ai-*        ❌ Missing
-make deploy      ❌ Missing  make new-project ❌ Missing
+make ci-test     ⚠️ Stub     make ai-analyze  ✅ Live
+make ai-suggest  ✅ Live     make ai-security ✅ Live
+make deploy      ⚠️ Stub     make new-project ✅ Live
 ```
 
-## 15. Implementation Plan
+## 15. Implementation Plan — Status
 
-### High Priority (fill gaps in existing targets)
-1. **Fix `test`** — add `test-node` to the dependency chain
-2. **Fix `graph`** — rewrite `generate-graph.sh` to parse `workspace.toml` `[projects]` properly
-3. **Fix `init`** — add tool checks (rustup, cargo, node, npm/pnpm) and Rust dependency installation
+### ✅ Done
+1. **`init`** — Enhanced with 6-phase check + auto-setup:
+   - Detects dev tools (rustc, cargo, rustup, node, npm, pnpm)
+   - Detects Git config, Docker, Ollama, system resources, GPU
+   - **Auto-installs** missing: Rust via rustup, pnpm via npm, Ollama on Linux/macOS
+   - **Auto-pulls** recommended Ollama model based on GPU/RAM (codellama:7b, codellama:13b, or phi3:3.8b)
+   - Gracefully handles install failures (never breaks the pipeline)
+2. **`ai-analyze`/`ai-suggest`/`ai-security`** — Makefile wrappers calling `polyglid-ai` binary (checks binary exists before running)
+3. **`deploy`** — Stub pipeline: build → docker-up → k8s-apply (wired as dependency chain)
+4. **`new-project`** — Interactive scaffolding script (prompts for language + name, creates dir under `projects/`)
 
-### Medium Priority (turn stubs into real commands)
-4. **`docker-up`/`docker-down`** — create `infrastructure/docker/compose/docker-compose.yml` and wire it up
-5. **`k8s-apply`/`k8s-delete`** — create K8s manifests or reference existing ones
-6. **`ai-analyze`/`ai-suggest`/`ai-security`** — add Makefile wrappers calling `polyglid-ai` binary
+### High Priority
+5. **Fix `test`** — add `test-node` to the dependency chain
+6. **Fix `graph`** — rewrite `generate-graph.sh` to parse `workspace.toml` `[projects]` properly
 
-### Low Priority (new functionality)
-7. **`deploy`** — deployment pipeline (depends on Docker + K8s being real first)
-8. **`new-project`** — scaffolding script
+### Medium Priority
+7. **`docker-up`/`docker-down`** — create `infrastructure/docker/compose/docker-compose.yml` and wire it up
+8. **`k8s-apply`/`k8s-delete`** — create K8s manifests or reference existing ones
+
+### Low Priority
 9. **`test-node`** — wire up as separate target

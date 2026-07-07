@@ -1,0 +1,15 @@
+[
+  {
+    "code": "fn verify_password(password: &str, hash: &str) -> bool {\n    password == hash\n}",
+    "issues": [
+      {"severity": "critical", "rule": "timing_attack", "message": "String comparison is not constant-time; use `subtle::ConstantEq` instead"},
+      {"severity": "high", "rule": "no_hashing", "message": "Password is stored in plaintext; use argon2 or bcrypt"}
+    ]
+  },
+  {
+    "code": "let token = req.headers().get(\"Authorization\").unwrap().to_str().unwrap();",
+    "issues": [
+      {"severity": "high", "rule": "panic_risk", "message": "unwrap() will panic if header is missing; prefer pattern matching or ? operator"}
+    ]
+  }
+]

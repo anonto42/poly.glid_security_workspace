@@ -9,3 +9,4 @@ Load only what matches the task.
 - UI/API validation alignment: `frontend-backend-validation.md`
 - Tests: `testing-patterns.md`
 - Security/authz tests: `security-testing.md`
+- Deciding where to store any file/data: `data-placement.md`

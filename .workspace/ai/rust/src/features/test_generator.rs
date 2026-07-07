@@ -5,18 +5,17 @@ use crate::cache::CacheManager;
 use crate::core::models::TestGeneration;
 
 pub struct TestGenerator {
-    _provider: Arc<dyn Provider + Send + Sync>,
+    provider: Arc<dyn Provider + Send + Sync>,
     _cache: Arc<CacheManager>,
 }
 
 impl TestGenerator {
     pub fn new(provider: Arc<dyn Provider + Send + Sync>, cache: Arc<CacheManager>) -> Self {
-        Self { _provider: provider, _cache: cache }
+        Self { provider, _cache: cache }
     }
 
-    pub async fn generate(&self, _code: &str, _language: &str) -> Result<TestGeneration> {
-        Ok(TestGeneration {
-            raw_code: "fn test() {}".to_string(),
-        })
+    pub async fn generate(&self, code: &str, language: &str) -> Result<TestGeneration> {
+        let raw_code = self.provider.generate_tests(code, language).await?;
+        Ok(TestGeneration { raw_code })
     }
 }

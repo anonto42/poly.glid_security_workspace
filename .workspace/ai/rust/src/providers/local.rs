@@ -199,4 +199,8 @@ impl Provider for LocalProvider {
             Err(anyhow!("Local model support is disabled. Rebuild with --features local to enable."))
         }
     }
+
+    async fn embed(&self, _input: &str) -> Result<Vec<f32>> {
+        Err(anyhow!("Embedding not supported by local provider. Use Ollama provider instead."))
+    }
 }

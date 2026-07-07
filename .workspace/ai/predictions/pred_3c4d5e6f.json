@@ -1,0 +1,9 @@
+{
+  "id": "pred_3c4d5e6f",
+  "timestamp": "2026-07-07T09:15:00+00:00",
+  "category": "dependency",
+  "input": "Check Cargo.toml for outdated dependencies",
+  "output": "## Outdated Dependencies\n| Package | Current | Latest | Risk |\n|---------|---------|--------|------|\n| serde | 1.0.180 | 1.0.210 | low |\n| tokio | 1.32.0 | 1.38.0 | medium (security fix in 1.35) |\n| reqwest | 0.11.22 | 0.12.4 | high (breaking changes) |",
+  "status": "Dismissed",
+  "metadata": {"file": "Cargo.toml", "risk_level": "medium"}
+}

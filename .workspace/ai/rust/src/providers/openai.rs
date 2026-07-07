@@ -1,4 +1,4 @@
-//! OpenAI Provider Implementation
+//! OpenAI-compatible Provider (works with OpenAI API & Ollama local API)
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -8,10 +8,16 @@ use std::env;
 
 use super::traits::{Provider, CodeAnalysis};
 
-/// OpenAI Provider
+/// OpenAI-compatible Provider
+///
+/// Works with:
+/// - OpenAI API (https://api.openai.com/v1)
+/// - Ollama local API (http://localhost:11434/v1)
+/// - Any OpenAI-compatible endpoint
 pub struct OpenAIProvider {
     client: Client,
-    api_key: String,
+    api_key: Option<String>,
+    api_base: String,
     model: String,
     temperature: f32,
     max_tokens: usize,
@@ -42,15 +48,25 @@ struct OpenAIChoice {
 }
 
 impl OpenAIProvider {
-    /// Create new OpenAI provider
-    pub fn new(api_key: Option<String>) -> Result<Self> {
+    /// Create new OpenAI-compatible provider
+    ///
+    /// - `api_base`: API endpoint base URL (e.g. "https://api.openai.com/v1" or "http://localhost:11434/v1")
+    /// - `api_key`: Optional API key (not needed for Ollama)
+    pub fn new(api_base: &str, api_key: Option<String>) -> Result<Self> {
         let api_key = api_key
             .or_else(|| env::var("OPENAI_API_KEY").ok())
-            .ok_or_else(|| anyhow!("OPENAI_API_KEY not found"))?;
+            .filter(|k| !k.is_empty());
+
+        if api_base.contains("api.openai.com") && api_key.is_none() {
+            return Err(anyhow!("OPENAI_API_KEY required for OpenAI API endpoint"));
+        }
         
         Ok(Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()?,
             api_key,
+            api_base: api_base.trim_end_matches('/').to_string(),
             model: "gpt-4".to_string(),
             temperature: 0.7,
             max_tokens: 2000,
@@ -66,6 +82,12 @@ impl OpenAIProvider {
     /// Set temperature
     pub fn with_temperature(mut self, temperature: f32) -> Self {
         self.temperature = temperature;
+        self
+    }
+
+    /// Set max tokens
+    pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
+        self.max_tokens = max_tokens;
         self
     }
 }
@@ -89,56 +111,79 @@ impl Provider for OpenAIProvider {
             max_tokens: self.max_tokens,
         };
         
-        let response = self.client
-            .post("https://api.openai.com/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .json(&request)
+        let url = format!("{}/chat/completions", self.api_base);
+        let mut req = self.client.post(&url).json(&request);
+        
+        if let Some(ref key) = self.api_key {
+            req = req.header("Authorization", format!("Bearer {}", key));
+        }
+        
+        let response = req
             .send()
             .await
-            .map_err(|e| anyhow!("OpenAI API error: {}", e))?;
+            .map_err(|e| anyhow!("API request failed: {}", e))?;
         
         if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow!("OpenAI error: {}", error_text));
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow!("API error {}: {}", status, error_text));
         }
         
         let response: OpenAIResponse = response
             .json()
             .await
-            .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
+            .map_err(|e| anyhow!("Failed to parse API response: {}", e))?;
         
         if let Some(choice) = response.choices.first() {
             Ok(choice.message.content.clone())
         } else {
-            Err(anyhow!("No response from OpenAI"))
+            Err(anyhow!("No response choices from API"))
         }
     }
     
     async fn analyze_code(&self, code: &str, language: &str) -> Result<CodeAnalysis> {
         let prompt = format!(
-            "Analyze this {language} code and provide:\n\
-             1. Code quality assessment (score 0-100)\n\
-             2. List of issues (bugs, problems)\n\
-             3. Performance issues\n\
-             4. Security vulnerabilities\n\
-             5. Suggestions for improvement\n\n\
-             Code:\n```{language}\n{code}\n```"
+            r#"Analyze this {language} code and return ONLY valid JSON (no markdown, no explanation):
+
+{{
+  "quality_score": <0-100>,
+  "issues": ["issue1", "issue2"],
+  "performance_issues": ["perf1"],
+  "security_issues": ["sec1"],
+  "suggestions": ["suggestion1"]
+}}
+
+Code:
+```{language}
+{code}
+```"#
         );
         
         let response = self.generate(&prompt).await?;
-        
-        // Parse response into structured format
-        // In production, use structured output or parse with regex
-        let analysis = CodeAnalysis {
-            quality_score: 75.0, // Placeholder - would parse from response
-            issues: vec!["Example issue".to_string()],
-            performance_issues: vec!["Example performance issue".to_string()],
-            security_issues: vec!["Example security issue".to_string()],
-            suggestions: vec!["Example suggestion".to_string()],
+
+        let cleaned = response
+            .trim()
+            .strip_prefix("```json").unwrap_or(response.trim())
+            .strip_prefix("```").unwrap_or(response.trim())
+            .strip_suffix("```").unwrap_or(response.trim())
+            .trim()
+            .to_string();
+
+        if let Ok(parsed) = serde_json::from_str::<CodeAnalysis>(&cleaned) {
+            return Ok(CodeAnalysis {
+                raw_response: response,
+                ..parsed
+            });
+        }
+
+        Ok(CodeAnalysis {
+            quality_score: 50.0,
+            issues: vec!["Could not parse LLM response — analysis incomplete".to_string()],
+            performance_issues: vec![],
+            security_issues: vec![],
+            suggestions: vec![],
             raw_response: response,
-        };
-        
-        Ok(analysis)
+        })
     }
     
     async fn generate_tests(&self, code: &str, language: &str) -> Result<String> {
@@ -171,6 +216,35 @@ impl Provider for OpenAIProvider {
         
         self.generate(&prompt).await
     }
+
+    async fn embed(&self, input: &str) -> Result<Vec<f32>> {
+        let url = format!("{}/embeddings", self.api_base);
+        let request = EmbeddingRequest {
+            model: "nomic-embed-text".to_string(),
+            input: input.to_string(),
+        };
+
+        let mut req = self.client.post(&url).json(&request);
+        if let Some(ref key) = self.api_key {
+            req = req.header("Authorization", format!("Bearer {}", key));
+        }
+
+        let response = req.send().await
+            .map_err(|e| anyhow!("Embedding request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(anyhow!("Embedding error {}: {}", status, text));
+        }
+
+        let result: EmbeddingResponse = response.json().await
+            .map_err(|e| anyhow!("Failed to parse embedding response: {}", e))?;
+
+        result.data.into_iter().next()
+            .map(|d| d.embedding)
+            .ok_or_else(|| anyhow!("No embedding returned"))
+    }
 }
 
 impl OpenAIProvider {
@@ -185,4 +259,21 @@ Key principles:
 4. Be practical and constructive
 5. Explain reasoning behind suggestions"#.to_string()
     }
+}
+
+// Embedding support (OpenAI-compatible — works with Ollama's /api/embeddings)
+#[derive(Serialize)]
+struct EmbeddingRequest {
+    model: String,
+    input: String,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingResponse {
+    data: Vec<EmbeddingData>,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingData {
+    embedding: Vec<f32>,
 }
