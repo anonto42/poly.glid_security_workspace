@@ -1,0 +1,21 @@
+[workspace]
+members = [
+  "projects/rust/crates/polyglid-cli",
+  "projects/rust/crates/polyglid-config",
+  "projects/rust/crates/polyglid-core",
+  "projects/rust/crates/polyglid-events",
+  "projects/rust/crates/polyglid-plugin-api",
+  "projects/rust/crates/polyglid-runtime",
+  "projects/rust/plugins/recon_probe",
+  "projects/node/desktop-tauri/src-tauri",
+  "projects/rust/crates/polyglid-server",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

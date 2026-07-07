@@ -1,0 +1,26 @@
+# ============================================================================
+# {{PROJECT_NAME}} - Project Makefile
+# ============================================================================
+
+PROJECT_NAME := {{PROJECT_NAME}}
+PROJECT_LANGUAGE := {{PROJECT_LANGUAGE}}
+PROJECT_TYPE := {{PROJECT_TYPE}}
+PROJECT_PATH := projects/{{PROJECT_LANGUAGE}}/{{PROJECT_TYPE}}/{{PROJECT_NAME}}
+
+.PHONY: {{PROJECT_NAME}}-build {{PROJECT_NAME}}-test {{PROJECT_NAME}}-clean
+
+{{PROJECT_NAME}}-build:
+	@echo "  Building {{PROJECT_NAME}}..."
+	@cd $(PROJECT_PATH) && $(call get_build_command,$(PROJECT_LANGUAGE))
+
+{{PROJECT_NAME}}-test:
+	@echo "  Testing {{PROJECT_NAME}}..."
+	@cd $(PROJECT_PATH) && $(call get_test_command,$(PROJECT_LANGUAGE))
+
+{{PROJECT_NAME}}-clean:
+	@echo "  Cleaning {{PROJECT_NAME}}..."
+	@cd $(PROJECT_PATH) && $(call get_clean_command,$(PROJECT_LANGUAGE))
+
+{{PROJECT_NAME}}-dev:
+	@echo "  Starting {{PROJECT_NAME}} development server..."
+	@cd $(PROJECT_PATH) && $(call get_dev_command,$(PROJECT_LANGUAGE))

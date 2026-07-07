@@ -1,0 +1,22 @@
+[package]
+name = "polyglid-core"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+polyglid-config = { path = "../polyglid-config" }
+polyglid-events = { path = "../polyglid-events" }
+polyglid-plugin-api = { path = "../polyglid-plugin-api" }
+tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+sha2 = "0.10"
+semver = "1.0"
+serde_json = "1"
+rusqlite = { version = "0.31.0", features = ["bundled"] }
+ed25519-dalek = "2.0"
+hex = "0.4"
+
+[lib]
+path = "src/lib.rs"

@@ -1,0 +1,96 @@
+package polyglid:engine@0.2.0;
+
+interface types {
+    enum severity {
+        info,
+        low,
+        medium,
+        high,
+        critical,
+    }
+
+    record issue {
+        title: string,
+        severity: severity,
+        description: string,
+        recommendation: string,
+    }
+
+    record plugin-report {
+        plugin-name: string,
+        target-tested: string,
+        issues: list<issue>,
+        summary: string,
+    }
+
+    /// Plugin self-description embedded in the WASM component.
+    record plugin-metadata {
+        name: string,
+        display-name: string,
+        version: string,
+        description: string,
+        author: string,
+    }
+
+    /// Widget types that the host knows how to render natively.
+    enum widget-type {
+        table,
+        key-value,
+        tree,
+        log,
+        chart-bar,
+        text-block,
+    }
+
+    /// A single renderable widget inside a panel.
+    record panel-widget {
+        widget-kind: widget-type,
+        title: string,
+        /// Rows of cells. Interpretation depends on widget-kind:
+        /// - table: first row is headers, rest are data rows
+        /// - key-value: each row is [key, value]
+        /// - tree: each row is [indent-level, label]
+        /// - log: each row is [timestamp, message]
+        /// - chart-bar: each row is [label, numeric-value]
+        /// - text-block: each row is [line-of-text]
+        data: list<list<string>>,
+    }
+
+    /// A structured layout that the host renders in its native UI toolkit.
+    record panel-layout {
+        title: string,
+        widgets: list<panel-widget>,
+    }
+}
+
+interface dns {
+    resolve: func(host: string) -> result<list<string>, string>;
+}
+
+interface reports {
+    write: func(filename: string, contents: string) -> result<string, string>;
+}
+
+world security-tool {
+    use types.{plugin-report, plugin-metadata, panel-layout};
+
+    import dns;
+    import reports;
+
+    /// Run the security analysis against the given target.
+    export execute: func(target: string) -> result<plugin-report, string>;
+
+    /// Return embedded metadata about this plugin.
+    export metadata: func() -> plugin-metadata;
+
+    /// Return the list of capability strings this plugin requires.
+    export required-capabilities: func() -> list<string>;
+
+    /// Given a completed report, return a structured panel layout
+    /// for the terminal (ratatui) dashboard.
+    export cli-panel: func(report: plugin-report) -> panel-layout;
+
+    /// Given a completed report, return a structured panel layout
+    /// for the desktop (Tauri/React) application.
+    export desktop-panel: func(report: plugin-report) -> panel-layout;
+}

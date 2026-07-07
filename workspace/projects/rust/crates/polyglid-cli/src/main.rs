@@ -1,0 +1,621 @@
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+use std::str::FromStr;
+
+use polyglid_config::AppConfig;
+use polyglid_core::{
+    CoreEngine, InMemoryPermissionStore, PluginRef, PluginRunRequest, PluginRuntime, Target,
+};
+use polyglid_events::VecEventSink;
+use polyglid_plugin_api::Capability;
+use polyglid_runtime::WasmRuntime;
+use wasi_preview1_component_adapter_provider::{
+    WASI_SNAPSHOT_PREVIEW1_ADAPTER_NAME, WASI_SNAPSHOT_PREVIEW1_REACTOR_ADAPTER,
+};
+
+pub(crate) mod tui;
+
+fn main() -> ExitCode {
+    match run(env::args().skip(1).collect()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("error: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run(args: Vec<String>) -> Result<(), String> {
+    match args.as_slice() {
+        [] => tui::event_loop(),
+        [flag] if flag == "--help" || flag == "-h" => {
+            print_help();
+            Ok(())
+        }
+        [command] if command == "doctor" => doctor(),
+        [command] if command == "config" => config_help(),
+        [command, subcommand] if command == "config" && subcommand == "validate" => {
+            AppConfig::load_from_env().map_err(|err| err.to_string())?;
+            println!("config: valid");
+            Ok(())
+        }
+        [command] if command == "plugin" => plugin_help(),
+        [command, subcommand] if command == "plugin" && subcommand == "list" => plugin_list(),
+        [command, subcommand, path] if command == "plugin" && subcommand == "inspect" => {
+            plugin_inspect(path)
+        }
+        [command, subcommand, path] if command == "plugin" && subcommand == "install" => {
+            plugin_install(path)
+        }
+        [command, subcommand, id] if command == "plugin" && subcommand == "remove" => {
+            plugin_remove(id)
+        }
+        [command, subcommand, id] if command == "plugin" && subcommand == "enable" => {
+            plugin_enable(id, true)
+        }
+        [command, subcommand, id] if command == "plugin" && subcommand == "disable" => {
+            plugin_enable(id, false)
+        }
+        [command, subcommand, input, output]
+            if command == "plugin" && subcommand == "componentize" =>
+        {
+            plugin_componentize(input, output)
+        }
+        [command, subcommand, path, target_flag, target]
+            if command == "plugin" && subcommand == "run" && target_flag == "--target" =>
+        {
+            plugin_run(path, target, &[])
+        }
+        [command, subcommand, path, target_flag, target, rest @ ..]
+            if command == "plugin" && subcommand == "run" && target_flag == "--target" =>
+        {
+            plugin_run(path, target, rest)
+        }
+        [command] if command == "target" => target_help(),
+        [command, subcommand] if command == "target" && subcommand == "list" => target_list(),
+        [command, subcommand, name] if command == "target" && subcommand == "add" => target_add(name),
+        [command, subcommand, name] if command == "target" && subcommand == "remove" => target_remove(name),
+        [command, subcommand] if command == "workspace" && subcommand == "verify" => workspace_verify(),
+        [command, subcommand, path] if command == "plugin" && subcommand == "verify" => plugin_verify(path),
+        [command, subcommand, path, flag, key_path] if command == "plugin" && subcommand == "sign" && flag == "--key" => plugin_sign(path, key_path),
+        _ => Err("unknown command; run `polyglid --help`".to_string()),
+    }
+}
+
+fn doctor() -> Result<(), String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    println!("=== PolyGlid Doctor Status Report ===");
+    
+    let plugin_dir = &config.plugin_dir;
+    print!("plugin directory ({}): ", plugin_dir.display());
+    if plugin_dir.exists() {
+        let test_file = plugin_dir.join(".doctor_write_test");
+        if fs::write(&test_file, b"test").is_ok() {
+            let _ = fs::remove_file(test_file);
+            println!("OK (Writable)");
+        } else {
+            println!("ERROR (Permission Denied)");
+        }
+    } else {
+        println!("ERROR (Not Found)");
+    }
+
+    let db_path = plugin_dir.parent().unwrap_or(plugin_dir).join("polyglid.db");
+    print!("database path ({}): ", db_path.display());
+    if db_path.exists() {
+        println!("OK");
+        if let Ok(store) = polyglid_core::store::WorkspaceStore::new(&db_path) {
+            let integrity = store.verify_integrity().unwrap_or_else(|err| format!("Failed: {err}"));
+            println!("- SQLite Integrity check: {}", integrity);
+            
+            let ver = store.user_version().unwrap_or(0);
+            println!("- Database User Version: {}", ver);
+
+            let pubs = store.trust_store().list().unwrap_or_default();
+            println!("- Trusted Publishers: {}", pubs.len());
+
+            let profile = store.settings().get("security_profile")
+                .unwrap_or(None)
+                .unwrap_or_else(|| "Balanced".to_string());
+            println!("- Active Security Profile: {}", profile);
+        } else {
+            println!("- Database Connection: FAILED");
+        }
+    } else {
+        println!("Not Initialized (No database file)");
+    }
+
+    println!("WASM Runtime: wasmtime integration ok");
+    Ok(())
+}
+
+fn workspace_verify() -> Result<(), String> {
+    let pm = manager()?;
+    let store = pm.store;
+    println!("=== PolyGlid Workspace Integrity Check ===");
+    
+    let plugins = store.plugins().list().unwrap_or_default();
+    let enabled_count = plugins.iter().filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Enabled).count();
+    let disabled_count = plugins.iter().filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Disabled).count();
+    println!("Plugins:");
+    println!("- Total Installed: {}", plugins.len());
+    println!("- Enabled: {}", enabled_count);
+    println!("- Disabled: {}", disabled_count);
+
+    let publishers = store.trust_store().list().unwrap_or_default();
+    println!("Trusted Publishers:");
+    if publishers.is_empty() {
+        println!("- None registered");
+    } else {
+        for p in publishers {
+            let status = if p.revocation_status == 1 { "REVOKED" } else { "Active" };
+            println!("- {} (Key: {}, Trust Level: {}, Status: {})", p.name, &p.public_key[..12], p.trust_level, status);
+        }
+    }
+
+    let history = store.executions().list().unwrap_or_default();
+    let reports = store.reports().list().unwrap_or_default();
+    println!("Execution Stats:");
+    println!("- Job Execution Logs: {}", history.len());
+    println!("- Report Artifacts: {}", reports.len());
+
+    Ok(())
+}
+
+fn plugin_verify(wasm_path: &str) -> Result<(), String> {
+    let pm = manager()?;
+    let path = Path::new(wasm_path);
+    if !path.exists() {
+        return Err(format!("WASM file not found at '{}'", wasm_path));
+    }
+
+    println!("Verifying plugin binary '{}'...", wasm_path);
+    let (status, sig_opt) = pm.verify_plugin_signature(path, &polyglid_plugin_api::PluginId::new("temp").unwrap())?;
+    println!("Signature Status: {}", status);
+
+    if let Some(sig) = sig_opt {
+        println!("- Algorithm: {}", sig.algorithm);
+        println!("- Key ID: {}", sig.key_id);
+        println!("- Fingerprint: {}", sig.fingerprint);
+        println!("- Verified Timestamp: {}", sig.verified_at);
+    } else {
+        println!("- No signature record found");
+    }
+
+    Ok(())
+}
+
+fn plugin_sign(wasm_path: &str, key_path: &str) -> Result<(), String> {
+    use ed25519_dalek::{SigningKey, Signer};
+    
+    let path = Path::new(wasm_path);
+    if !path.exists() {
+        return Err(format!("WASM binary not found at '{}'", wasm_path));
+    }
+
+    let key_data = fs::read_to_string(key_path)
+        .map_err(|err| format!("failed to read key file: {err}"))?;
+    let trimmed = key_data.trim();
+    let seed_bytes = hex::decode(trimmed)
+        .map_err(|err| format!("invalid hex formatting in key file: {err}"))?;
+
+    let seed: &[u8; 32] = seed_bytes.as_slice().try_into()
+        .map_err(|_| "private key seed must be exactly 32 bytes (64 hex characters)".to_string())?;
+
+    let signing_key = SigningKey::from_bytes(seed);
+    let verifying_key = signing_key.verifying_key();
+
+    let wasm_bytes = fs::read(path)
+        .map_err(|err| format!("failed to read WASM binary: {err}"))?;
+    let signature = signing_key.sign(&wasm_bytes);
+
+    let signature_hex = hex::encode(signature.to_bytes());
+    let key_id_hex = hex::encode(verifying_key.to_bytes());
+
+    let sig_json = serde_json::json!({
+        "algorithm": "Ed25519",
+        "key_id": key_id_hex,
+        "signature": signature_hex
+    });
+
+    let sig_path = path.with_extension("sig");
+    fs::write(&sig_path, serde_json::to_string_pretty(&sig_json).unwrap())
+        .map_err(|err| format!("failed to write signature file: {err}"))?;
+
+    println!("Successfully signed '{}'", wasm_path);
+    println!("Detached signature file written to '{}'", sig_path.display());
+    Ok(())
+}
+
+fn manager() -> Result<polyglid_core::plugin_manager::PluginManager<WasmRuntime>, String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let runtime = std::sync::Arc::new(WasmRuntime::new());
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    let pm = polyglid_core::plugin_manager::PluginManager::new(runtime, &config, store)?;
+    let _ = pm.sync_directory();
+    Ok(pm)
+}
+
+fn plugin_list() -> Result<(), String> {
+    let pm = manager()?;
+    let plugins = pm.get_plugins();
+    if plugins.is_empty() {
+        println!("No plugins currently installed in workspace.");
+    } else {
+        println!(
+            "{:<28} {:<10} {:<10} {:<25}",
+            "ID", "Version", "Status", "Name"
+        );
+        println!("{:-<75}", "");
+        for p in plugins {
+            println!(
+                "{:<28} {:<10} {:<10} {:<25}",
+                p.id.as_str(),
+                p.version.to_string(),
+                p.status.to_string(),
+                p.name
+            );
+        }
+    }
+    Ok(())
+}
+
+fn plugin_inspect(id_or_path: &str) -> Result<(), String> {
+    let pm = manager()?;
+
+    // Try registry lookup first
+    if let Ok(id) = polyglid_plugin_api::PluginId::new(id_or_path) {
+        if let Some(entry) = pm.get_plugin(&id) {
+            println!("id: {}", entry.id.as_str());
+            println!("name: {}", entry.name);
+            println!("version: {}", entry.version);
+            println!("author: {}", entry.author);
+            println!("description: {}", entry.description);
+            println!("status: {}", entry.status.to_string());
+            println!("source: {}", entry.source.to_string());
+            println!("checksum: {}", entry.checksum);
+            println!("size: {} bytes", entry.file_size);
+            if entry.capabilities.is_empty() {
+                println!("requested capabilities: none");
+            } else {
+                println!("requested capabilities:");
+                for cap in entry.capabilities {
+                    println!("- {cap}");
+                }
+            }
+            return Ok(());
+        }
+    }
+
+    // Fallback to inspecting raw local WASM file path
+    let path = PathBuf::from(id_or_path);
+    if path.exists() {
+        let runtime = WasmRuntime::new();
+        let plugin_ref = PluginRef::from_path(path);
+        let manifest = runtime
+            .inspect(&plugin_ref)
+            .map_err(|err| err.to_string())?;
+        let metadata = runtime
+            .call_metadata(&plugin_ref)
+            .map_err(|err| err.to_string())?;
+        println!("id: {}", manifest.id.as_str());
+        println!("name: {}", metadata.display_name);
+        println!("version: {}", metadata.version);
+        println!("author: {}", metadata.author);
+        println!("description: {}", metadata.description);
+        if manifest.requested_capabilities.is_empty() {
+            println!("requested capabilities: none");
+        } else {
+            println!("requested capabilities:");
+            for cap in manifest.requested_capabilities {
+                println!("- {cap}");
+            }
+        }
+        return Ok(());
+    }
+
+    Err(format!(
+        "Plugin '{}' not found in registry and is not a valid wasm file path",
+        id_or_path
+    ))
+}
+
+fn plugin_install(wasm_path: &str) -> Result<(), String> {
+    let pm = manager()?;
+    let entry = pm.install_plugin(
+        Path::new(wasm_path),
+        polyglid_config::plugin_registry::PluginSource::LocalPath(PathBuf::from(wasm_path)),
+    )?;
+    println!(
+        "successfully installed plugin '{}' (version {})",
+        entry.id.as_str(),
+        entry.version
+    );
+    Ok(())
+}
+
+fn plugin_remove(plugin_id: &str) -> Result<(), String> {
+    let pm = manager()?;
+    let id = polyglid_plugin_api::PluginId::new(plugin_id).map_err(|err| err.to_string())?;
+    pm.uninstall_plugin(&id)?;
+    println!("successfully uninstalled plugin '{plugin_id}'");
+    Ok(())
+}
+
+fn plugin_enable(plugin_id: &str, enabled: bool) -> Result<(), String> {
+    let pm = manager()?;
+    let id = polyglid_plugin_api::PluginId::new(plugin_id).map_err(|err| err.to_string())?;
+    pm.toggle_plugin_enabled(&id, enabled)?;
+    let state = if enabled { "enabled" } else { "disabled" };
+    println!("successfully {state} plugin '{plugin_id}'");
+    Ok(())
+}
+
+fn plugin_componentize(input: &str, output: &str) -> Result<(), String> {
+    let module = fs::read(input).map_err(|err| format!("failed to read {input}: {err}"))?;
+    let component = wit_component::ComponentEncoder::default()
+        .module(&module)
+        .map_err(|err| format!("failed to read component metadata from {input}: {err:#}"))?
+        .adapter(
+            WASI_SNAPSHOT_PREVIEW1_ADAPTER_NAME,
+            WASI_SNAPSHOT_PREVIEW1_REACTOR_ADAPTER,
+        )
+        .map_err(|err| format!("failed to configure WASI preview1 adapter: {err:#}"))?
+        .validate(true)
+        .encode()
+        .map_err(|err| format!("failed to encode component: {err:#}"))?;
+
+    fs::write(output, component).map_err(|err| format!("failed to write {output}: {err}"))?;
+    println!("component: {output}");
+    Ok(())
+}
+
+fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), String> {
+    let pm = manager()?;
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let mut resolved_path = PathBuf::from(id_or_path);
+
+    if let Ok(id) = polyglid_plugin_api::PluginId::new(id_or_path) {
+        if let Some(entry) = pm.get_plugin(&id) {
+            resolved_path = entry.path;
+        }
+    }
+
+    let plugin_ref = PluginRef::from_path(&resolved_path);
+    let manifest = pm.runtime.inspect(&plugin_ref).map_err(|err| err.to_string())?;
+
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    if db_path.exists() {
+        let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+        let active_profile_name = store.settings()
+            .get("security_profile")
+            .unwrap_or(None)
+            .unwrap_or_else(|| "Balanced".to_string());
+
+        let profile = match active_profile_name.as_str() {
+            "Strict" => polyglid_core::security::profiles::SecurityProfile::strict(),
+            "Development" => polyglid_core::security::profiles::SecurityProfile::development(),
+            _ => polyglid_core::security::profiles::SecurityProfile::balanced(),
+        };
+
+        for request in &manifest.requested_capabilities {
+            if profile.allowed_capabilities.contains(&request.capability) {
+                continue;
+            }
+
+            let permission_engine = store.permission_engine();
+            let decision_opt = permission_engine.evaluate(
+                &manifest.id,
+                &request.capability,
+                "",
+                "Workspace"
+            )?;
+
+            let approved = match decision_opt {
+                Some(polyglid_core::PermissionDecision::Allow) => true,
+                Some(polyglid_core::PermissionDecision::Deny { .. }) => false,
+                None => {
+                    print!("Plugin '{}' requests capability '{}'. Approve? (y/N): ", manifest.id.as_str(), request.capability);
+                    use std::io::Write;
+                    let _ = std::io::stdout().flush();
+                    let mut input = String::new();
+                    let _ = std::io::stdin().read_line(&mut input);
+                    let input_trimmed = input.trim().to_lowercase();
+                    if input_trimmed == "y" || input_trimmed == "yes" {
+                        let _ = permission_engine.record_decision(
+                            &manifest.id,
+                            &request.capability,
+                            "",
+                            "Workspace",
+                            polyglid_core::PermissionDecision::Allow,
+                            None
+                        );
+                        let _ = store.audit_logger().log(
+                            "PermissionGranted",
+                            Some(manifest.id.as_str()),
+                            serde_json::json!({
+                                "capability": request.capability.to_string(),
+                                "scope": "Workspace"
+                            })
+                        );
+                        true
+                    } else {
+                        let _ = permission_engine.record_decision(
+                            &manifest.id,
+                            &request.capability,
+                            "",
+                            "Workspace",
+                            polyglid_core::PermissionDecision::Deny {
+                                reason: "Explicitly denied by user in CLI".to_string(),
+                            },
+                            None
+                        );
+                        let _ = store.audit_logger().log(
+                            "PermissionDenied",
+                            Some(manifest.id.as_str()),
+                            serde_json::json!({
+                                "capability": request.capability.to_string(),
+                                "scope": "Workspace"
+                            })
+                        );
+                        false
+                    }
+                }
+            };
+
+            if !approved {
+                return Err(format!("Permission denied for capability: {}", request.capability));
+            }
+        }
+    }
+
+    let mut engine = engine(parse_allow_flags(flags)?)?;
+    let report = engine
+        .run_plugin(PluginRunRequest {
+            plugin: PluginRef::from_path(resolved_path),
+            target: Target::parse(target).map_err(|err| err.to_string())?,
+        })
+        .map_err(|err| err.to_string())?;
+
+    println!("plugin: {}", report.plugin_name);
+    println!("target: {}", report.target_tested);
+    println!("summary: {}", report.summary);
+    if report.issues.is_empty() {
+        println!("issues: none");
+    } else {
+        println!("issues:");
+        for issue in report.issues {
+            println!("- [{}] {}", issue.severity, issue.title);
+            println!("  {}", issue.description);
+            println!("  recommendation: {}", issue.recommendation);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn engine(
+    allowed_capabilities: Vec<Capability>,
+) -> Result<CoreEngine<WasmRuntime, InMemoryPermissionStore, VecEventSink>, String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let mut permissions = InMemoryPermissionStore::default();
+    for capability in &config.default_capabilities {
+        permissions.grant_for_all(*capability);
+    }
+    for grant in &config.approved_capabilities {
+        match &grant.plugin_id {
+            Some(plugin_id) => permissions.grant_request(plugin_id.clone(), grant.request.clone()),
+            None => permissions.grant_request_for_all(grant.request.clone()),
+        }
+    }
+    for capability in allowed_capabilities {
+        permissions.grant_for_all(capability);
+    }
+
+    CoreEngine::new(
+        WasmRuntime::new(),
+        permissions,
+        VecEventSink::default(),
+        config,
+    )
+    .map_err(|err| err.to_string())
+}
+
+pub(crate) fn parse_allow_flags(flags: &[String]) -> Result<Vec<Capability>, String> {
+    let mut capabilities = Vec::new();
+    let mut chunks = flags.chunks_exact(2);
+    for chunk in &mut chunks {
+        if chunk[0] != "--allow" {
+            return Err(format!("unknown plugin run flag: {}", chunk[0]));
+        }
+        capabilities.push(Capability::from_str(&chunk[1]).map_err(|err| err.to_string())?);
+    }
+    if !chunks.remainder().is_empty() {
+        return Err("expected `--allow <capability>`".to_string());
+    }
+    Ok(capabilities)
+}
+
+fn config_help() -> Result<(), String> {
+    println!("config commands:");
+    println!("  polyglid config validate");
+    println!("  POLYGLID_CONFIG=/path/to/config.toml polyglid config validate");
+    Ok(())
+}
+
+fn plugin_help() -> Result<(), String> {
+    println!("plugin commands:");
+    println!("  polyglid plugin list");
+    println!("  polyglid plugin inspect <plugin_id_or_wasm_path>");
+    println!("  polyglid plugin install <wasm_path>");
+    println!("  polyglid plugin remove <plugin_id>");
+    println!("  polyglid plugin enable <plugin_id>");
+    println!("  polyglid plugin disable <plugin_id>");
+    println!("  polyglid plugin componentize <module.wasm> <component.wasm>");
+    println!("  polyglid plugin run <plugin_id_or_wasm_path> --target <target> [--allow <capability>...]");
+    Ok(())
+}
+
+fn target_help() -> Result<(), String> {
+    println!("target commands:");
+    println!("  polyglid target list");
+    println!("  polyglid target add <name>");
+    println!("  polyglid target remove <name>");
+    Ok(())
+}
+
+fn target_list() -> Result<(), String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    let targets = store.targets().list()?;
+    if targets.is_empty() {
+        println!("No targets saved in workspace.");
+    } else {
+        println!("{:<30}", "Target Name");
+        println!("{:-<30}", "");
+        for (name, _) in targets {
+            println!("{name}");
+        }
+    }
+    Ok(())
+}
+
+fn target_add(name: &str) -> Result<(), String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    store.targets().add(name, None)?;
+    println!("Target '{name}' added successfully.");
+    Ok(())
+}
+
+fn target_remove(name: &str) -> Result<(), String> {
+    let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
+    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
+    store.targets().remove(name)?;
+    println!("Target '{name}' removed successfully.");
+    Ok(())
+}
+
+fn print_help() {
+    println!("PolyGlid development CLI");
+    println!();
+    println!("usage:");
+    println!("  polyglid doctor");
+    println!("  polyglid config validate");
+    println!("  polyglid plugin list");
+    println!("  polyglid plugin inspect <plugin_id_or_wasm_path>");
+    println!("  polyglid plugin install <wasm_path>");
+    println!("  polyglid plugin remove <plugin_id>");
+    println!("  polyglid plugin enable <plugin_id>");
+    println!("  polyglid plugin disable <plugin_id>");
+    println!("  polyglid plugin componentize <module.wasm> <component.wasm>");
+    println!("  polyglid plugin run <plugin_id_or_wasm_path> --target <target> [--allow <capability>...]");
+    println!("  polyglid target list");
+    println!("  polyglid target add <name>");
+    println!("  polyglid target remove <name>");
+}

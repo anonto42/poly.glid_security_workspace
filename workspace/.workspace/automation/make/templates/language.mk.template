@@ -1,0 +1,14 @@
+# ============================================================================
+# Language Rules: {{LANGUAGE}}
+# ============================================================================
+
+.PHONY: {{LANGUAGE}}-build {{LANGUAGE}}-test {{LANGUAGE}}-clean
+
+{{LANGUAGE}}-build:
+	@echo "🛠️ Building {{LANGUAGE}} projects..."
+
+{{LANGUAGE}}-test:
+	@echo "🧪 Testing {{LANGUAGE}} projects..."
+
+{{LANGUAGE}}-clean:
+	@echo "🧹 Cleaning {{LANGUAGE}} projects..."
