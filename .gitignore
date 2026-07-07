@@ -12,3 +12,6 @@ node_modules/
 dist/
 *.db
 .nx/
+
+# AI engine build artifacts
+.workspace/ai/rust/target/

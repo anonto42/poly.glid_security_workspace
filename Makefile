@@ -10,26 +10,27 @@
 #   make clean          - Clean all artifacts
 # ============================================================================
 
-SHELL := /bin/bash
 .ONESHELL:
-.SHELLFLAGS := -eu -o pipefail -c
 .DELETE_ON_ERROR:
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
+# Include OS detection (first — other includes depend on these vars)
+include .workspace/automation/includes/os.mk
+
 # Include automation system
-include .workspace/automation/make/includes/colors.mk
-include .workspace/automation/make/includes/config.mk
-include .workspace/automation/make/includes/utils.mk
-include .workspace/automation/make/includes/help.mk
+include .workspace/automation/includes/colors.mk
+include .workspace/automation/includes/config.mk
+include .workspace/automation/includes/utils.mk
+include .workspace/automation/includes/help.mk
 
 # Include language modules
-include .workspace/automation/make/includes/languages.mk
+include .workspace/automation/includes/languages.mk
 
 # Include infrastructure modules
-include .workspace/automation/make/includes/docker.mk
-include .workspace/automation/make/includes/k8s.mk
-include .workspace/automation/make/includes/ci.mk
+include .workspace/automation/includes/docker.mk
+include .workspace/automation/includes/k8s.mk
+include .workspace/automation/includes/ci.mk
 
 # ============================================================================
 # Default Target
@@ -41,20 +42,44 @@ include .workspace/automation/make/includes/ci.mk
 # Workspace Commands
 # ============================================================================
 
+# ── Init (orchestrator — runs phases in order) ──
+
 .PHONY: init
-init: ## Initialize workspace (install tools and dependencies)
-	@$(call print_header,📦 Initializing Workspace)
-	@$(call print_step,Installing dependencies...)
-	@$(MAKE) _install-deps
-	@$(call print_step,Validating workspace...)
-	@.workspace/automation/make/scripts/validate-workspace.sh
+init: _init-check-tools _init-install-deps _init-build _init-validate ## Initialize workspace
 	@$(call print_success,Workspace initialized successfully!)
 
-.PHONY: _install-deps
-_install-deps:
+.PHONY: _init-check-tools
+_init-check-tools: ## [Phase 1] Check prerequisites
+	@$(call print_header,📦 Phase 1/4 — Checking Prerequisites)
+	@$(call print_substep,Running on: $(OS) ($(UNAME_S)))
+	@for tool in rustc cargo node npm pnpm; do \
+		if $(CHECK_CMD) $$tool >$(NULL_DEV) 2>&1; then \
+			printf "  $(GREEN)✅$(RESET) %-10s %s\n" "$$tool" "$$($$tool --version 2>&1 | head -1)"; \
+		else \
+			printf "  $(YELLOW)⚠️$(RESET) %-10s not found (install manually)\n" "$$tool"; \
+		fi \
+	done
+
+.PHONY: _init-install-deps
+_init-install-deps: ## [Phase 2] Install project dependencies
+	@$(call print_header,📦 Phase 2/4 — Installing Dependencies)
 	@$(call print_substep,Installing Node.js dependencies...)
 	@(cd projects/node/react-web && npx pnpm install 2>/dev/null) || true
 	@(cd projects/node/desktop-tauri && npm install 2>/dev/null) || true
+
+.PHONY: _init-build
+_init-build: ## [Phase 3] Build workspace
+	@$(call print_header,📦 Phase 3/4 — Building Workspace)
+	@$(call print_substep,Building Rust workspace crates...)
+	@cargo build
+	@$(call print_substep,Building AI engine...)
+	@cargo build --manifest-path .workspace/ai/rust/Cargo.toml 2>/dev/null || \
+		printf "  $(YELLOW)⚠️$(RESET) AI engine skipped (run 'make _init-build-ai' manually)\n"
+
+.PHONY: _init-validate
+_init-validate: ## [Phase 4] Validate workspace structure
+	@$(call print_header,📦 Phase 4/4 — Validating Workspace)
+	@.workspace/automation/scripts/validate-workspace.sh
 
 .PHONY: status
 status: ## Show workspace status
@@ -62,12 +87,12 @@ status: ## Show workspace status
 	@echo "  $(GREEN)✓$(RESET) Workspace root: $(WORKSPACE_ROOT)"
 	@echo "  $(GREEN)✓$(RESET) Languages enabled: $(LANGUAGES)"
 	@$(call print_step,Project Health:)
-	@.workspace/automation/make/scripts/validate-workspace.sh --quiet
+	@.workspace/automation/scripts/validate-workspace.sh --quiet
 
 .PHONY: graph
 graph: ## Generate and display dependency graph
 	@$(call print_header,📊 Dependency Graph)
-	@.workspace/automation/make/scripts/generate-graph.sh
+	@.workspace/automation/scripts/generate-graph.sh
 
 .PHONY: info
 info: ## Show workspace information
@@ -126,7 +151,7 @@ build-rust:
 .PHONY: test
 test: ## Run all tests
 	@$(call print_header,🧪 Running All Tests)
-	@$(MAKE) test-rust
+	@$(MAKE) test-rust test-node
 
 .PHONY: test-rust
 test-rust:
