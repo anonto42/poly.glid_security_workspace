@@ -9,6 +9,7 @@ members = [
   "projects/rust/plugins/recon_probe",
   "projects/node/desktop-tauri/src-tauri",
   "projects/rust/crates/polyglid-server",
+  "projects/wpm",
 ]
 resolver = "2"
 

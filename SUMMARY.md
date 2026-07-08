@@ -4,9 +4,11 @@
 ```
 .
 ├── Makefile                          # Root — all commands
+├── workspace.toml                    # Workspace project registry
 ├── projects/
 │   ├── rust/                         # Rust workspace (8 crates)
-│   └── node/                         # Node projects (react-web, desktop-tauri)
+│   ├── node/                         # Node projects (react-web, desktop-tauri)
+│   └── wpm/                          # Workspace Project Manager (planned)
 ├── .workspace/
 │   ├── ai/                           # AI engine (Rust binary)
 │   │   ├── configs/                  # ai-config.toml + per-domain model-configs/
@@ -70,6 +72,18 @@ All AI commands auto-build the engine binary before running.
 | `make ai-init-configs` | Generate .gitignore, .editorconfig, .vscode | root + `configs/` |
 | `make ai-generate-mk` | Regenerate per-project .mk files | `automation/includes/projects/` |
 | `make ai-detect-changes` | List projects changed since main | stdout |
+
+### WPM (Workspace Project Manager)
+| Command | Description |
+|---------|-------------|
+| `make init-wpm` | Scaffold WPM project from design plan |
+| `make wpm-build` | Build WPM binary |
+| `make wpm-run` | Start WPM server |
+| `make wpm-db-setup` | Create + migrate database |
+| `make wpm-test` | Run WPM tests |
+| `make wpm-docker-up` | Start Docker Compose stack |
+| `make wpm-docker-down` | Stop Docker Compose stack |
+| `make wpm-plan` | Show WPM design document |
 
 ### Deploy
 | Command | Description |

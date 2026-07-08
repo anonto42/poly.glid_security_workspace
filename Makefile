@@ -558,3 +558,61 @@ new-project: ## Create a new project from template
 	mkdir -p "$$path"; \
 	printf "  $(GREEN)✅$(RESET) Created $$path\n"; \
 	printf "  $(GREEN)💡$(RESET) Add '$$name = { path = \"$$path\", language = \"$$lang\", type = \"service\" }' to workspace.toml\n"
+
+# ============================================================================
+# WPM — Workspace Project Manager
+# ============================================================================
+
+WPM_DIR := projects/wpm
+WPM_INFRA := infrastructure/wpm
+WPM_CONFIG := configs/wpm
+
+.PHONY: init-wpm
+init-wpm: build-ai-engine ## Scaffold the WPM project from design plan
+	@$(call print_header,🏗️ Scaffolding WPM)
+	@mkdir -p $(WPM_DIR)/src/{api,models,services,dashboard,db/migrations,web/{static/{js,css},templates}}
+	@mkdir -p $(WPM_DIR)/tests/{integration,unit}
+	@mkdir -p $(WPM_INFRA)
+	@mkdir -p $(WPM_CONFIG)
+	@if [ ! -f $(WPM_DIR)/Cargo.toml ]; then \
+		$(AI_BIN) generate --wpm-cargo > $(WPM_DIR)/Cargo.toml; \
+	fi
+	@printf "  $(GREEN)✅$(RESET) WPM scaffold created at $(WPM_DIR)\n"
+	@printf "  $(GREEN)💡$(RESET) Run 'make wpm-db-setup' to initialize the database\n"
+
+.PHONY: wpm-build
+wpm-build: build-ai-engine ## Build WPM binary
+	@$(call print_header,🔨 Building WPM)
+	@cargo build --release -p wpm 2>&1 || \
+		printf "  $(YELLOW)⚠️$(RESET) WPM build failed (Cargo workspace may need updating)\n"
+
+.PHONY: wpm-run
+wpm-run: ## Run WPM server
+	@$(call print_header,🚀 Starting WPM)
+	@cargo run -p wpm
+
+.PHONY: wpm-db-setup
+wpm-db-setup: ## Create and migrate WPM database
+	@$(call print_header,🗄️ Setting up WPM database)
+	@echo "  Run the init.sql script against your PostgreSQL instance:"
+	@echo "    createdb wpm"
+	@echo "    psql -d wpm < infrastructure/wpm/init.sql"
+
+.PHONY: wpm-test
+wpm-test: ## Run WPM tests
+	@$(call print_header,🧪 Testing WPM)
+	@cargo test -p wpm
+
+.PHONY: wpm-docker-up
+wpm-docker-up: ## Start WPM stack via Docker Compose
+	@$(call print_header,🐳 Starting WPM Docker stack)
+	@docker compose -f $(WPM_INFRA)/docker-compose.yml up -d
+
+.PHONY: wpm-docker-down
+wpm-docker-down: ## Stop WPM Docker stack
+	@$(call print_header,🛑 Stopping WPM Docker stack)
+	@docker compose -f $(WPM_INFRA)/docker-compose.yml down
+
+.PHONY: wpm-plan
+wpm-plan: ## Show WPM design plan
+	@cat .workspace/ai/planning/wpm-design.md

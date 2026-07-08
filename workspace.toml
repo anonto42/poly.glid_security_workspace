@@ -1,41 +1,6 @@
-# ============================================================================
-# PolyGlid Workspace Configuration
-# ============================================================================
-
 [workspace]
-name = "polyglid-workspace"
-version = "1.0.0"
-description = "Universal Polyglot Monorepo"
+name = "PolyGlid"
+version = "0.1.0"
 
-# Language configurations
-[languages]
-enabled = ["node", "rust"]
-
-[languages.node]
-version = "20.0.0"
-package_manager = "pnpm"
-paths = ["projects/node/**/*"]
-
-[languages.rust]
-version = "1.75.0"
-package_manager = "cargo"
-paths = ["projects/rust/**/*"]
-
-# Project definitions
 [projects]
-react-web = { path = "projects/node/frontend/react-web", language = "node", type = "frontend" }
-desktop-tauri = { path = "projects/node/frontend/desktop-tauri", language = "node", type = "frontend" }
-polyglid-core = { path = "projects/rust/core/polyglid-core", language = "rust", type = "core" }
-polyglid-runtime = { path = "projects/rust/core/polyglid-runtime", language = "rust", type = "core" }
-polyglid-plugin-api = { path = "projects/rust/core/polyglid-plugin-api", language = "rust", type = "core" }
-polyglid-config = { path = "projects/rust/core/polyglid-config", language = "rust", type = "core" }
-polyglid-events = { path = "projects/rust/core/polyglid-events", language = "rust", type = "core" }
-polyglid-server = { path = "projects/rust/services/polyglid-server", language = "rust", type = "service" }
-polyglid-cli = { path = "projects/rust/tools/polyglid-cli", language = "rust", type = "tool" }
-
-# Build pipeline
-[pipeline]
-build = { depends_on = ["^build"], cache = true, parallel = true }
-test = { depends_on = ["build"], cache = true, parallel = true }
-dev = { depends_on = [], cache = false, parallel = true }
-lint = { depends_on = [], cache = true, parallel = true }
+wpm = { path = "projects/wpm", language = "rust", type = "service", description = "Workspace Project Manager" }
