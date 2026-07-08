@@ -6,6 +6,34 @@ use crate::pipelines::PipelineManager;
 use std::path::Path;
 use colored::*;
 use std::collections::HashMap;
+use tokio::fs;
+use chrono::Utc;
+
+fn report_dir(engine: &AIEngine, sub: &str) -> std::path::PathBuf {
+    engine.workspace_path.join(".workspace").join(sub)
+}
+
+async fn ensure_dir(path: &std::path::Path) -> Result<()> {
+    fs::create_dir_all(path).await?;
+    Ok(())
+}
+
+pub async fn log_analytics(engine: &AIEngine, command: &str, duration_ms: u64, status: &str) -> Result<()> {
+    let dir = report_dir(engine, "data/analytics");
+    ensure_dir(&dir).await?;
+    let path = dir.join("usage.jsonl");
+    let entry = serde_json::json!({
+        "command": command,
+        "timestamp": Utc::now().to_rfc3339(),
+        "duration_ms": duration_ms,
+        "status": status,
+    });
+    let mut file = fs::OpenOptions::new()
+        .create(true).append(true).open(&path).await?;
+    use tokio::io::AsyncWriteExt;
+    file.write_all(format!("{}\n", serde_json::to_string(&entry)?).as_bytes()).await?;
+    Ok(())
+}
 
 pub async fn analyze_file(_engine: &AIEngine, path: &str) -> Result<()> {
     println!("Analyzing file: {}", path.bold().yellow());
@@ -16,6 +44,14 @@ pub async fn analyze_workspace(engine: &AIEngine, _format: &str) -> Result<()> {
     println!("Analyzing workspace via AI...");
     let report = engine.analyze_workspace().await?;
     println!("Workspace analysis complete! Score: {:.1}", report.code_quality.average_score);
+
+    let dir = report_dir(engine, "quality/reports");
+    ensure_dir(&dir).await?;
+    let path = dir.join(format!("{}-analysis.json", report.timestamp.format("%Y%m%d_%H%M%S")));
+    let json = serde_json::to_string_pretty(&report)?;
+    fs::write(&path, &json).await?;
+    println!("{} Report saved to: {}", "✓".green(), path.display());
+
     Ok(())
 }
 
@@ -89,6 +125,15 @@ pub async fn security_scan_workspace(engine: &AIEngine) -> Result<()> {
     println!("Running workspace security scan...");
     let report = engine.security_analyzer.analyze_workspace().await?;
     println!("Workspace security scan complete! {} vulnerabilities found.", report.vulnerabilities.len());
+
+    let dir = report_dir(engine, "security/audits");
+    ensure_dir(&dir).await?;
+    let ts = Utc::now().format("%Y%m%d_%H%M%S");
+    let path = dir.join(format!("{}-audit.json", ts));
+    let json = serde_json::to_string_pretty(&report)?;
+    fs::write(&path, &json).await?;
+    println!("{} Audit saved to: {}", "✓".green(), path.display());
+
     Ok(())
 }
 
