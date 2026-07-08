@@ -4,8 +4,8 @@
 
 PROJECT_NAME := react-web
 PROJECT_LANGUAGE := node
-PROJECT_TYPE := node
-PROJECT_PATH := projects/node/node/react-web
+PROJECT_DIR := node/react-web
+PROJECT_PATH := projects/node/react-web
 
 .PHONY: react-web-build react-web-test react-web-clean
 

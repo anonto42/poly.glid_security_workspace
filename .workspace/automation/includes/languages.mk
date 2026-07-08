@@ -5,31 +5,33 @@
 # Node.js
 .PHONY: node-build node-test node-clean
 
+NODE_PKG := $(shell command -v pnpm 2>/dev/null && echo "pnpm" || echo "npm")
+
 node-build:
 	@echo "  🟢 Building Node.js projects..."
-	@cd projects/node/frontend/react-web && npx pnpm run build
-	@cd projects/node/frontend/desktop-tauri && npm run build
+	@cd projects/node/react-web && $(NODE_PKG) run build
+	@cd projects/node/desktop-tauri && npm run build
 
 node-test:
 	@echo "  🟢 Testing Node.js projects..."
-	@cd projects/node/frontend/react-web && npx pnpm run test
+	@cd projects/node/react-web && $(NODE_PKG) run test
 
 node-clean:
 	@echo "  🟢 Cleaning Node.js projects..."
-	@rm -rf projects/node/frontend/react-web/node_modules projects/node/frontend/react-web/dist
-	@rm -rf projects/node/frontend/desktop-tauri/node_modules projects/node/frontend/desktop-tauri/dist
+	@rm -rf projects/node/react-web/node_modules projects/node/react-web/dist
+	@rm -rf projects/node/desktop-tauri/node_modules projects/node/desktop-tauri/dist
 
 # Rust
 .PHONY: rust-build rust-test rust-clean
 
 rust-build:
 	@echo "  🦀 Building Rust projects..."
-	@cd projects/rust && cargo build --release
+	@cargo build --release
 
 rust-test:
 	@echo "  🦀 Testing Rust projects..."
-	@cd projects/rust && cargo test --workspace
+	@cargo test --workspace
 
 rust-clean:
 	@echo "  🦀 Cleaning Rust projects..."
-	@cd projects/rust && cargo clean
+	@cargo clean

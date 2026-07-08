@@ -44,10 +44,9 @@ impl TemplateEngine {
         let mut results = Vec::new();
 
         // Walk all directories under projects/, detect real projects
-        let mut stack = vec![(projects_root, String::new())];
-        while let Some((current, prefix)) = stack.pop() {
+        let mut stack = vec![projects_root.clone()];
+        while let Some(current) = stack.pop() {
             if !current.is_dir() { continue; }
-            // Detect hierarchy: if the parent is not the root, try to figure out type
             let mut rd = fs::read_dir(&current).await?;
             while let Some(entry) = rd.next_entry().await? {
                 let path = entry.path();
@@ -59,11 +58,15 @@ impl TemplateEngine {
             if Self::is_project_dir(&path).await {
                 // Found a real project — generate template
                 let language = Self::detect_language(&path).await.unwrap_or_else(|| "unknown".to_string());
-                let project_type = if prefix.is_empty() { "default" } else { &prefix };
+                // Compute relative dir from projects/ root (e.g. "rust/crates/polyglid-core")
+                let project_dir = path.strip_prefix(&projects_root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .to_string();
                 let content = template
                     .replace("{{PROJECT_NAME}}", &name)
                     .replace("{{PROJECT_LANGUAGE}}", &language)
-                    .replace("{{PROJECT_TYPE}}", project_type);
+                    .replace("{{PROJECT_DIR}}", &project_dir);
                 results.push(GeneratedMakefile {
                     project: name.clone(),
                     language,
@@ -71,8 +74,7 @@ impl TemplateEngine {
                 });
             }
             // Always recurse to find nested projects (e.g. src-tauri inside desktop-tauri)
-            let new_prefix = if prefix.is_empty() { name } else { format!("{}/{}", prefix, name) };
-            stack.push((path, new_prefix));
+            stack.push(path);
             }
         }
 

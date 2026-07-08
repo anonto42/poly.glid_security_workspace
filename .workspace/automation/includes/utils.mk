@@ -44,6 +44,15 @@ define get_clean_command
 	esac)
 endef
 
+# Get dev command for project
+define get_dev_command
+	$(shell case "$(1)" in \
+		node*) echo "npm run dev" ;; \
+		rust*) echo "cargo run" ;; \
+		*) echo "echo 'No dev command'" ;; \
+	esac)
+endef
+
 # Get dependencies for project
 define get_dependencies
 	$(shell grep -A 10 "\[dependencies\]" workspace.toml | grep "$(1)" | awk '{print $$3}' | tr -d '"')

@@ -4,8 +4,8 @@
 
 PROJECT_NAME := polyglid-plugin-api
 PROJECT_LANGUAGE := rust
-PROJECT_TYPE := rust/crates
-PROJECT_PATH := projects/rust/rust/crates/polyglid-plugin-api
+PROJECT_DIR := rust/crates/polyglid-plugin-api
+PROJECT_PATH := projects/rust/crates/polyglid-plugin-api
 
 .PHONY: polyglid-plugin-api-build polyglid-plugin-api-test polyglid-plugin-api-clean
 

@@ -4,8 +4,8 @@
 
 PROJECT_NAME := src-tauri
 PROJECT_LANGUAGE := rust
-PROJECT_TYPE := node/desktop-tauri
-PROJECT_PATH := projects/rust/node/desktop-tauri/src-tauri
+PROJECT_DIR := node/desktop-tauri/src-tauri
+PROJECT_PATH := projects/node/desktop-tauri/src-tauri
 
 .PHONY: src-tauri-build src-tauri-test src-tauri-clean
 

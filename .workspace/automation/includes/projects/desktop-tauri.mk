@@ -4,8 +4,8 @@
 
 PROJECT_NAME := desktop-tauri
 PROJECT_LANGUAGE := node
-PROJECT_TYPE := node
-PROJECT_PATH := projects/node/node/desktop-tauri
+PROJECT_DIR := node/desktop-tauri
+PROJECT_PATH := projects/node/desktop-tauri
 
 .PHONY: desktop-tauri-build desktop-tauri-test desktop-tauri-clean
 
