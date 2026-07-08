@@ -4,6 +4,8 @@ use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
 use crate::providers::Provider;
 use crate::cache::CacheManager;
+use tokio::fs;
+use regex::Regex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeChunk {
@@ -18,6 +20,17 @@ pub struct CodeChunk {
 pub struct EmbeddedChunk {
     pub chunk: CodeChunk,
     pub embedding: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snippet {
+    pub file: String,
+    pub name: String,
+    pub snippet_type: String, // function, class, method
+    pub start_line: usize,
+    pub end_line: usize,
+    pub content: String,
+    pub language: String,
 }
 
 pub struct IngestService {
@@ -36,11 +49,14 @@ impl IngestService {
         tokio::fs::create_dir_all(&store_dir).await?;
 
         let mut all_chunks = Vec::new();
+        let mut all_snippets = Vec::new();
 
         for file in &files {
             let content = tokio::fs::read_to_string(file).await?;
             let lang = file.extension().and_then(|e| e.to_str()).unwrap_or("");
             let chunks = self.chunk_content(&content, lang, file)?;
+            let snippets = self.extract_snippets(&content, lang, file);
+            all_snippets.extend(snippets);
 
             for chunk in &chunks {
                 let embedded = self.embed_chunk(chunk).await?;
@@ -48,9 +64,19 @@ impl IngestService {
             }
         }
 
+        // Save embedding index
         let path = store_dir.join("index.json");
         let json = serde_json::to_string_pretty(&all_chunks)?;
         tokio::fs::write(path, json).await?;
+
+        // Save snippets to docs/snippets/
+        if !all_snippets.is_empty() {
+            let snippets_dir = workspace.join(".workspace/docs/snippets");
+            tokio::fs::create_dir_all(&snippets_dir).await?;
+            let snippet_path = snippets_dir.join("index.json");
+            let snippet_json = serde_json::to_string_pretty(&all_snippets)?;
+            tokio::fs::write(snippet_path, snippet_json).await?;
+        }
 
         Ok(all_chunks)
     }
@@ -138,6 +164,35 @@ impl IngestService {
             chunk: chunk.clone(),
             embedding,
         })
+    }
+
+    fn extract_snippets(&self, content: &str, language: &str, file: &Path) -> Vec<Snippet> {
+        let mut snippets = Vec::new();
+        let rel_path = file.to_string_lossy().to_string();
+        let lines: Vec<&str> = content.lines().collect();
+        match language {
+            "rs" => {
+                let re = Regex::new(r"^\s*(pub\s+)?(unsafe\s+)?fn\s+(\w+)").unwrap();
+                for (i, line) in lines.iter().enumerate() {
+                    if let Some(caps) = re.captures(line) {
+                        let name = caps.get(3).map(|m| m.as_str()).unwrap_or("unknown").to_string();
+                        let end = (i + 20).min(lines.len());
+                        let snippet_content = lines[i..end].join("\n");
+                        snippets.push(Snippet {
+                            file: rel_path.clone(),
+                            name,
+                            snippet_type: "function".to_string(),
+                            start_line: i + 1,
+                            end_line: end,
+                            content: snippet_content,
+                            language: language.to_string(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+        snippets
     }
 }
 

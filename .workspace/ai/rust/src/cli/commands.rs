@@ -262,3 +262,74 @@ pub async fn start_daemon(engine: &AIEngine) -> Result<()> {
     manager.start().await?;
     Ok(())
 }
+
+pub async fn generate_diagrams(engine: &AIEngine) -> Result<()> {
+    println!("{} Generating architecture diagrams...", "📐".cyan());
+    let ws = &engine.workspace_path;
+    let dir = report_dir(engine, "docs/diagrams");
+    ensure_dir(&dir).await?;
+
+    let arch = crate::features::DiagramGenerator::generate_architecture_diagram(ws).await?;
+    let dep = crate::features::DiagramGenerator::generate_dependency_diagram(ws).await?;
+
+    fs::write(dir.join(&arch.filename), &arch.content).await?;
+    println!("  {} {} saved", "✓".green(), arch.filename);
+    fs::write(dir.join(&dep.filename), &dep.content).await?;
+    println!("  {} {} saved", "✓".green(), dep.filename);
+    Ok(())
+}
+
+pub async fn generate_release_manifests(engine: &AIEngine) -> Result<()> {
+    println!("{} Generating release manifests...", "📦".cyan());
+    let ws = &engine.workspace_path;
+    let dir = report_dir(engine, "releases/manifests");
+    ensure_dir(&dir).await?;
+
+    let manifests = crate::features::ReleasePlanner::analyze(ws).await?;
+    if manifests.is_empty() {
+        println!("  {} No projects found in projects/", "!".yellow());
+        return Ok(());
+    }
+    for m in &manifests {
+        let filename = format!("{}-deployment.yaml", m.project);
+        fs::write(dir.join(&filename), &m.manifest_yaml).await?;
+        println!("  {} {} v{} → {}", "✓".green(), m.project.cyan(), m.version.yellow(), filename);
+    }
+    Ok(())
+}
+
+pub async fn init_configs(engine: &AIEngine) -> Result<()> {
+    println!("{} Generating workspace configs...", "⚙".cyan());
+    let ws = &engine.workspace_path;
+
+    // .gitignore -> configs/git/
+    let git_dir = report_dir(engine, "configs/git");
+    ensure_dir(&git_dir).await?;
+    let gitignore = crate::features::ConfigGenerator::generate_gitignore(ws).await?;
+    let git_path = ws.join(".gitignore");
+    fs::write(&git_path, &gitignore.content).await?;
+    println!("  {} .gitignore written", "✓".green());
+    fs::write(git_dir.join(".gitignore"), &gitignore.content).await?;
+    println!("  {} configs/git/.gitignore written", "✓".green());
+
+    // .editorconfig -> configs/ide/
+    let ide_dir = report_dir(engine, "configs/ide");
+    ensure_dir(&ide_dir).await?;
+    let ec = crate::features::ConfigGenerator::generate_editorconfig().await;
+    let ec_path = ws.join(".editorconfig");
+    fs::write(&ec_path, &ec.content).await?;
+    println!("  {} .editorconfig written", "✓".green());
+    fs::write(ide_dir.join(".editorconfig"), &ec.content).await?;
+    println!("  {} configs/ide/.editorconfig written", "✓".green());
+
+    // .vscode/settings.json -> configs/ide/
+    let vs = crate::features::ConfigGenerator::generate_vscode_settings().await;
+    let vscode_dir = ws.join(".vscode");
+    fs::create_dir_all(&vscode_dir).await?;
+    fs::write(vscode_dir.join("settings.json"), &vs.content).await?;
+    println!("  {} .vscode/settings.json written", "✓".green());
+    fs::write(ide_dir.join("vscode-settings.json"), &vs.content).await?;
+    println!("  {} configs/ide/vscode-settings.json written", "✓".green());
+
+    Ok(())
+}

@@ -1,38 +1,9 @@
-[
-  {
-    "id": "pred_1a2b3c4d",
-    "timestamp": "2026-07-07T10:00:00+00:00",
-    "category": "code_generation",
-    "input": "Generate a JWT auth middleware for actix-web",
-    "output": "```rust\npub async fn jwt_middleware(req: HttpRequest, next: Next<Body>) -> Result<HttpResponse, actix_web::Error> {\n    let token = req.headers().get(\"Authorization\")\n        .and_then(|v| v.to_str().ok())\n        .and_then(|v| v.strip_prefix(\"Bearer \"))\n        .ok_or_else(|| actix_web::error::ErrorUnauthorized(\"missing token\"))?;\n    let config = req.app_data::<web::Data<JwtConfig>>().unwrap();\n    let decoded = jsonwebtoken::decode::<Claims>(token, &config.decoding, &Validation::default())\n        .map_err(|_| actix_web::error::ErrorUnauthorized(\"invalid token\"))?;\n    req.extensions_mut().insert(decoded.claims);\n    next.call(req).await\n}\n```",
-    "status": "Accepted",
-    "metadata": {"language": "rust", "file": "auth/middleware.rs"}
-  },
-  {
-    "id": "pred_2b3c4d5e",
-    "timestamp": "2026-07-07T11:30:00+00:00",
-    "category": "security",
-    "input": "Review auth/mod.rs for security issues",
-    "output": "## Security Analysis\n1. **OWASP Top 10 — A01 Broken Access Control**: The `is_admin` check in `require_role()` is missing a fallback — if the claims deserialize fails, access is granted by default.\n2. **Timing Attack**: Password comparison uses `==` instead of constant-time `subtle::ConstantEq`.\n3. **No Rate Limiting**: Login endpoint has no throttling — vulnerable to brute force.",
-    "status": "Pending",
-    "metadata": {"file": "auth/mod.rs", "risk_level": "high"}
-  },
-  {
-    "id": "pred_3c4d5e6f",
-    "timestamp": "2026-07-07T09:15:00+00:00",
-    "category": "dependency",
-    "input": "Check Cargo.toml for outdated dependencies",
-    "output": "## Outdated Dependencies\n| Package | Current | Latest | Risk |\n|---------|---------|--------|------|\n| serde | 1.0.180 | 1.0.210 | low |\n| tokio | 1.32.0 | 1.38.0 | medium (security fix in 1.35) |\n| reqwest | 0.11.22 | 0.12.4 | high (breaking changes) |",
-    "status": "Dismissed",
-    "metadata": {"file": "Cargo.toml", "risk_level": "medium"}
-  },
-  {
-    "id": "pred_4d5e6f7g",
-    "timestamp": "2026-07-07T14:00:00+00:00",
-    "category": "build_optimization",
-    "input": "Optimize Makefile build times",
-    "output": "## Build Optimizations\n1. **Enable sccache**: Add `export RUSTC_WRAPPER=sccache` — reduces rebuilds by 60%\n2. **Parallel test jobs**: `cargo test -- --test-threads=$(nproc)`\n3. **Incremental builds**: Already enabled via `CARGO_INCREMENTAL=1`\n4. **Linker**: Switch from default to `mold` or `lld` — cuts link time by 5x",
-    "status": "Accepted",
-    "metadata": {"file": "Makefile"}
-  }
-]
+{
+  "id": "pred_1a2b3c4d",
+  "timestamp": "2026-07-07T10:00:00+00:00",
+  "category": "code_generation",
+  "input": "Generate a JWT auth middleware for actix-web",
+  "output": "```rust\npub async fn jwt_middleware(req: HttpRequest, next: Next<Body>) -> Result<HttpResponse, actix_web::Error> {\n    let token = req.headers().get(\"Authorization\")\n        .and_then(|v| v.to_str().ok())\n        .and_then(|v| v.strip_prefix(\"Bearer \"))\n        .ok_or_else(|| actix_web::error::ErrorUnauthorized(\"missing token\"))?;\n    let config = req.app_data::<web::Data<JwtConfig>>().unwrap();\n    let decoded = jsonwebtoken::decode::<Claims>(token, &config.decoding, &Validation::default())\n        .map_err(|_| actix_web::error::ErrorUnauthorized(\"invalid token\"))?;\n    req.extensions_mut().insert(decoded.claims);\n    next.call(req).await\n}\n```",
+  "status": "Accepted",
+  "metadata": {"language": "rust", "file": "auth/middleware.rs"}
+}

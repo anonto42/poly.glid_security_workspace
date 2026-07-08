@@ -84,6 +84,12 @@ enum Commands {
     },
     /// Start the background pipeline daemon (file watcher + scheduler + auto-suggest)
     Daemon,
+    /// Generate architecture diagrams -> docs/diagrams/
+    Diagram,
+    /// Generate release manifests from project configs -> releases/manifests/
+    Release,
+    /// Generate .gitignore, .editorconfig, .vscode settings -> configs/git/, configs/ide/
+    InitConfigs,
 }
 
 #[derive(Subcommand)]
@@ -191,6 +197,21 @@ async fn main() -> Result<()> {
             log_analytics(&engine, "feedback", start.elapsed().as_millis() as u64, "ok").await?;
         }
         Commands::Daemon => start_daemon(&engine).await?,
+        Commands::Diagram => {
+            let start = Instant::now();
+            generate_diagrams(&engine).await?;
+            log_analytics(&engine, "diagram", start.elapsed().as_millis() as u64, "ok").await?;
+        }
+        Commands::Release => {
+            let start = Instant::now();
+            generate_release_manifests(&engine).await?;
+            log_analytics(&engine, "release", start.elapsed().as_millis() as u64, "ok").await?;
+        }
+        Commands::InitConfigs => {
+            let start = Instant::now();
+            init_configs(&engine).await?;
+            log_analytics(&engine, "init-configs", start.elapsed().as_millis() as u64, "ok").await?;
+        }
     }
 
     Ok(())
