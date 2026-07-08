@@ -7,6 +7,7 @@ pub mod ingest;
 pub mod diagram_generator;
 pub mod release_planner;
 pub mod config_generator;
+pub mod template_engine;
 
 pub use code_analysis::CodeAnalyzer;
 pub use dependency_advisor::DependencyAdvisor;
@@ -17,3 +18,4 @@ pub use ingest::IngestService;
 pub use diagram_generator::DiagramGenerator;
 pub use release_planner::ReleasePlanner;
 pub use config_generator::ConfigGenerator;
+pub use template_engine::TemplateEngine;

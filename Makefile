@@ -31,6 +31,7 @@ include .workspace/automation/includes/languages.mk
 include .workspace/automation/includes/docker.mk
 include .workspace/automation/includes/k8s.mk
 include .workspace/automation/includes/ci.mk
+-include .workspace/automation/includes/projects/*.mk
 
 # ============================================================================
 # Default Target
@@ -499,6 +500,31 @@ ai-search: build-ai-engine ## Search code index (usage: make ai-search QUERY="fi
 	else \
 		printf "  $(YELLOW)⚠️$(RESET) AI engine binary not found\n"; \
 	fi
+
+.PHONY: ai-generate-mk
+ai-generate-mk: build-ai-engine ## Generate Makefile templates from projects/
+	@$(call print_header,🔧 Generate Makefile Templates)
+	@$(AI_BIN) generate-mk
+
+.PHONY: ai-diagram
+ai-diagram: build-ai-engine ## Generate architecture diagrams -> docs/diagrams/
+	@$(call print_header,📐 Generate Diagrams)
+	@$(AI_BIN) diagram
+
+.PHONY: ai-release
+ai-release: build-ai-engine ## Generate release manifests -> releases/manifests/
+	@$(call print_header,📦 Generate Release Manifests)
+	@$(AI_BIN) release
+
+.PHONY: ai-init-configs
+ai-init-configs: build-ai-engine ## Generate .gitignore, .editorconfig, .vscode settings
+	@$(call print_header,⚙ Generate Configs)
+	@$(AI_BIN) init-configs
+
+.PHONY: ai-detect-changes
+ai-detect-changes: build-ai-engine ## Detect changed projects since main
+	@$(call print_header,🔍 Detect Changes)
+	@$(AI_BIN) detect-changes $(ARGS)
 
 # ============================================================================
 # Deploy Command (stub — real impl depends on Docker + K8s being ready)

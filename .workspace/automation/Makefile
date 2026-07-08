@@ -10,3 +10,4 @@ include includes/languages.mk
 include includes/docker.mk
 include includes/k8s.mk
 include includes/ci.mk
+-include includes/projects/*.mk

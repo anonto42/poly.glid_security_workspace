@@ -292,6 +292,60 @@ impl AIEngine {
         
         Ok(analysis)
     }
+
+    /// Detect changed files between git refs using detect-changes.sh
+    pub async fn detect_changes(&self, base: Option<&str>) -> Result<Vec<std::path::PathBuf>> {
+        let script = self.workspace_path
+            .join(".workspace/automation/scripts/detect-changes.sh");
+        if !script.exists() {
+            return Ok(Vec::new());
+        }
+
+        let base_ref = base.unwrap_or("main");
+        let output = tokio::process::Command::new("bash")
+            .arg(&script)
+            .arg(base_ref)
+            .arg("HEAD")
+            .current_dir(&self.workspace_path)
+            .output()
+            .await?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut files = Vec::new();
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('🔍') || trimmed.starts_with('📦') {
+                continue;
+            }
+            for project in trimmed.split_whitespace() {
+                let path = self.workspace_path.join("projects");
+                // Search all project dirs for matching name
+                let mut found = self.find_project_dir(&path, project).await;
+                if let Some(p) = found {
+                    files.push(p);
+                }
+            }
+        }
+        Ok(files)
+    }
+
+    async fn find_project_dir(&self, dir: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(current) = stack.pop() {
+            if let Ok(mut rd) = tokio::fs::read_dir(&current).await {
+                while let Ok(Some(entry)) = rd.next_entry().await {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        if path.file_name().and_then(|n| n.to_str()) == Some(name) {
+                            return Some(path);
+                        }
+                        stack.push(path);
+                    }
+                }
+            }
+        }
+        None
+    }
     
     /// Generate code based on description
     pub async fn generate_code(

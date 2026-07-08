@@ -90,6 +90,13 @@ enum Commands {
     Release,
     /// Generate .gitignore, .editorconfig, .vscode settings -> configs/git/, configs/ide/
     InitConfigs,
+    /// Generate Makefile includes from project templates -> automation/includes/projects/
+    GenerateMk,
+    /// Detect changed projects between git refs
+    DetectChanges {
+        #[arg(default_value = "main")]
+        base: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -211,6 +218,16 @@ async fn main() -> Result<()> {
             let start = Instant::now();
             init_configs(&engine).await?;
             log_analytics(&engine, "init-configs", start.elapsed().as_millis() as u64, "ok").await?;
+        }
+        Commands::GenerateMk => {
+            let start = Instant::now();
+            generate_mk_templates(&engine).await?;
+            log_analytics(&engine, "generate-mk", start.elapsed().as_millis() as u64, "ok").await?;
+        }
+        Commands::DetectChanges { base } => {
+            let start = Instant::now();
+            detect_changes(&engine, &base).await?;
+            log_analytics(&engine, "detect-changes", start.elapsed().as_millis() as u64, "ok").await?;
         }
     }
 

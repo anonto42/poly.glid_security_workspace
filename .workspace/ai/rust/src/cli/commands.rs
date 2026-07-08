@@ -333,3 +333,44 @@ pub async fn init_configs(engine: &AIEngine) -> Result<()> {
 
     Ok(())
 }
+
+pub async fn generate_mk_templates(engine: &AIEngine) -> Result<()> {
+    println!("{} Generating Makefile templates...", "🔧".cyan());
+    let ws = &engine.workspace_path;
+    let out_dir = ws.join(".workspace/automation/includes/projects");
+    fs::create_dir_all(&out_dir).await?;
+
+    let projects = crate::features::TemplateEngine::generate_project_mk(ws).await?;
+    let languages = crate::features::TemplateEngine::generate_language_mk(ws).await?;
+
+    for p in &projects {
+        let filename = format!("{}.mk", p.project);
+        fs::write(out_dir.join(&filename), &p.content).await?;
+        println!("  {} {} ({})", "✓".green(), filename, p.language);
+    }
+    for l in &languages {
+        let filename = format!("{}.mk", l.project);
+        fs::write(out_dir.join(&filename), &l.content).await?;
+        println!("  {} {} (language)", "✓".green(), filename);
+    }
+
+    if projects.is_empty() && languages.is_empty() {
+        println!("  {} No projects found in projects/", "!".yellow());
+    }
+    Ok(())
+}
+
+pub async fn detect_changes(engine: &AIEngine, base: &str) -> Result<()> {
+    println!("{} Detecting changes from {}...", "🔍".cyan(), base);
+    let changed = engine.detect_changes(Some(base)).await?;
+    if changed.is_empty() {
+        println!("  {} No changes detected", "○".yellow());
+        return Ok(());
+    }
+    for path in &changed {
+        let rel = path.strip_prefix(&engine.workspace_path).unwrap_or(path);
+        println!("  {} {}", "📄".cyan(), rel.display());
+    }
+    println!("  {} {} projects changed", "✓".green(), changed.len());
+    Ok(())
+}
