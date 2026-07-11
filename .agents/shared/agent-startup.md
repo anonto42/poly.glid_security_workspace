@@ -25,6 +25,13 @@ Daily history is local working memory and stays gitignored.
 - Security features are for authorized testing and defensive diagnostics.
 - Do not store secrets, raw chat logs, tokens, private keys, or target
   credentials in `.agents`.
+- After a meaningful discussion, decision, codebase discovery, implementation,
+  verification, or change of direction, update the matching `.agents` memory,
+  plan, decision, or change note before finishing. Do not record greetings,
+  speculative chat, duplicated Git history, or unverified claims.
+- Keep every response and context load as small as the task safely allows. Lead
+  with the result, avoid repetition, and include only details needed for action,
+  verification, risk, or a requested explanation.
 
 ## Work Loop
 
@@ -41,5 +48,7 @@ Daily history is local working memory and stays gitignored.
 - After meaningful work, rewrite today's `caveman.md` to reflect current
   `STATE` / `TODAY` / `NEXT` / `HANDOFFS` / `RISKS` / `LOAD`.
 - Record task splits in `handoffs.md` and decisions in `decisions.md`.
+- Follow `rules/durable-agent-knowledge.md` when deciding what must be retained.
+- Follow `rules/token-efficient-communication.md` for responses and context use.
 - Keep files under 200 lines; create `updates-02.md` when needed.
 - Do not store secrets or raw chat logs.

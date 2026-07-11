@@ -10,3 +10,7 @@ Load only what matches the task.
 - Tests: `testing-patterns.md`
 - Security/authz tests: `security-testing.md`
 - Deciding where to store any file/data: `data-placement.md`
+- Recording discussions, discoveries, decisions, and completed work:
+  `durable-agent-knowledge.md`
+- Minimal responses and efficient context/tool usage:
+  `token-efficient-communication.md`

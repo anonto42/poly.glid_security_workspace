@@ -101,8 +101,8 @@ graph TD
     subgraph "🧠 AI LAYER"
         A1[AI Engine]
         A2[Ollama Client]
-        A3[Model: CodeLlama]
-        A4[Prompt Templates]
+        A3[Configured Model: phi3:3.8b]
+        A4[Workspace Context + RAG Prompts]
         A5[Response Parser]
     end
 

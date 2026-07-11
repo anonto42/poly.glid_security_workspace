@@ -1,13 +1,17 @@
 # .workspace/ — Data Map
 
-## Live directories (have real content)
+## Live directories (verified 2026-07-11)
 
 | Path | Size | Stores |
 |------|------|--------|
-| `ai/` | 972 MB | Rust AI engine: source, configs, compiled deps (target/) |
+| `ai/` | ~3.4 GB including ignored artifacts | Rust AI engine, configs, predictions, training samples, embeddings, and `rust/target/` |
 | `automation/` | 60 KB | Makefile build system: includes, scripts, templates |
 
-## Skeleton directories (for future use)
+Most disk usage is ignored Rust output under `.workspace/ai/rust/target/`; it is
+not project knowledge. Build artifacts should eventually use the root `target/`
+or another disposable cache location.
+
+## Generated or partially active directories
 
 | Path | Subdirs | Stores |
 |------|---------|--------|
@@ -21,3 +25,7 @@
 | `security/` | `audits/`, `certificates/`, `policies/`, `secrets/` | Audit reports, TLS certs, security policies, encrypted secrets |
 | `state/` | `cache/`, `locks/`, `logs/`, `temp/` | Build caches, file locks, log archives, temporary files |
 | `templates/` | `infrastructure/`, `projects/` | Docker/K8s/Terraform templates, project starter templates |
+
+`configs/`, `data/`, `docs/`, `quality/`, `releases/`, and `security/` are no
+longer purely skeletons. The AI CLI can generate or append content in these
+locations. See `workspace-ai-current-state.md` before changing their contracts.
