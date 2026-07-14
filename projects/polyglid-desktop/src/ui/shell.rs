@@ -5,18 +5,6 @@ use super::models::WorkspaceView;
 use super::state::AppState;
 
 #[component]
-pub(crate) fn TitleBar() -> Element {
-    let mut state = use_context::<AppState>();
-    rsx! {
-        header { class: "titlebar",
-            div { class: "wordmark", span { class: "wordmark-icon", "P" } strong { "polyglid" } span { "/ developer space" } }
-            button { class: "command-trigger", onclick: move |_| state.command_open.set(true), span { "Search workspace or run a command" } kbd { "⌘ K" } }
-            div { class: "window-context", span { class: "live-dot" } "local workspace" button { class: "avatar", "S" } }
-        }
-    }
-}
-
-#[component]
 pub(crate) fn ActivityRail() -> Element {
     let mut state = use_context::<AppState>();
     let current = *state.active_view.read();

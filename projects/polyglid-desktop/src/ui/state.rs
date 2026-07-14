@@ -2,9 +2,10 @@ use dioxus::prelude::*;
 use polyglid_desktop::WorkspaceOverview;
 
 use super::models::{
-    BottomTab, EditorTab, PluginCard, ScanReport, SettingsTab, TrackFilter, WorkspaceView,
+    BottomTab, EditorTab, PluginCard, ScanReport, SettingsTab, TopBarAction, TrackFilter,
+    WorkspaceView,
 };
-use super::preview::{seed_overview, seed_plugins};
+use super::preview::{seed_overview, seed_plugins, seed_top_bar_actions};
 
 #[derive(Clone, Copy)]
 pub(crate) struct AppState {
@@ -14,6 +15,8 @@ pub(crate) struct AppState {
     pub(crate) settings_tab: Signal<SettingsTab>,
     pub(crate) settings_open: Signal<bool>,
     pub(crate) command_open: Signal<bool>,
+    pub(crate) active_workspace: Signal<String>,
+    pub(crate) top_bar_actions: Signal<Vec<TopBarAction>>,
     pub(crate) selected_target: Signal<String>,
     pub(crate) new_target: Signal<String>,
     pub(crate) targets: Signal<Vec<String>>,
@@ -34,6 +37,8 @@ pub(crate) fn use_app_state() -> AppState {
         settings_tab: use_signal(|| SettingsTab::Overview),
         settings_open: use_signal(|| false),
         command_open: use_signal(|| false),
+        active_workspace: use_signal(|| "polyglid workspace".to_string()),
+        top_bar_actions: use_signal(seed_top_bar_actions),
         selected_target: use_signal(|| "example.com".to_string()),
         new_target: use_signal(String::new),
         targets: use_signal(|| {

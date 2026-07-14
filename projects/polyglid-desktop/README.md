@@ -23,6 +23,8 @@ later integration phases; the existing Rust engine remains canonical.
 - `src/ui/models.rs` owns view, tab, filter, plugin, and report models.
 - `src/ui/shell.rs`, `sidebar.rs`, `editor.rs`, `bottom_panel.rs`, and
   `overlays.rs` own the persistent workspace regions.
+- `src/ui/top_bar.rs` owns the extensible brand, workspace selector, command
+  center, trusted plugin-action slot, runtime status, notifications, and profile.
 - `src/ui/features/` contains independently controlled scanner, plugin, track,
   automation, and agent screens.
 - `src/ui/components.rs` contains reusable visual controls.

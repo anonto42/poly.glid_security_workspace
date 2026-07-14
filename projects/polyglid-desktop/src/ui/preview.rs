@@ -1,6 +1,6 @@
 use polyglid_desktop::{TaskStatus, WorkTrack, WorkspaceOverview};
 
-use super::models::{Finding, PluginCard, ScanReport};
+use super::models::{Finding, PluginCard, ScanReport, TopBarAction, WorkspaceView};
 
 pub(crate) const PLUGIN_SOURCE: &str = r#"//! Sandboxed first-party diagnostic plugin.
 
@@ -41,6 +41,25 @@ pub(crate) fn seed_plugins() -> Vec<PluginCard> {
             description: "Local-first static review helper behind explicit approval gates.",
             capabilities: vec!["workspace-read", "ai-inference"],
             enabled: false,
+        },
+    ]
+}
+
+pub(crate) fn seed_top_bar_actions() -> Vec<TopBarAction> {
+    vec![
+        TopBarAction {
+            id: "recon-probe.open",
+            icon: "◇",
+            label: "Open plugins",
+            source: "Recon Probe",
+            destination: WorkspaceView::Plugins,
+        },
+        TopBarAction {
+            id: "workspace.verify",
+            icon: "✓",
+            label: "Workspace verify",
+            source: "PolyGlid Core",
+            destination: WorkspaceView::Automation,
         },
     ]
 }

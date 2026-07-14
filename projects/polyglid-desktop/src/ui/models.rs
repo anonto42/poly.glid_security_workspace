@@ -9,6 +9,15 @@ pub(crate) enum WorkspaceView {
     Agents,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TopBarAction {
+    pub(crate) id: &'static str,
+    pub(crate) icon: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) source: &'static str,
+    pub(crate) destination: WorkspaceView,
+}
+
 impl WorkspaceView {
     pub(crate) fn title(self) -> &'static str {
         match self {
