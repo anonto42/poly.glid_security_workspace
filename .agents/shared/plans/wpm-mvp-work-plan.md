@@ -149,13 +149,21 @@ Every successful mutation writes an audit event.
 
 ## Implementation sequence
 
-1. Create WPM Rust crates, Dioxus shell, domain types, and test setup.
-2. Add SQLite migrations, repositories, state transitions, audit log, and outbox.
-3. Build project/task tree, criteria, comments, and activity UI incrementally.
-4. Define versioned event schemas, exporter/importer, validation, and idempotency.
-5. Add isolated `wpm-data` worktree, publisher, fetch/import helper, and sync UI.
-6. Add conflict/quarantine handling, backup/restore, and end-to-end verification.
-7. Add a read-only workspace agent after the data and permission contracts stabilize.
+Accepted UI-first staging on 2026-07-15: finish the complete visual contract with
+isolated preview data and manually verify every screen before connecting rules,
+permissions, persistence, plugins, automation, or agent execution. Preview buttons
+must remain clearly non-production and must not bypass the later service boundary.
+
+1. Finish the modular Dioxus shell, design system, screens, responsive states, and
+   manual visual checklist using isolated preview data.
+2. Freeze the UI models/events that application services must provide.
+3. Add SQLite migrations, repositories, state transitions, audit log, and outbox.
+4. Replace preview data/actions with typed services one feature at a time.
+5. Define versioned event schemas, exporter/importer, validation, and idempotency.
+6. Add isolated `wpm-data` worktree, publisher, fetch/import helper, and sync UI.
+7. Add conflict/quarantine handling, backup/restore, and end-to-end verification.
+8. Add roles and a read-only workspace agent only after data and permission
+   contracts stabilize.
 
 ## MVP verification
 
