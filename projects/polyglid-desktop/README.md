@@ -29,6 +29,8 @@ later integration phases; the existing Rust engine remains canonical.
   automation, and agent screens.
 - `src/ui/components.rs` contains reusable visual controls.
 - `src/ui/preview.rs` isolates temporary seeded data from UI components.
+- `assets/theme.css` defines the shared Obsidian Emerald design tokens; component
+  styling consumes those tokens from `assets/main.css`.
 
 ## Verify
 

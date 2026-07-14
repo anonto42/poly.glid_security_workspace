@@ -8,7 +8,10 @@ use super::sidebar::WorkspaceSidebar;
 use super::state::use_app_state;
 use super::top_bar::TitleBar;
 
-const APP_CSS: &str = include_str!("../../assets/main.css");
+const APP_CSS: &str = concat!(
+    include_str!("../../assets/theme.css"),
+    include_str!("../../assets/main.css"),
+);
 
 #[component]
 pub(crate) fn App() -> Element {

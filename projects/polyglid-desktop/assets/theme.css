@@ -1,0 +1,53 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, "SF Pro Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+  --canvas: #080a0d;
+  --canvas-deep: #050709;
+  --surface-1: #0e1217;
+  --surface-2: #13181f;
+  --surface-3: #181f27;
+  --surface-hover: #1d252e;
+  --surface-active: #17251f;
+  --line: rgba(226, 238, 232, .075);
+  --line-strong: rgba(226, 238, 232, .14);
+  --line-accent: rgba(54, 230, 154, .34);
+  --text-strong: #f1f5f3;
+  --text: #cbd3cf;
+  --text-muted: #89948f;
+  --text-dim: #59645f;
+  --accent: #36e69a;
+  --accent-hover: #5aefae;
+  --accent-soft: rgba(54, 230, 154, .09);
+  --accent-muted: #69aa8b;
+  --info: #6ea8ff;
+  --info-soft: rgba(110, 168, 255, .1);
+  --warning: #f2c66d;
+  --danger: #ff7078;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 13px;
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, .2);
+  --shadow-lg: 0 28px 80px rgba(0, 0, 0, .48);
+  --ease: 160ms cubic-bezier(.2, .8, .2, 1);
+
+  /* Compatibility aliases while component CSS is migrated. */
+  --bg: var(--canvas);
+  --surface: var(--surface-1);
+  --blue: var(--info);
+  --muted: var(--text-muted);
+  --dim: var(--text-dim);
+}
+
+* { box-sizing: border-box; }
+html, body, #main { width: 100%; height: 100%; }
+body { margin: 0; min-width: 900px; overflow: hidden; color: var(--text); background: var(--canvas); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; }
+button { color: inherit; }
+button, input, select, textarea { transition: border-color var(--ease), background-color var(--ease), color var(--ease), box-shadow var(--ease), transform var(--ease); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(54,230,154,.55); outline-offset: 2px; }
+::selection { color: #04110a; background: var(--accent); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: #303942; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: #46524c; background-clip: padding-box; }
