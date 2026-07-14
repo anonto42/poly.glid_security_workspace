@@ -5,7 +5,7 @@ automation, and AI capabilities.
 
 ## Current developer-space shell
 
-- Rust/Dioxus replacement shell for the legacy React/Tauri dashboard views.
+- Rust/Dioxus developer-space shell and the single active desktop UI.
 - Explorer and targets, scanner configuration, result dashboard, source viewer,
   plugin registry, settings, command palette, and problems/output/terminal panels.
 - Unified WPM work tracks, automation control, and AI-agent workspace views.
@@ -13,14 +13,14 @@ automation, and AI capabilities.
 
 The current non-track dashboard data is an interactive UI preview. SQLite, real
 plugin execution, Git synchronization, automation handlers, and AI execution are
-later integration phases; the legacy Rust engine remains canonical until parity.
+later integration phases; the existing Rust engine remains canonical.
 
 ## Verify
 
 ```bash
-cargo fmt --manifest-path projects/polyglid-desktop/Cargo.toml -- --check
-cargo test --manifest-path projects/polyglid-desktop/Cargo.toml
-cargo check --manifest-path projects/polyglid-desktop/Cargo.toml --bin polyglid-desktop
+cargo fmt --all -- --check
+cargo test -p polyglid-desktop
+cargo check -p polyglid-desktop
 ```
 
 ## Run on CachyOS/Arch Linux
@@ -31,13 +31,8 @@ the `xdotool` package provides that library:
 
 ```bash
 sudo pacman -S --needed xdotool
-cargo run --manifest-path projects/polyglid-desktop/Cargo.toml
+cargo run -p polyglid-desktop
 ```
-
-PolyGlid Desktop temporarily uses an isolated Cargo workspace because Dioxus Desktop 0.7 and
-the legacy Tauri desktop select incompatible Linux WebView dependency versions.
-Remove the isolation after the Tauri frontend is retired or the upstream stacks
-become compatible.
 
 ## Manual UI checklist
 

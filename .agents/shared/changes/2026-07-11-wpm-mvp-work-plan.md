@@ -9,5 +9,8 @@ The repeated attachment matches the previously reviewed proposal exactly.
 
 ## Current direction
 
-Assume Rust/Axum, SQLite local-first, existing Tauri/React UI, single-user, and a
-read-only workspace helper until the user confirms the three first decisions.
+The initial assumption was Rust/Axum, SQLite local-first, an existing
+Tauri/React UI, single-user, and a read-only workspace helper.
+
+This UI assumption was superseded on 2026-07-14. The canonical application is
+now the single Rust/Dioxus desktop project at `projects/polyglid-desktop`.

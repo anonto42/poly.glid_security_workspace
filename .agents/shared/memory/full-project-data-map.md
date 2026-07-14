@@ -140,8 +140,6 @@ SQLite database for local development — plugin registry, execution history, pe
 | `projects/polyglid-events/` | Rust | Typed event system | ✅ Live |
 | `projects/polyglid-contracts/polyglid.wit` | WIT | Canonical host/plugin contract | ✅ Live |
 | `projects/recon-probe/` | Rust | First-party WASM diagnostic plugin | ✅ Live |
-| `projects/polyglid-web-legacy/` | TypeScript | React frontend pending retirement | ✅ Legacy |
-| `projects/polyglid-desktop-legacy/` | TS+Rust | Tauri/React app pending parity | ✅ Legacy |
 
 ---
 

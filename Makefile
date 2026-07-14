@@ -323,9 +323,7 @@ _setup-ai-config:
 .PHONY: _init-install-deps
 _init-install-deps: ## [Phase 2] Install project dependencies
 	@$(call print_header,📦 Phase 2/4 — Installing Dependencies)
-	@$(call print_substep,Installing Node.js dependencies...)
-	@(cd projects/polyglid-web-legacy && npx pnpm install 2>/dev/null) || true
-	@(cd projects/polyglid-desktop-legacy && npm install 2>/dev/null) || true
+	@$(call print_substep,Rust dependencies are managed by Cargo.)
 
 .PHONY: _init-build
 _init-build: build-rust build-ai-engine ## [Phase 3] Build workspace
@@ -365,13 +363,7 @@ info: ## Show workspace information
 .PHONY: dev
 dev: ## Start development servers (usage: make dev)
 	@$(call print_header,🚀 Starting Development Servers)
-	@$(MAKE) -j$(PARALLEL_JOBS) dev-node dev-rust
-
-.PHONY: dev-node
-dev-node:
-	@$(call print_substep,Starting Node/TypeScript dev servers...)
-	@(cd projects/polyglid-web-legacy && npx pnpm run dev) &
-	@(cd projects/polyglid-desktop-legacy && npm run dev) &
+	@$(MAKE) -j$(PARALLEL_JOBS) dev-rust
 
 .PHONY: dev-rust
 dev-rust:
@@ -385,13 +377,7 @@ dev-rust:
 .PHONY: build
 build: ## Build all projects
 	@$(call print_header,📦 Building All Projects)
-	@$(MAKE) build-rust build-node
-
-.PHONY: build-node
-build-node:
-	@$(call print_substep,Building Node/TypeScript projects...)
-	@(cd projects/polyglid-web-legacy && npx pnpm run build)
-	@(cd projects/polyglid-desktop-legacy && npm run build)
+	@$(MAKE) build-rust
 
 .PHONY: build-rust
 build-rust:
@@ -405,7 +391,7 @@ build-rust:
 .PHONY: test
 test: ## Run all tests
 	@$(call print_header,🧪 Running All Tests)
-	@$(MAKE) test-rust test-node
+	@$(MAKE) test-rust
 
 .PHONY: test-rust
 test-rust:
@@ -419,14 +405,8 @@ test-rust:
 .PHONY: clean
 clean: ## Clean all build artifacts
 	@$(call print_header,🧹 Cleaning Workspace)
-	@$(MAKE) clean-node clean-rust
+	@$(MAKE) clean-rust
 	@$(call print_success,Clean completed!)
-
-.PHONY: clean-node
-clean-node:
-	@$(call print_substep,Cleaning Node.js projects...)
-	@rm -rf projects/polyglid-web-legacy/node_modules projects/polyglid-web-legacy/dist
-	@rm -rf projects/polyglid-desktop-legacy/node_modules projects/polyglid-desktop-legacy/dist
 
 .PHONY: clean-rust
 clean-rust:
@@ -576,12 +556,12 @@ init-wpm: ## Verify the existing PolyGlid desktop project
 .PHONY: wpm-build
 wpm-build: ## Build PolyGlid Desktop
 	@$(call print_header,🔨 Building WPM)
-	@cargo build --release --manifest-path $(WPM_DIR)/Cargo.toml
+	@cargo build --release -p polyglid-desktop
 
 .PHONY: wpm-run
 wpm-run: ## Run PolyGlid Desktop
 	@$(call print_header,🚀 Starting WPM)
-	@cargo run --manifest-path $(WPM_DIR)/Cargo.toml
+	@cargo run -p polyglid-desktop
 
 .PHONY: wpm-db-setup
 wpm-db-setup: ## Create and migrate WPM database
@@ -593,7 +573,7 @@ wpm-db-setup: ## Create and migrate WPM database
 .PHONY: wpm-test
 wpm-test: ## Run WPM tests
 	@$(call print_header,🧪 Testing WPM)
-	@cargo test --manifest-path $(WPM_DIR)/Cargo.toml
+	@cargo test -p polyglid-desktop
 
 .PHONY: wpm-docker-up
 wpm-docker-up: ## Start WPM stack via Docker Compose

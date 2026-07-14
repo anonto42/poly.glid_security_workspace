@@ -15,9 +15,7 @@
 │   ├── polyglid-events/              # Event contracts
 │   ├── polyglid-plugin-api/          # Plugin-facing types
 │   ├── polyglid-contracts/           # Canonical WIT contract
-│   ├── recon-probe/                  # First-party WASM plugin
-│   ├── polyglid-web-legacy/          # React web UI pending retirement
-│   └── polyglid-desktop-legacy/      # Tauri/React UI pending parity
+│   └── recon-probe/                  # First-party WASM plugin
 ├── .workspace/
 │   ├── ai/                           # AI engine (Rust binary)
 │   │   ├── configs/                  # ai-config.toml + per-domain model-configs/

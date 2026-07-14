@@ -77,9 +77,8 @@ Status: useful product input, not implementation-ready specification.
 
 - The HTML/JavaScript samples are conceptual; inline handlers and interpolated
   `innerHTML` are unsafe for untrusted node/comment content.
-- Choose the UI architecture before implementation: existing Tauri/React client,
-  a new React web application, or server-rendered HTMX. Avoid maintaining two
-  frontends in the MVP.
+- Resolved on 2026-07-14: Rust/Dioxus is the canonical UI. The former
+  React/Tauri clients and separate web client were removed.
 - Tree drag-and-drop needs keyboard controls, screen-reader semantics, loading and
   failure states, cycle prevention, and server-confirmed rollback.
 - Use a virtualized tree for large workspaces.
@@ -109,7 +108,7 @@ Status: useful product input, not implementation-ready specification.
 ## Decisions required next
 
 - PostgreSQL collaborative MVP or SQLite local-first MVP.
-- Existing Tauri/React UI or separate web dashboard.
+- UI resolved: maintain one Rust/Dioxus desktop application.
 - Single-user first or immediate multi-user RBAC.
 - Filesystem tree and task graph as separate models or one polymorphic model.
 - Event-sourced workflow or relational state with append-only audit events.

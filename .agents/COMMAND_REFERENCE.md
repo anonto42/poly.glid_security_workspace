@@ -92,20 +92,14 @@ info:
 **Actual implementation** (in `Makefile:87-100`):
 ```makefile
 dev:
-    @$(MAKE) -j$(PARALLEL_JOBS) dev-node dev-rust
-
-dev-node:
-    @(cd projects/polyglid-web-legacy && npx pnpm run dev) &
-    @(cd projects/polyglid-desktop-legacy && npm run dev) &
+    @$(MAKE) -j$(PARALLEL_JOBS) dev-rust
 
 dev-rust:
     @cargo run -p polyglid-server &
 ```
 
-**Reality:** Starts 3 processes in background:
-- React web dev server (Vite)
-- Tauri desktop dev
-- Rust backend (`polyglid-server`)
+**Reality:** Starts the Rust backend (`polyglid-server`). Run
+`cargo run -p polyglid-desktop` separately for the desktop UI.
 
 **Gap vs hypothetical:** No Python or Go services started (none exist). No health check, no unified status output.
 
@@ -116,19 +110,13 @@ dev-rust:
 **Actual implementation** (in `Makefile:107-120`):
 ```makefile
 build:
-    @$(MAKE) build-rust build-node
-
-build-node:
-    @cd projects/polyglid-web-legacy && npx pnpm run build
-    @cd projects/polyglid-desktop-legacy && npm run build
+    @$(MAKE) build-rust
 
 build-rust:
     @cargo build --release
 ```
 
-**Reality:**
-- Rust: builds entire workspace (all crates) with `--release`
-- Node: builds react-web + desktop-tauri
+**Reality:** Builds the active Rust workspace with `--release`.
 
 **Gap vs hypothetical:** No Python or Go builds. No per-project artifact listing.
 
@@ -158,17 +146,13 @@ test-rust:
 **Actual implementation** (in `Makefile:140-155`):
 ```makefile
 clean:
-    @$(MAKE) clean-node clean-rust
-
-clean-node:
-    @rm -rf projects/polyglid-web-legacy/node_modules projects/polyglid-web-legacy/dist
-    @rm -rf projects/polyglid-desktop-legacy/node_modules projects/polyglid-desktop-legacy/dist
+    @$(MAKE) clean-rust
 
 clean-rust:
     @cargo clean
 ```
 
-**Reality:** Removes Node `node_modules`/`dist` dirs and runs `cargo clean`. No Python/Go cleanup (no projects). No cache cleaning.
+**Reality:** Runs `cargo clean` for the active Rust workspace.
 
 ---
 

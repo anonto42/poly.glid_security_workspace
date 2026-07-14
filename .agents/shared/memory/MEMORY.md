@@ -8,9 +8,8 @@
 - Plugins: untrusted WebAssembly components behind WIT contracts.
 - First client: `polyglid-cli` development harness.
 - Primary desktop: `projects/polyglid-desktop` using Rust/Dioxus.
-- Legacy client: `projects/polyglid-desktop-legacy` using Tauri/React until parity.
 - Runtime: Wasmtime Component Model.
-- Contract source: `wit/polyglid.wit`.
+- Contract source: `projects/polyglid-contracts/polyglid.wit`.
 
 ## References
 
@@ -46,7 +45,6 @@ default.
 - `polyglid-events` owns typed host/UI/runtime events.
 - `polyglid-cli` owns development commands and harness behavior.
 - `projects/polyglid-desktop` owns the Dioxus workspace UI.
-- `projects/polyglid-desktop-legacy` owns legacy Tauri IPC/UI until retirement.
 
 ## Security Defaults
 

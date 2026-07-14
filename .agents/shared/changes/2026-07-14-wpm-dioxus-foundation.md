@@ -8,8 +8,8 @@ Date: 2026-07-14
 - Added initial domain rules and four passing tests.
 - Added an interactive, responsive work-tracks control-plane screen.
 - Documented Linux prerequisites and a manual visual test checklist.
-- Isolated WPM's Cargo workspace/lockfile to prevent Dioxus WebView dependencies
-  from downgrading and breaking the legacy Tauri desktop dependencies.
+- Initially isolated the Dioxus workspace due to Tauri dependency conflicts; the
+  isolation was later removed when the retired Tauri client was deleted.
 - Embedded the stylesheet in the binary so the UI works through plain `cargo run`
   without requiring Dioxus CLI asset collection.
 

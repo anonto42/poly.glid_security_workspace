@@ -91,6 +91,6 @@ world security-tool {
     export cli-panel: func(report: plugin-report) -> panel-layout;
 
     /// Given a completed report, return a structured panel layout
-    /// for the desktop (Tauri/React) application.
+    /// for the PolyGlid Dioxus desktop application.
     export desktop-panel: func(report: plugin-report) -> panel-layout;
 }

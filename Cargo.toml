@@ -7,10 +7,9 @@ members = [
   "projects/polyglid-plugin-api",
   "projects/polyglid-runtime",
   "projects/recon-probe",
-  "projects/polyglid-desktop-legacy/src-tauri",
+  "projects/polyglid-desktop",
   "projects/polyglid-server",
 ]
-exclude = ["projects/polyglid-desktop"]
 resolver = "2"
 
 [workspace.package]

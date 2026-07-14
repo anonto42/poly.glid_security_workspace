@@ -22,9 +22,7 @@ projects/
 ├── polyglid-events/           # event contracts
 ├── polyglid-plugin-api/       # plugin/WIT-facing types
 ├── polyglid-contracts/        # canonical WIT contract
-├── recon-probe/               # first-party WASM plugin
-├── polyglid-web-legacy/       # current React web UI until retirement
-└── polyglid-desktop-legacy/   # current Tauri/React UI until parity
+└── recon-probe/               # first-party WASM plugin
 ```
 
 Empty language placeholders should be removed. A mixed-language project may keep
@@ -43,9 +41,9 @@ language-specific internal folders only when its own build requires them.
 
 1. Preserved the Dioxus baseline in commit `063723b`.
 2. Renamed `projects/wpm` to `projects/polyglid-desktop`.
-3. Moved Rust crates, WIT, plugin, and legacy clients to direct product paths.
+3. Moved Rust crates, WIT, and the plugin to direct product paths.
 4. Updated Cargo members, path dependencies, scripts, docs, and agent references.
-5. Kept legacy React/Tauri projects until Dioxus engine parity is proven.
+5. Removed the retired React and Tauri clients after selecting Dioxus as canonical.
 6. Removed empty language grouping placeholders.
 
 Every move must pass formatting, workspace metadata, compile/check, tests, and

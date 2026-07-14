@@ -18,6 +18,3 @@ test = false
 
 [lints.rust]
 unsafe_code = "forbid"
-
-[workspace]
-resolver = "2"

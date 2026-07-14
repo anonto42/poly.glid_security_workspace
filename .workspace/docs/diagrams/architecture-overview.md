@@ -10,8 +10,6 @@ graph TD
   api[polyglid-plugin-api]
   contracts[polyglid-contracts]
   plugin[recon-probe]
-  legacy_web[polyglid-web-legacy]
-  legacy_desktop[polyglid-desktop-legacy]
   desktop --> core
   cli --> core
   server --> core
@@ -21,7 +19,6 @@ graph TD
   core --> config
   core --> events
   core --> api
-  legacy_desktop --> core
 
 ```
 
