@@ -1,6 +1,6 @@
 # WPM Current State
 
-Verified: 2026-07-14.
+Verified: 2026-07-15.
 
 ## Current implementation
 
@@ -18,6 +18,19 @@ Verified: 2026-07-14.
 - Non-track data remains seeded UI state. SQLite, real executor/plugin adapters, Git
   sync, automation handlers, and AI integration do not exist in WPM yet. The legacy
   Rust engine remains canonical until explicit integration gates pass.
+
+## Plugin integration boundary
+
+- The desktop must not implement a second plugin engine. It should call application
+  services backed by `polyglid-core::PluginManager` and `polyglid-runtime`.
+- `PluginManager` already validates, installs, discovers, enables, and persists
+  plugins through the core SQLite `WorkspaceStore`.
+- Plugins implement the `security-tool` WIT world: metadata, required capabilities,
+  typed execution reports, and host-rendered CLI/desktop panel layouts.
+- The host grants scoped capabilities such as DNS resolution and report writing;
+  plugins never receive unrestricted host access.
+- Current `ui/preview.rs` plugin cards and scanner reports must eventually be
+  replaced by typed core commands/results and events.
 
 ## Verification
 
