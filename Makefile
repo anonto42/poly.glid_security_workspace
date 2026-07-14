@@ -4,7 +4,8 @@
 # Usage: make [target] [options]
 # Examples:
 #   make help           - Show all available commands
-#   make dev            - Start all development servers
+#   make dev            - Run the PolyGlid desktop app
+#   make server         - Run the optional backend API
 #   make build          - Build all projects
 #   make test           - Run all tests
 #   make clean          - Clean all artifacts
@@ -360,15 +361,19 @@ info: ## Show workspace information
 # Development Commands
 # ============================================================================
 
-.PHONY: dev
-dev: ## Start development servers (usage: make dev)
-	@$(call print_header,🚀 Starting Development Servers)
-	@$(MAKE) -j$(PARALLEL_JOBS) dev-rust
+.PHONY: dev desktop server dev-rust
+dev: desktop ## Run PolyGlid Desktop (default development command)
 
-.PHONY: dev-rust
-dev-rust:
-	@$(call print_substep,Starting Rust backend server...)
-	@cargo run -p polyglid-server &
+desktop: ## Run the PolyGlid Dioxus desktop app
+	@$(call print_header,🚀 Starting PolyGlid Desktop)
+	@cargo run -p polyglid-desktop
+
+server: ## Run the optional PolyGlid backend API
+	@$(call print_header,🌐 Starting PolyGlid Server)
+	@cargo run -p polyglid-server
+
+# Compatibility alias for older automation.
+dev-rust: server
 
 # ============================================================================
 # Build Commands
@@ -553,15 +558,15 @@ init-wpm: ## Verify the existing PolyGlid desktop project
 	@test -f $(WPM_DIR)/Cargo.toml
 	@printf "  $(GREEN)✅$(RESET) PolyGlid Desktop found at $(WPM_DIR)\n"
 
-.PHONY: wpm-build
-wpm-build: ## Build PolyGlid Desktop
+.PHONY: desktop-build wpm-build
+desktop-build: ## Build the PolyGlid desktop app
 	@$(call print_header,🔨 Building WPM)
 	@cargo build --release -p polyglid-desktop
 
+wpm-build: desktop-build ## Compatibility alias for desktop-build
+
 .PHONY: wpm-run
-wpm-run: ## Run PolyGlid Desktop
-	@$(call print_header,🚀 Starting WPM)
-	@cargo run -p polyglid-desktop
+wpm-run: desktop ## Compatibility alias for desktop
 
 .PHONY: wpm-db-setup
 wpm-db-setup: ## Create and migrate WPM database
@@ -570,10 +575,12 @@ wpm-db-setup: ## Create and migrate WPM database
 	@echo "    createdb wpm"
 	@echo "    psql -d wpm < infrastructure/wpm/init.sql"
 
-.PHONY: wpm-test
-wpm-test: ## Run WPM tests
+.PHONY: desktop-test wpm-test
+desktop-test: ## Test the PolyGlid desktop app
 	@$(call print_header,🧪 Testing WPM)
 	@cargo test -p polyglid-desktop
+
+wpm-test: desktop-test ## Compatibility alias for desktop-test
 
 .PHONY: wpm-docker-up
 wpm-docker-up: ## Start WPM stack via Docker Compose

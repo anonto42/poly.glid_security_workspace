@@ -56,8 +56,15 @@ PolyGlid Desktop is the single active UI and is a root Rust workspace member:
 
 ```bash
 sudo pacman -S --needed xdotool
-cargo run -p polyglid-desktop
+make dev           # normal workflow: run the desktop app
+make desktop       # explicit equivalent
+make server        # optional backend API; not required by the current desktop
+make desktop-build
+make desktop-test
 ```
+
+The older `make wpm-run`, `make wpm-build`, and `make wpm-test` commands remain
+as compatibility aliases.
 
 The CLI remains the primary engine test harness; running it without arguments
 opens its interactive terminal dashboard.
