@@ -15,6 +15,19 @@ The current non-track dashboard data is an interactive UI preview. SQLite, real
 plugin execution, Git synchronization, automation handlers, and AI execution are
 later integration phases; the existing Rust engine remains canonical.
 
+## UI module ownership
+
+- `src/main.rs` launches the Dioxus desktop window only.
+- `src/ui/app.rs` composes the full developer-space shell.
+- `src/ui/state.rs` owns shared interactive UI state.
+- `src/ui/models.rs` owns view, tab, filter, plugin, and report models.
+- `src/ui/shell.rs`, `sidebar.rs`, `editor.rs`, `bottom_panel.rs`, and
+  `overlays.rs` own the persistent workspace regions.
+- `src/ui/features/` contains independently controlled scanner, plugin, track,
+  automation, and agent screens.
+- `src/ui/components.rs` contains reusable visual controls.
+- `src/ui/preview.rs` isolates temporary seeded data from UI components.
+
 ## Verify
 
 ```bash
