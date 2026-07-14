@@ -106,11 +106,11 @@ graph TD
         A5[Response Parser]
     end
 
-    subgraph "📁 PROJECT LAYER"
-        P1[projects/rust/]
-        P2[projects/node/]
-        P3[projects/python/]
-        P4[projects/go/]
+    subgraph "📁 PRODUCT-ORIENTED PROJECT LAYER"
+        P1[projects/polyglid-desktop/]
+        P2[projects/polyglid-core/]
+        P3[projects/polyglid-server/]
+        P4[projects/recon-probe/]
     end
 
     subgraph "📊 OUTPUT LAYER"
@@ -263,11 +263,11 @@ graph TD
         C4[package.json]
     end
 
-    subgraph "PROJECTS"
-        P1[projects/rust/]
-        P2[projects/node/]
-        P3[projects/python/]
-        P4[projects/go/]
+    subgraph "PRODUCT-ORIENTED PROJECTS"
+        P1[projects/polyglid-desktop/]
+        P2[projects/polyglid-core/]
+        P3[projects/polyglid-server/]
+        P4[projects/recon-probe/]
     end
 
     subgraph "INFRASTRUCTURE"

@@ -1,4 +1,4 @@
-# WPM
+# PolyGlid Desktop
 
 Local-first Dioxus desktop control plane for PolyGlid workspace projects,
 automation, and AI capabilities.
@@ -18,9 +18,9 @@ later integration phases; the legacy Rust engine remains canonical until parity.
 ## Verify
 
 ```bash
-cargo fmt --manifest-path projects/wpm/Cargo.toml -- --check
-cargo test --manifest-path projects/wpm/Cargo.toml
-cargo check --manifest-path projects/wpm/Cargo.toml --bin wpm
+cargo fmt --manifest-path projects/polyglid-desktop/Cargo.toml -- --check
+cargo test --manifest-path projects/polyglid-desktop/Cargo.toml
+cargo check --manifest-path projects/polyglid-desktop/Cargo.toml --bin polyglid-desktop
 ```
 
 ## Run on CachyOS/Arch Linux
@@ -31,10 +31,10 @@ the `xdotool` package provides that library:
 
 ```bash
 sudo pacman -S --needed xdotool
-cargo run --manifest-path projects/wpm/Cargo.toml
+cargo run --manifest-path projects/polyglid-desktop/Cargo.toml
 ```
 
-WPM temporarily uses an isolated Cargo workspace because Dioxus Desktop 0.7 and
+PolyGlid Desktop temporarily uses an isolated Cargo workspace because Dioxus Desktop 0.7 and
 the legacy Tauri desktop select incompatible Linux WebView dependency versions.
 Remove the isolation after the Tauri frontend is retired or the upstream stacks
 become compatible.

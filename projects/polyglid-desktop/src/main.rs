@@ -1,12 +1,12 @@
 use dioxus::prelude::*;
-use wpm::{TaskStatus, WorkTrack, WorkspaceOverview};
+use polyglid_desktop::{TaskStatus, WorkTrack, WorkspaceOverview};
 
 const MAIN_CSS: &str = include_str!("../assets/main.css");
 const PLUGIN_SOURCE: &str = r#"//! Sandboxed first-party diagnostic plugin.
 
 wit_bindgen::generate!({
     world: "security-tool",
-    path: "../../wit",
+    path: "../polyglid-contracts",
 });
 
 impl Guest for ReconProbe {
@@ -559,7 +559,7 @@ fn ResultDashboard(report: Option<ScanReport>) -> Element {
 
 #[component]
 fn SourceDashboard() -> Element {
-    rsx! { div { class: "source-view", div { class: "source-note", "Read-only · projects/rust/plugins/recon_probe/src/lib.rs" } pre { code { "{PLUGIN_SOURCE}" } } } }
+    rsx! { div { class: "source-view", div { class: "source-note", "Read-only · projects/recon-probe/src/lib.rs" } pre { code { "{PLUGIN_SOURCE}" } } } }
 }
 
 #[component]

@@ -3,11 +3,12 @@
 ## Shape
 
 - Product: PolyGlid Security Workspace.
-- Shape: Rust workspace plus Tauri desktop frontend.
+- Shape: product-oriented projects with Rust services/libraries and Dioxus desktop.
 - Host: trusted Rust engine with hexagonal boundaries.
 - Plugins: untrusted WebAssembly components behind WIT contracts.
 - First client: `polyglid-cli` development harness.
-- Later client: `apps/desktop` Tauri workspace UI.
+- Primary desktop: `projects/polyglid-desktop` using Rust/Dioxus.
+- Legacy client: `projects/polyglid-desktop-legacy` using Tauri/React until parity.
 - Runtime: Wasmtime Component Model.
 - Contract source: `wit/polyglid.wit`.
 
@@ -44,7 +45,8 @@ default.
 - `polyglid-config` owns config schema, validation, persistence.
 - `polyglid-events` owns typed host/UI/runtime events.
 - `polyglid-cli` owns development commands and harness behavior.
-- `apps/desktop` owns Tauri commands and frontend workspace UI only.
+- `projects/polyglid-desktop` owns the Dioxus workspace UI.
+- `projects/polyglid-desktop-legacy` owns legacy Tauri IPC/UI until retirement.
 
 ## Security Defaults
 

@@ -6,9 +6,18 @@
 ├── Makefile                          # Root — all commands
 ├── workspace.toml                    # Workspace project registry
 ├── projects/
-│   ├── rust/                         # Rust workspace (8 crates)
-│   ├── node/                         # Node projects (react-web, desktop-tauri)
-│   └── wpm/                          # Workspace Project Manager (planned)
+│   ├── polyglid-desktop/             # Dioxus developer-space application
+│   ├── polyglid-cli/                 # Terminal client
+│   ├── polyglid-server/              # API service
+│   ├── polyglid-core/                # Domain and orchestration
+│   ├── polyglid-runtime/             # Wasmtime runtime
+│   ├── polyglid-config/              # Configuration
+│   ├── polyglid-events/              # Event contracts
+│   ├── polyglid-plugin-api/          # Plugin-facing types
+│   ├── polyglid-contracts/           # Canonical WIT contract
+│   ├── recon-probe/                  # First-party WASM plugin
+│   ├── polyglid-web-legacy/          # React web UI pending retirement
+│   └── polyglid-desktop-legacy/      # Tauri/React UI pending parity
 ├── .workspace/
 │   ├── ai/                           # AI engine (Rust binary)
 │   │   ├── configs/                  # ai-config.toml + per-domain model-configs/

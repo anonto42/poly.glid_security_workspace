@@ -95,8 +95,8 @@ dev:
     @$(MAKE) -j$(PARALLEL_JOBS) dev-node dev-rust
 
 dev-node:
-    @(cd projects/node/react-web && npx pnpm run dev) &
-    @(cd projects/node/desktop-tauri && npm run dev) &
+    @(cd projects/polyglid-web-legacy && npx pnpm run dev) &
+    @(cd projects/polyglid-desktop-legacy && npm run dev) &
 
 dev-rust:
     @cargo run -p polyglid-server &
@@ -119,8 +119,8 @@ build:
     @$(MAKE) build-rust build-node
 
 build-node:
-    @cd projects/node/react-web && npx pnpm run build
-    @cd projects/node/desktop-tauri && npm run build
+    @cd projects/polyglid-web-legacy && npx pnpm run build
+    @cd projects/polyglid-desktop-legacy && npm run build
 
 build-rust:
     @cargo build --release
@@ -161,8 +161,8 @@ clean:
     @$(MAKE) clean-node clean-rust
 
 clean-node:
-    @rm -rf projects/node/react-web/node_modules projects/node/react-web/dist
-    @rm -rf projects/node/desktop-tauri/node_modules projects/node/desktop-tauri/dist
+    @rm -rf projects/polyglid-web-legacy/node_modules projects/polyglid-web-legacy/dist
+    @rm -rf projects/polyglid-desktop-legacy/node_modules projects/polyglid-desktop-legacy/dist
 
 clean-rust:
     @cargo clean

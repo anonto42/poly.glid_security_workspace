@@ -130,19 +130,18 @@ SQLite database for local development — plugin registry, execution history, pe
 
 | Path | Language | Contents | Status |
 |------|----------|----------|--------|
-| `projects/rust/crates/polyglid-core/` | Rust | Core engine: execution, plugin mgmt, security (verifier, trust store, permission engine, audit, profiles), store (11 SQLite modules) | ✅ Live |
-| `projects/rust/crates/polyglid-cli/` | Rust | CLI harness: Ratatui TUI dashboard (app state, keybindings, UI panels) | ✅ Live |
-| `projects/rust/crates/polyglid-server/` | Rust | HTTP backend: auth routes, server setup, tests | ✅ Live |
-| `projects/rust/crates/polyglid-runtime/` | Rust | Wasm runtime: WASM component loading, sandboxed execution | ✅ Live |
-| `projects/rust/crates/polyglid-plugin-api/` | Rust | Plugin contract: WIT-derived types, capability definitions | ✅ Live |
-| `projects/rust/crates/polyglid-config/` | Rust | Config system: plugin registry | ✅ Live |
-| `projects/rust/crates/polyglid-events/` | Rust | Event system: pub/sub dispatch | ✅ Live |
-| `projects/rust/plugins/recon_probe/` | Rust | Example WASM plugin: dns-resolve, report-write | ✅ Live |
-| `projects/rust/wit/polyglid.wit` | WIT | Host/plugin contract definition | ✅ Live |
-| `projects/node/react-web/` | TypeScript | React frontend (Vite) | ✅ Live |
-| `projects/node/desktop-tauri/` | TS+Rust | Tauri desktop app: React UI + Rust IPC | ✅ Live |
-| `projects/python/` | Python | Future: security tools, data processing, scripts | ⬜ Skeleton |
-| `projects/go/` | Go | Future: services, tools, libs | ⬜ Skeleton |
+| `projects/polyglid-desktop/` | Rust | Dioxus developer-space application and WPM UI | ✅ Live |
+| `projects/polyglid-core/` | Rust | Core engine: execution, plugins, security, and stores | ✅ Live |
+| `projects/polyglid-cli/` | Rust | CLI and Ratatui development dashboard | ✅ Live |
+| `projects/polyglid-server/` | Rust | HTTP backend: auth routes, server setup, tests | ✅ Live |
+| `projects/polyglid-runtime/` | Rust | Wasmtime component loading and sandboxed execution | ✅ Live |
+| `projects/polyglid-plugin-api/` | Rust | Plugin-facing types and capabilities | ✅ Live |
+| `projects/polyglid-config/` | Rust | Configuration and plugin registry | ✅ Live |
+| `projects/polyglid-events/` | Rust | Typed event system | ✅ Live |
+| `projects/polyglid-contracts/polyglid.wit` | WIT | Canonical host/plugin contract | ✅ Live |
+| `projects/recon-probe/` | Rust | First-party WASM diagnostic plugin | ✅ Live |
+| `projects/polyglid-web-legacy/` | TypeScript | React frontend pending retirement | ✅ Legacy |
+| `projects/polyglid-desktop-legacy/` | TS+Rust | Tauri/React app pending parity | ✅ Legacy |
 
 ---
 

@@ -33,7 +33,7 @@ export function EditorArea({
 
 wit_bindgen::generate!({
     world: "security-tool",
-    path: "../../wit",
+    path: "../polyglid-contracts",
 });
 
 use crate::polyglid::engine::{

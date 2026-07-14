@@ -22,10 +22,9 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-polyglid-config = { path = "../../../rust/crates/polyglid-config" }
-polyglid-core = { path = "../../../rust/crates/polyglid-core" }
-polyglid-events = { path = "../../../rust/crates/polyglid-events" }
-polyglid-plugin-api = { path = "../../../rust/crates/polyglid-plugin-api" }
-polyglid-runtime = { path = "../../../rust/crates/polyglid-runtime" }
+polyglid-config = { path = "../../polyglid-config" }
+polyglid-core = { path = "../../polyglid-core" }
+polyglid-events = { path = "../../polyglid-events" }
+polyglid-plugin-api = { path = "../../polyglid-plugin-api" }
+polyglid-runtime = { path = "../../polyglid-runtime" }
 uuid = { version = "1.0", features = ["v4"] }
-

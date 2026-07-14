@@ -4,10 +4,10 @@ Verified: 2026-07-14.
 
 ## Current implementation
 
-- `projects/wpm` is now a real Rust workspace package using Dioxus Desktop 0.7.9.
+- `projects/polyglid-desktop` is a Rust package using Dioxus Desktop 0.7.9.
 - WPM temporarily uses its own nested Cargo workspace/lockfile because Dioxus 0.7.9
   and the legacy Tauri desktop require incompatible Linux `wry` versions. The root
-  workspace excludes `projects/wpm` until Tauri retirement or upstream compatibility.
+  workspace excludes `projects/polyglid-desktop` until Tauri retirement or upstream compatibility.
 - The Dioxus application now replaces all legacy dashboard surfaces at the UI layer:
   Explorer/targets, scanner, results, source, plugins, settings, command palette,
   problems/output/terminal, and runtime status.
@@ -22,9 +22,9 @@ Verified: 2026-07-14.
 
 ## Verification
 
-- `cargo fmt --manifest-path projects/wpm/Cargo.toml -- --check`: passes.
-- `cargo test --manifest-path projects/wpm/Cargo.toml --offline`: 4 tests pass.
-- `cargo check --manifest-path projects/wpm/Cargo.toml --bin wpm --offline`: passes.
+- `cargo fmt --manifest-path projects/polyglid-desktop/Cargo.toml -- --check`: passes.
+- `cargo test --manifest-path projects/polyglid-desktop/Cargo.toml --offline`: 4 tests pass.
+- `cargo check --manifest-path projects/polyglid-desktop/Cargo.toml --bin polyglid-desktop --offline`: passes.
 - `git diff --check`: passes.
 - The unified developer-space shell and navigation were visually verified on
   2026-07-14.
@@ -42,10 +42,10 @@ Run manually:
 
 ```bash
 sudo pacman -S --needed xdotool
-cargo run --manifest-path projects/wpm/Cargo.toml
+cargo run --manifest-path projects/polyglid-desktop/Cargo.toml
 ```
 
-Use `projects/wpm/README.md` for the visual checklist.
+Use `projects/polyglid-desktop/README.md` for the visual checklist.
 
 ## Phase status
 

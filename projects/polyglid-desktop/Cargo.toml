@@ -1,5 +1,5 @@
 [package]
-name = "wpm"
+name = "polyglid-desktop"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ thiserror = "2"
 uuid = { version = "1", features = ["v7", "serde"] }
 
 [[bin]]
-name = "wpm"
+name = "polyglid-desktop"
 path = "src/main.rs"
 test = false
 

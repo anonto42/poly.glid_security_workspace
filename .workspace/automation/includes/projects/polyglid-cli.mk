@@ -4,8 +4,8 @@
 
 PROJECT_NAME := polyglid-cli
 PROJECT_LANGUAGE := rust
-PROJECT_DIR := rust/crates/polyglid-cli
-PROJECT_PATH := projects/rust/crates/polyglid-cli
+PROJECT_DIR := polyglid-cli
+PROJECT_PATH := projects/polyglid-cli
 
 .PHONY: polyglid-cli-build polyglid-cli-test polyglid-cli-clean
 

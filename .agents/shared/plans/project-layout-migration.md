@@ -1,6 +1,6 @@
 # Product-Oriented Project Layout
 
-Status: proposed for discussion.
+Status: implemented.
 Updated: 2026-07-14.
 
 ## Decision direction
@@ -21,6 +21,7 @@ projects/
 ├── polyglid-config/           # configuration library
 ├── polyglid-events/           # event contracts
 ├── polyglid-plugin-api/       # plugin/WIT-facing types
+├── polyglid-contracts/        # canonical WIT contract
 ├── recon-probe/               # first-party WASM plugin
 ├── polyglid-web-legacy/       # current React web UI until retirement
 └── polyglid-desktop-legacy/   # current Tauri/React UI until parity
@@ -38,14 +39,14 @@ language-specific internal folders only when its own build requires them.
 - The Dioxus desktop becomes the clear product entry point instead of a prototype
   hidden behind the name `wpm`.
 
-## Migration safety
+## Completed migration
 
-1. Commit or preserve the current dirty implementation before moving paths.
-2. Rename `projects/wpm` to `projects/polyglid-desktop` first.
-3. Move one Rust crate or plugin per verified change using history-preserving moves.
-4. Update Cargo members, path dependencies, scripts, docs, and `.agents` references.
-5. Keep legacy React/Tauri projects until Dioxus engine parity is proven.
-6. Remove language grouping folders only when empty.
+1. Preserved the Dioxus baseline in commit `063723b`.
+2. Renamed `projects/wpm` to `projects/polyglid-desktop`.
+3. Moved Rust crates, WIT, plugin, and legacy clients to direct product paths.
+4. Updated Cargo members, path dependencies, scripts, docs, and agent references.
+5. Kept legacy React/Tauri projects until Dioxus engine parity is proven.
+6. Removed empty language grouping placeholders.
 
 Every move must pass formatting, workspace metadata, compile/check, tests, and
 focused launch verification. Path migration must not be mixed with behavior changes.

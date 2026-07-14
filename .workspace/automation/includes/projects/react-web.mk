@@ -4,8 +4,8 @@
 
 PROJECT_NAME := react-web
 PROJECT_LANGUAGE := node
-PROJECT_DIR := node/react-web
-PROJECT_PATH := projects/node/react-web
+PROJECT_DIR := polyglid-web-legacy
+PROJECT_PATH := projects/polyglid-web-legacy
 
 .PHONY: react-web-build react-web-test react-web-clean
 

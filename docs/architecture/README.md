@@ -74,17 +74,17 @@ world security-tool {
 
 ---
 
-### Step B: Writing a Plugin (`plugins/recon_tool/src/lib.rs`)
+### Step B: Writing a Plugin (`projects/recon-tool/src/lib.rs`)
 
 This is the code for an independent plugin module. It uses `wit-bindgen` to automatically read the contract file and generate matching types.
 
 ```rust
-// plugins/recon_tool/Cargo.toml need: wit-bindgen = "0.58.0"
+// projects/recon-tool/Cargo.toml needs: wit-bindgen = "0.58.0"
 
 // Generate the Rust structures automatically from our WIT file definitions
 wit_bindgen::generate!({
     world: "security-tool",
-    path: "../../wit",
+    path: "../polyglid-contracts",
 });
 
 // Create our structural implementation component
@@ -131,7 +131,7 @@ use std::path::Path;
 // Macros generate the structures for the Host side
 wasmtime::component::bindgen!({
     world: "security-tool",
-    path: "../wit",
+    path: "../polyglid-contracts",
 });
 
 fn run_sandboxed_plugin(wasm_path: &Path, target_host: &str) -> Result<(), anyhow::Error> {

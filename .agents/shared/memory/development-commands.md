@@ -55,7 +55,7 @@ cargo run -p polyglid-cli -- plugin componentize \
 The existing PolyGlid developer-space desktop is the Tauri/React application:
 
 ```bash
-cd projects/node/desktop-tauri
+cd projects/polyglid-desktop-legacy
 npm install
 npm run tauri dev
 ```
@@ -67,7 +67,7 @@ The new Rust-only WPM dashboard prototype is a separate Dioxus application:
 
 ```bash
 sudo pacman -S --needed xdotool
-cargo run --manifest-path projects/wpm/Cargo.toml
+cargo run --manifest-path projects/polyglid-desktop/Cargo.toml
 ```
 
 The CLI remains the primary engine test harness; running it without arguments

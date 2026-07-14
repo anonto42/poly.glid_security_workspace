@@ -3,4 +3,15 @@ name = "PolyGlid"
 version = "0.1.0"
 
 [projects]
-wpm = { path = "projects/wpm", language = "rust", type = "service", description = "Workspace Project Manager" }
+polyglid_desktop = { path = "projects/polyglid-desktop", language = "rust", type = "application", description = "PolyGlid Dioxus developer space" }
+polyglid_cli = { path = "projects/polyglid-cli", language = "rust", type = "application", description = "Terminal client and development dashboard" }
+polyglid_server = { path = "projects/polyglid-server", language = "rust", type = "service", description = "HTTP and collaboration API" }
+polyglid_core = { path = "projects/polyglid-core", language = "rust", type = "library", description = "Domain, orchestration, security, and stores" }
+polyglid_runtime = { path = "projects/polyglid-runtime", language = "rust", type = "library", description = "Wasmtime component runtime" }
+polyglid_config = { path = "projects/polyglid-config", language = "rust", type = "library", description = "Configuration and plugin registry" }
+polyglid_events = { path = "projects/polyglid-events", language = "rust", type = "library", description = "Typed host and UI events" }
+polyglid_plugin_api = { path = "projects/polyglid-plugin-api", language = "rust", type = "library", description = "Plugin-facing types and capabilities" }
+polyglid_contracts = { path = "projects/polyglid-contracts", language = "wit", type = "contract", description = "Canonical host/plugin WIT contract" }
+recon_probe = { path = "projects/recon-probe", language = "rust", type = "plugin", description = "First-party diagnostic WASM plugin" }
+polyglid_web_legacy = { path = "projects/polyglid-web-legacy", language = "typescript", type = "legacy-application", description = "Legacy React web client" }
+polyglid_desktop_legacy = { path = "projects/polyglid-desktop-legacy", language = "typescript-rust", type = "legacy-application", description = "Legacy Tauri and React desktop" }

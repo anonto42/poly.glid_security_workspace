@@ -1,25 +1,27 @@
 ```mermaid
 graph TD
-  node[node]
-  desktop_tauri[desktop-tauri]
-  node --> desktop_tauri
-  react_web[react-web]
-  node --> react_web
-  rust[rust]
-  core[core]
-  rust --> core
-  services[services]
-  rust --> services
-  tools[tools]
-  rust --> tools
-  crates[crates]
-  rust --> crates
-  plugins[plugins]
-  rust --> plugins
-  wit[wit]
-  rust --> wit
-  python[python]
-  go[go]
+  desktop[polyglid-desktop]
+  cli[polyglid-cli]
+  server[polyglid-server]
+  core[polyglid-core]
+  runtime[polyglid-runtime]
+  config[polyglid-config]
+  events[polyglid-events]
+  api[polyglid-plugin-api]
+  contracts[polyglid-contracts]
+  plugin[recon-probe]
+  legacy_web[polyglid-web-legacy]
+  legacy_desktop[polyglid-desktop-legacy]
+  desktop --> core
+  cli --> core
+  server --> core
+  runtime --> core
+  runtime --> contracts
+  plugin --> contracts
+  core --> config
+  core --> events
+  core --> api
+  legacy_desktop --> core
 
 ```
 

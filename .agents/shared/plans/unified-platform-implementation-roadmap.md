@@ -35,7 +35,7 @@ legacy system are documented rather than silently accepted.
 - Add `wpm-domain`: projects, milestones, tasks, dependencies, criteria, comments,
   approvals, audit events, runs, attempts, conflicts, and validated state machines.
 - Add serialization, validation, transition, cycle, and contract fixture tests.
-- Current progress: `projects/wpm` now supplies a runnable Dioxus shell and initial
+- Current progress: `projects/polyglid-desktop` supplies a runnable Dioxus shell and initial
   tested work-track/progress/transition models. Full task/result/event contracts,
   dependency rules, criteria, approvals, and audit entities remain.
 - UI migration preview: all legacy developer dashboard surfaces plus planned work

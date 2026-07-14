@@ -4,8 +4,8 @@
 
 PROJECT_NAME := src-tauri
 PROJECT_LANGUAGE := rust
-PROJECT_DIR := node/desktop-tauri/src-tauri
-PROJECT_PATH := projects/node/desktop-tauri/src-tauri
+PROJECT_DIR := polyglid-desktop-legacy/src-tauri
+PROJECT_PATH := projects/polyglid-desktop-legacy/src-tauri
 
 .PHONY: src-tauri-build src-tauri-test src-tauri-clean
 

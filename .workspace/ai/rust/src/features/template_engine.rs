@@ -58,7 +58,7 @@ impl TemplateEngine {
             if Self::is_project_dir(&path).await {
                 // Found a real project — generate template
                 let language = Self::detect_language(&path).await.unwrap_or_else(|| "unknown".to_string());
-                // Compute relative dir from projects/ root (e.g. "rust/crates/polyglid-core")
+                // Compute relative dir from projects/ root (e.g. "polyglid-core")
                 let project_dir = path.strip_prefix(&projects_root)
                     .unwrap_or(&path)
                     .to_string_lossy()

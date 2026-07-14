@@ -4,8 +4,8 @@
 
 PROJECT_NAME := polyglid-core
 PROJECT_LANGUAGE := rust
-PROJECT_DIR := rust/crates/polyglid-core
-PROJECT_PATH := projects/rust/crates/polyglid-core
+PROJECT_DIR := polyglid-core
+PROJECT_PATH := projects/polyglid-core
 
 .PHONY: polyglid-core-build polyglid-core-test polyglid-core-clean
 

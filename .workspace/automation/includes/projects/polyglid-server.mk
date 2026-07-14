@@ -4,8 +4,8 @@
 
 PROJECT_NAME := polyglid-server
 PROJECT_LANGUAGE := rust
-PROJECT_DIR := rust/crates/polyglid-server
-PROJECT_PATH := projects/rust/crates/polyglid-server
+PROJECT_DIR := polyglid-server
+PROJECT_PATH := projects/polyglid-server
 
 .PHONY: polyglid-server-build polyglid-server-test polyglid-server-clean
 

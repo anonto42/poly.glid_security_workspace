@@ -4,8 +4,8 @@
 
 PROJECT_NAME := polyglid-runtime
 PROJECT_LANGUAGE := rust
-PROJECT_DIR := rust/crates/polyglid-runtime
-PROJECT_PATH := projects/rust/crates/polyglid-runtime
+PROJECT_DIR := polyglid-runtime
+PROJECT_PATH := projects/polyglid-runtime
 
 .PHONY: polyglid-runtime-build polyglid-runtime-test polyglid-runtime-clean
 

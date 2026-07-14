@@ -6,11 +6,10 @@
 What are you creating?
 │
 ├─ Source code?
-│   ├─ Rust crate → projects/rust/crates/<crate-name>/
-│   ├─ Rust plugin → projects/rust/plugins/<plugin-name>/
-│   ├─ Node.js app → projects/node/<app-name>/
-│   ├─ Python project → projects/python/<project-name>/
-│   └─ Go project → projects/go/<project-name>/
+│   ├─ Product/application → projects/<product-name>/
+│   ├─ Service → projects/<service-name>/
+│   ├─ Shared library → projects/<library-name>/
+│   └─ Plugin → projects/<plugin-name>/
 │
 ├─ Configuration?
 │   ├─ Global (env, linting, build) → configs/
@@ -113,17 +112,17 @@ What are you creating?
 
 | Extension | Default Location |
 |-----------|-----------------|
-| `.rs` | `projects/rust/crates/` |
-| `.ts`, `.tsx` | `projects/node/` |
-| `.js`, `.jsx` | `projects/node/` |
-| `.py` | `projects/python/` |
-| `.go` | `projects/go/` |
+| `.rs` | Inside its owning `projects/<name>/` |
+| `.ts`, `.tsx` | Inside its owning `projects/<name>/` |
+| `.js`, `.jsx` | Inside its owning `projects/<name>/` |
+| `.py` | Inside its owning `projects/<name>/` |
+| `.go` | Inside its owning `projects/<name>/` |
 | `.toml` | Alongside the project it configures |
 | `.json` | Alongside the project or `configs/` |
 | `.yaml`, `.yml` | `infrastructure/` or `.workspace/integrations/` |
 | `.sh` | `.workspace/automation/scripts/` or `tools/scripts/` |
 | `.md` | `docs/` or alongside the project |
-| `.wit` | `projects/rust/wit/` or `sdk/` |
+| `.wit` | `projects/<contracts-name>/` or `sdk/` |
 | `.proto` | `shared/protocols/proto/` |
 | `.sql` | `shared/schemas/database/` |
 
@@ -133,6 +132,6 @@ What are you creating?
 1. Does it configure something? → nearest config directory
 2. Does it run/build/test something? → `.workspace/automation/`
 3. Does it document something? → `docs/`
-4. Is it source code? → `projects/<language>/`
+4. Is it source code? → its product/capability at `projects/<name>/`
 5. Is it shared between projects? → `shared/`
 6. Is it runtime state? → `.workspace/state/`

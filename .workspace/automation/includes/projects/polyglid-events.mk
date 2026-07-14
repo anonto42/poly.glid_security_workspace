@@ -4,8 +4,8 @@
 
 PROJECT_NAME := polyglid-events
 PROJECT_LANGUAGE := rust
-PROJECT_DIR := rust/crates/polyglid-events
-PROJECT_PATH := projects/rust/crates/polyglid-events
+PROJECT_DIR := polyglid-events
+PROJECT_PATH := projects/polyglid-events
 
 .PHONY: polyglid-events-build polyglid-events-test polyglid-events-clean
 

@@ -19,7 +19,7 @@ use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiVie
 
 wasmtime::component::bindgen!({
     world: "security-tool",
-    path: "../../wit",
+    path: "../polyglid-contracts",
 });
 
 use std::collections::HashMap;

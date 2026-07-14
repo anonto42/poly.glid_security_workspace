@@ -1,16 +1,16 @@
 [workspace]
 members = [
-  "projects/rust/crates/polyglid-cli",
-  "projects/rust/crates/polyglid-config",
-  "projects/rust/crates/polyglid-core",
-  "projects/rust/crates/polyglid-events",
-  "projects/rust/crates/polyglid-plugin-api",
-  "projects/rust/crates/polyglid-runtime",
-  "projects/rust/plugins/recon_probe",
-  "projects/node/desktop-tauri/src-tauri",
-  "projects/rust/crates/polyglid-server",
+  "projects/polyglid-cli",
+  "projects/polyglid-config",
+  "projects/polyglid-core",
+  "projects/polyglid-events",
+  "projects/polyglid-plugin-api",
+  "projects/polyglid-runtime",
+  "projects/recon-probe",
+  "projects/polyglid-desktop-legacy/src-tauri",
+  "projects/polyglid-server",
 ]
-exclude = ["projects/wpm"]
+exclude = ["projects/polyglid-desktop"]
 resolver = "2"
 
 [workspace.package]

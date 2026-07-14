@@ -324,8 +324,8 @@ _setup-ai-config:
 _init-install-deps: ## [Phase 2] Install project dependencies
 	@$(call print_header,📦 Phase 2/4 — Installing Dependencies)
 	@$(call print_substep,Installing Node.js dependencies...)
-	@(cd projects/node/react-web && npx pnpm install 2>/dev/null) || true
-	@(cd projects/node/desktop-tauri && npm install 2>/dev/null) || true
+	@(cd projects/polyglid-web-legacy && npx pnpm install 2>/dev/null) || true
+	@(cd projects/polyglid-desktop-legacy && npm install 2>/dev/null) || true
 
 .PHONY: _init-build
 _init-build: build-rust build-ai-engine ## [Phase 3] Build workspace
@@ -370,8 +370,8 @@ dev: ## Start development servers (usage: make dev)
 .PHONY: dev-node
 dev-node:
 	@$(call print_substep,Starting Node/TypeScript dev servers...)
-	@(cd projects/node/react-web && npx pnpm run dev) &
-	@(cd projects/node/desktop-tauri && npm run dev) &
+	@(cd projects/polyglid-web-legacy && npx pnpm run dev) &
+	@(cd projects/polyglid-desktop-legacy && npm run dev) &
 
 .PHONY: dev-rust
 dev-rust:
@@ -390,8 +390,8 @@ build: ## Build all projects
 .PHONY: build-node
 build-node:
 	@$(call print_substep,Building Node/TypeScript projects...)
-	@(cd projects/node/react-web && npx pnpm run build)
-	@(cd projects/node/desktop-tauri && npm run build)
+	@(cd projects/polyglid-web-legacy && npx pnpm run build)
+	@(cd projects/polyglid-desktop-legacy && npm run build)
 
 .PHONY: build-rust
 build-rust:
@@ -425,8 +425,8 @@ clean: ## Clean all build artifacts
 .PHONY: clean-node
 clean-node:
 	@$(call print_substep,Cleaning Node.js projects...)
-	@rm -rf projects/node/react-web/node_modules projects/node/react-web/dist
-	@rm -rf projects/node/desktop-tauri/node_modules projects/node/desktop-tauri/dist
+	@rm -rf projects/polyglid-web-legacy/node_modules projects/polyglid-web-legacy/dist
+	@rm -rf projects/polyglid-desktop-legacy/node_modules projects/polyglid-desktop-legacy/dist
 
 .PHONY: clean-rust
 clean-rust:
@@ -554,7 +554,7 @@ new-project: ## Create a new project from template
 	@read -p "  Language (rust/node/python/go): " lang; \
 	read -p "  Project name: " name; \
 	template=".workspace/automation/templates/project.mk.template"; \
-	path="projects/$$lang/$$name"; \
+	path="projects/$$name"; \
 	mkdir -p "$$path"; \
 	printf "  $(GREEN)✅$(RESET) Created $$path\n"; \
 	printf "  $(GREEN)💡$(RESET) Add '$$name = { path = \"$$path\", language = \"$$lang\", type = \"service\" }' to workspace.toml\n"
@@ -563,33 +563,25 @@ new-project: ## Create a new project from template
 # WPM — Workspace Project Manager
 # ============================================================================
 
-WPM_DIR := projects/wpm
+WPM_DIR := projects/polyglid-desktop
 WPM_INFRA := infrastructure/wpm
 WPM_CONFIG := configs/wpm
 
 .PHONY: init-wpm
-init-wpm: build-ai-engine ## Scaffold the WPM project from design plan
-	@$(call print_header,🏗️ Scaffolding WPM)
-	@mkdir -p $(WPM_DIR)/src/{api,models,services,dashboard,db/migrations,web/{static/{js,css},templates}}
-	@mkdir -p $(WPM_DIR)/tests/{integration,unit}
-	@mkdir -p $(WPM_INFRA)
-	@mkdir -p $(WPM_CONFIG)
-	@if [ ! -f $(WPM_DIR)/Cargo.toml ]; then \
-		$(AI_BIN) generate --wpm-cargo > $(WPM_DIR)/Cargo.toml; \
-	fi
-	@printf "  $(GREEN)✅$(RESET) WPM scaffold created at $(WPM_DIR)\n"
-	@printf "  $(GREEN)💡$(RESET) Run 'make wpm-db-setup' to initialize the database\n"
+init-wpm: ## Verify the existing PolyGlid desktop project
+	@$(call print_header,🏗️ Verifying PolyGlid Desktop)
+	@test -f $(WPM_DIR)/Cargo.toml
+	@printf "  $(GREEN)✅$(RESET) PolyGlid Desktop found at $(WPM_DIR)\n"
 
 .PHONY: wpm-build
-wpm-build: build-ai-engine ## Build WPM binary
+wpm-build: ## Build PolyGlid Desktop
 	@$(call print_header,🔨 Building WPM)
-	@cargo build --release -p wpm 2>&1 || \
-		printf "  $(YELLOW)⚠️$(RESET) WPM build failed (Cargo workspace may need updating)\n"
+	@cargo build --release --manifest-path $(WPM_DIR)/Cargo.toml
 
 .PHONY: wpm-run
-wpm-run: ## Run WPM server
+wpm-run: ## Run PolyGlid Desktop
 	@$(call print_header,🚀 Starting WPM)
-	@cargo run -p wpm
+	@cargo run --manifest-path $(WPM_DIR)/Cargo.toml
 
 .PHONY: wpm-db-setup
 wpm-db-setup: ## Create and migrate WPM database
@@ -601,7 +593,7 @@ wpm-db-setup: ## Create and migrate WPM database
 .PHONY: wpm-test
 wpm-test: ## Run WPM tests
 	@$(call print_header,🧪 Testing WPM)
-	@cargo test -p wpm
+	@cargo test --manifest-path $(WPM_DIR)/Cargo.toml
 
 .PHONY: wpm-docker-up
 wpm-docker-up: ## Start WPM stack via Docker Compose
