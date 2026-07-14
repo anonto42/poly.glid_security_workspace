@@ -27,7 +27,10 @@
 - Coders: `.agents/shared/coders/`
 - Commands: `.agents/shared/memory/development-commands.md`
 - Current workspace AI status: `.agents/shared/memory/workspace-ai-current-state.md`
+- Rustfinity reference review: `.agents/shared/memory/rustfinity-reference-review.md`
+- Current WPM implementation: `.agents/shared/memory/wpm-current-state.md`
 - Project-management agent plan: `.agents/shared/plans/project-management-agent-platform.md`
+- Proposed product-oriented layout: `.agents/shared/plans/project-layout-migration.md`
 - Daily history: `.agents/shared/history/YYYY-MM-DD/`
 
 Read the smallest matching doc set before coding. Do not load every rule file by

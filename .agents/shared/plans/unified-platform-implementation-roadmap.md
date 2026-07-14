@@ -1,7 +1,8 @@
 # Unified Platform Implementation Roadmap
 
-Status: ready for implementation.
-Updated: 2026-07-12.
+Status: implementation started; Phase 1 visual/domain slice exists while the formal
+Phase 0 baseline gate and remaining Phase 1 contracts are still open.
+Updated: 2026-07-14.
 
 Parent architecture:
 `.agents/shared/plans/project-management-agent-platform.md`
@@ -20,6 +21,8 @@ Keep current AI and Make behavior until its replacement passes parity checks.
 - Define which current outputs are canonical, generated, cached, or disposable.
 - Stop new features in `.workspace/ai/rust`; allow only fixes during migration.
 - Establish formatting, linting, test, dependency, and security CI gates.
+- Use the Rustfinity reference review for runner/package ideas, without copying
+  restricted source or treating it as a Dioxus UI reference.
 
 Gate: baseline report is reproducible, dirty work is preserved, and failures in the
 legacy system are documented rather than silently accepted.
@@ -32,6 +35,12 @@ legacy system are documented rather than silently accepted.
 - Add `wpm-domain`: projects, milestones, tasks, dependencies, criteria, comments,
   approvals, audit events, runs, attempts, conflicts, and validated state machines.
 - Add serialization, validation, transition, cycle, and contract fixture tests.
+- Current progress: `projects/wpm` now supplies a runnable Dioxus shell and initial
+  tested work-track/progress/transition models. Full task/result/event contracts,
+  dependency rules, criteria, approvals, and audit entities remain.
+- UI migration preview: all legacy developer dashboard surfaces plus planned work
+  tracks, automation, and agent sections now exist in Dioxus with seeded local state.
+  This is UI parity scaffolding, not completion of Phases 2-11 or engine parity.
 
 Gate: domain/contracts compile without Dioxus, SQLite, Git, Ollama, or network.
 

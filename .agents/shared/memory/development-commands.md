@@ -25,6 +25,7 @@ cargo clippy --workspace -- -D warnings
 
 ```bash
 scripts/run-mvp.sh
+cargo run -p polyglid-cli
 cargo run -p polyglid-cli -- doctor
 cargo run -p polyglid-cli -- plugin list
 cargo run -p polyglid-cli -- plugin inspect ./path/to/plugin.wasm
@@ -51,8 +52,26 @@ cargo run -p polyglid-cli -- plugin componentize \
 
 ## Desktop UI
 
-Add Tauri commands once `apps/desktop` exists. The CLI remains the required
-engine test harness.
+The existing PolyGlid developer-space desktop is the Tauri/React application:
+
+```bash
+cd projects/node/desktop-tauri
+npm install
+npm run tauri dev
+```
+
+Run only its browser frontend with `npm run dev`. This omits the Rust/Tauri IPC
+backend, so use `npm run tauri dev` for the actual integrated application.
+
+The new Rust-only WPM dashboard prototype is a separate Dioxus application:
+
+```bash
+sudo pacman -S --needed xdotool
+cargo run --manifest-path projects/wpm/Cargo.toml
+```
+
+The CLI remains the primary engine test harness; running it without arguments
+opens its interactive terminal dashboard.
 
 ## Agent Notes
 

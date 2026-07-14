@@ -1,0 +1,23 @@
+[package]
+name = "wpm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Local-first workspace project manager and execution control plane"
+
+[dependencies]
+dioxus = { version = "0.7", features = ["desktop"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[[bin]]
+name = "wpm"
+path = "src/main.rs"
+test = false
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[workspace]
+resolver = "2"

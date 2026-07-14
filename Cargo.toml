@@ -9,8 +9,8 @@ members = [
   "projects/rust/plugins/recon_probe",
   "projects/node/desktop-tauri/src-tauri",
   "projects/rust/crates/polyglid-server",
-  "projects/wpm",
 ]
+exclude = ["projects/wpm"]
 resolver = "2"
 
 [workspace.package]
