@@ -12,12 +12,37 @@ pub(crate) fn WorkspaceSidebar() -> Element {
         aside { class: "sidebar",
             div { class: "sidebar-heading", span { "{active_view.title()}" } button { "•••" } }
             match active_view {
+                WorkspaceView::Projects => rsx! { ProjectsSidebar {} },
                 WorkspaceView::Explorer => rsx! { ExplorerSidebar {} },
                 WorkspaceView::Plugins => rsx! { PluginsSidebar {} },
                 WorkspaceView::Tracks => rsx! { TracksSidebar {} },
                 WorkspaceView::Automation => rsx! { AutomationSidebar {} },
                 WorkspaceView::Agents => rsx! { AgentsSidebar {} },
             }
+        }
+    }
+}
+
+#[component]
+fn ProjectsSidebar() -> Element {
+    let mut state = use_context::<AppState>();
+    rsx! {
+        div { class: "sidebar-section",
+            p { class: "section-label", "Workspace" }
+            div { class: "workspace-summary",
+                span { class: "live-dot" }
+                div { strong { "{state.active_workspace}" } small { "local catalog" } }
+            }
+        }
+        div { class: "sidebar-section grow",
+            p { class: "section-label", "Projects · {state.projects.read().len()}" }
+            for project in state.projects.read().iter() {
+                div { class: "project-nav", span { "◇" } div { strong { "{project.name}" } small { "{project.kind}" } } }
+            }
+            button { class: "sidebar-option", onclick: move |_| {
+                let next = *state.workspace_refresh.read() + 1;
+                state.workspace_refresh.set(next);
+            }, span { "Refresh discovery" } small { "↻" } }
         }
     }
 }

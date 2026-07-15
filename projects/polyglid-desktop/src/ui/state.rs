@@ -1,15 +1,22 @@
 use dioxus::prelude::*;
+use polyglid_core::store::{DbProject, DbWorkspace};
 use polyglid_desktop::WorkspaceOverview;
 
 use super::models::{
     BottomTab, EditorTab, PluginCard, ScanReport, SettingsTab, TopBarAction, TrackFilter,
-    WorkspaceView,
+    WorkspaceLoadState, WorkspaceView,
 };
 use super::preview::{seed_overview, seed_plugins, seed_top_bar_actions};
 
 #[derive(Clone, Copy)]
 pub(crate) struct AppState {
     pub(crate) active_view: Signal<WorkspaceView>,
+    pub(crate) workspace_load: Signal<WorkspaceLoadState>,
+    pub(crate) workspaces: Signal<Vec<DbWorkspace>>,
+    pub(crate) projects: Signal<Vec<DbProject>>,
+    pub(crate) active_workspace_id: Signal<Option<String>>,
+    pub(crate) workspace_refresh: Signal<u64>,
+    pub(crate) workspace_mutation_error: Signal<Option<String>>,
     pub(crate) editor_tab: Signal<EditorTab>,
     pub(crate) bottom_tab: Signal<BottomTab>,
     pub(crate) settings_tab: Signal<SettingsTab>,
@@ -31,7 +38,13 @@ pub(crate) struct AppState {
 
 pub(crate) fn use_app_state() -> AppState {
     AppState {
-        active_view: use_signal(|| WorkspaceView::Explorer),
+        active_view: use_signal(|| WorkspaceView::Projects),
+        workspace_load: use_signal(|| WorkspaceLoadState::Loading),
+        workspaces: use_signal(Vec::new),
+        projects: use_signal(Vec::new),
+        active_workspace_id: use_signal(|| None),
+        workspace_refresh: use_signal(|| 0),
+        workspace_mutation_error: use_signal(|| None),
         editor_tab: use_signal(|| EditorTab::Scanner),
         bottom_tab: use_signal(|| BottomTab::Problems),
         settings_tab: use_signal(|| SettingsTab::Overview),

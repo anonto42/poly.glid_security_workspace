@@ -7,6 +7,14 @@ use crate::execution::ExecutionManager;
 use crate::plugin_manager::PluginManager;
 use crate::PluginRuntime;
 
+mod workspace_catalog;
+mod workspace_discovery;
+mod project_lifecycle;
+pub use workspace_catalog::WorkspaceCatalogService;
+
+#[cfg(test)]
+mod workspace_catalog_tests;
+
 pub struct PluginService<R> {
     pm: Arc<PluginManager<R>>,
 }

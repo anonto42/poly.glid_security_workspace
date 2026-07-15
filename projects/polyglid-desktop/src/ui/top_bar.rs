@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
 
+use crate::backend::DesktopBackend;
+
 use super::state::AppState;
 
 #[component]
@@ -16,7 +18,9 @@ pub(crate) fn TitleBar() -> Element {
 #[component]
 fn BrandArea() -> Element {
     let mut state = use_context::<AppState>();
+    let backend = use_context::<DesktopBackend>();
     let mut menu_open = use_signal(|| false);
+    let workspaces = state.workspaces.read().clone();
     rsx! {
         div { class: "brand-area",
             div { class: "wordmark", span { class: "wordmark-icon", "P" } div { strong { "polyglid" } small { "developer space" } } }
@@ -25,9 +29,34 @@ fn BrandArea() -> Element {
                 if *menu_open.read() {
                     div { class: "topbar-menu workspace-menu",
                         p { "Workspace" }
-                        button { class: "selected", onclick: move |_| { state.active_workspace.set("polyglid workspace".to_string()); menu_open.set(false); }, span { "◈" } div { strong { "PolyGlid workspace" } small { "Local · current" } } }
-                        button { onclick: move |_| { state.active_workspace.set("security research".to_string()); menu_open.set(false); }, span { "◇" } div { strong { "Security research" } small { "Preview workspace" } } }
-                        button { class: "menu-command", onclick: move |_| { state.command_open.set(true); menu_open.set(false); }, "+ Open another workspace" }
+                        for workspace in workspaces {
+                            button {
+                                class: if workspace.is_active { "selected" } else { "" },
+                                onclick: {
+                                    let backend = backend.clone();
+                                    let workspace_id = workspace.id.clone();
+                                    move |_| {
+                                        menu_open.set(false);
+                                        let backend = backend.clone();
+                                        let workspace_id = workspace_id.clone();
+                                        spawn(async move {
+                                            let result = tokio::task::spawn_blocking(move || backend.activate(&workspace_id)).await;
+                                            match result {
+                                                Ok(Ok(())) => {
+                                                    let next = *state.workspace_refresh.read() + 1;
+                                                    state.workspace_refresh.set(next);
+                                                }
+                                                Ok(Err(error)) => state.workspace_mutation_error.set(Some(error)),
+                                                Err(error) => state.workspace_mutation_error.set(Some(format!("workspace task failed: {error}"))),
+                                            }
+                                        });
+                                    }
+                                },
+                                span { if workspace.is_active { "◈" } else { "◇" } }
+                                div { strong { "{workspace.name}" } small { if workspace.is_active { "Local · current" } else { "Local workspace" } } }
+                            }
+                        }
+                        button { class: "menu-command", onclick: move |_| { state.command_open.set(true); menu_open.set(false); }, "+ Workspace commands" }
                     }
                 }
             }

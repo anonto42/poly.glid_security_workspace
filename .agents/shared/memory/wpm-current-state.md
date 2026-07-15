@@ -11,13 +11,20 @@ Verified: 2026-07-15.
   Explorer/targets, scanner, results, source, plugins, settings, command palette,
   problems/output/terminal, and runtime status.
 - The same shell adds WPM work tracks, automation control, and AI-agent views.
-- Interactive preview behavior includes target selection/addition, scanner results,
-  plugin toggles, track filters/details, settings, and workspace navigation.
+- My Projects is now a real vertical slice. Core schema version 5 persists
+  workspaces/projects, active selection, discovery status, exclusions, and timestamps.
+- Dioxus loads the project catalog asynchronously through `WorkspaceCatalogService`,
+  shows loading/empty/error/ready states, and supports create, rename, catalog removal,
+  explicitly confirmed file deletion, refresh, and persisted workspace selection.
+- Discovery scans direct child directories without following directory symlinks and
+  classifies Rust, Node, Python, and general projects from their manifest files.
+- Interactive preview behavior remains for targets/scanner results, plugin toggles,
+  track filters/details, settings, automation, and agents.
 - Domain features: serializable `WorkTrack`, `TaskStatus`, progress calculation,
   overview aggregation, and validated state transitions.
-- Non-track data remains seeded UI state. SQLite, real executor/plugin adapters, Git
-  sync, automation handlers, and AI integration do not exist in WPM yet. The legacy
-  Rust engine remains canonical until explicit integration gates pass.
+- SQLite is real for workspace/project catalog data. Real executor/plugin desktop
+  adapters, Git sync, automation handlers, tracks persistence, and AI integration
+  are still pending. Core/runtime remain canonical until their UI gates pass.
 
 ## Plugin integration boundary
 
@@ -35,10 +42,12 @@ Verified: 2026-07-15.
 ## Verification
 
 - `cargo test -p polyglid-desktop --offline`: 4 tests pass.
-- `cargo check -p polyglid-desktop --offline`: passes.
+- `cargo test -p polyglid-core workspace_catalog --offline`: 3 tests pass.
+- `cargo check -p polyglid-core -p polyglid-events -p polyglid-desktop --offline`:
+  passes.
 - `git diff --check`: passes.
-- The unified developer-space shell and navigation were visually verified on
-  2026-07-14.
+- The desktop launched on 2026-07-15 with isolated data and discovered 10 real
+  project folders from the repository `projects/` directory.
 - CSS is compiled into the binary with `include_str!`; plain `cargo run` does not
   depend on the Dioxus CLI asset pipeline.
 
@@ -60,7 +69,7 @@ Use `projects/polyglid-desktop/README.md` for the visual checklist.
 
 ## Phase status
 
-Implementation has started, but Phase 0 and Phase 1 are not fully complete. The
-visual/domain slice is valid parallel work; next close the baseline gate and finish
-versioned commands, events, results, permissions, and the complete domain model
-before starting SQLite persistence.
+Gate 1 workspaces/projects is implemented as the first real vertical slice. It still
+needs broader UI acceptance at all target window sizes before being marked closed.
+Next, finish Gate 0 shared errors/platform paths and then integrate persisted plugin
+management as Gate 2. Follow `polyglid-production-desktop-plan.md` in gate order.

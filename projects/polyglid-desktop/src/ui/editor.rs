@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 
 use super::components::EditorTabButton;
 use super::features::{
-    AgentsDashboard, AutomationDashboard, PluginDashboard, ResultDashboard, ScannerDashboard,
-    SourceDashboard, TracksDashboard,
+    AgentsDashboard, AutomationDashboard, PluginDashboard, ProjectsDashboard, ResultDashboard,
+    ScannerDashboard, SourceDashboard, TracksDashboard,
 };
 use super::models::{BottomTab, EditorTab, WorkspaceView};
 use super::preview::sample_report;
@@ -16,6 +16,7 @@ pub(crate) fn EditorWorkspace() -> Element {
     rsx! {
         main { class: "editor",
             match active_view {
+                WorkspaceView::Projects => rsx! { ProjectsDashboard {} },
                 WorkspaceView::Explorer => rsx! { ExplorerEditor {} },
                 WorkspaceView::Plugins => rsx! { PluginsEditor {} },
                 WorkspaceView::Tracks => rsx! { TracksEditor {} },

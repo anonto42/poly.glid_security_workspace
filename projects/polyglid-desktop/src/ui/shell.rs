@@ -10,7 +10,8 @@ pub(crate) fn ActivityRail() -> Element {
     let current = *state.active_view.read();
     rsx! {
         nav { class: "activity-rail", aria_label: "Developer space sections",
-            RailButton { icon: "⌂", label: "Explorer", active: current == WorkspaceView::Explorer, onclick: move |_| state.active_view.set(WorkspaceView::Explorer) }
+            RailButton { icon: "▦", label: "My Projects", active: current == WorkspaceView::Projects, onclick: move |_| state.active_view.set(WorkspaceView::Projects) }
+            RailButton { icon: "⌕", label: "Scanner", active: current == WorkspaceView::Explorer, onclick: move |_| state.active_view.set(WorkspaceView::Explorer) }
             RailButton { icon: "◇", label: "Plugins", active: current == WorkspaceView::Plugins, onclick: move |_| state.active_view.set(WorkspaceView::Plugins) }
             RailButton { icon: "☷", label: "Work tracks", active: current == WorkspaceView::Tracks, onclick: move |_| state.active_view.set(WorkspaceView::Tracks) }
             RailButton { icon: "⚙", label: "Automation", active: current == WorkspaceView::Automation, onclick: move |_| state.active_view.set(WorkspaceView::Automation) }

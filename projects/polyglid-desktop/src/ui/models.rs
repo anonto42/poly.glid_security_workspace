@@ -2,6 +2,7 @@ use polyglid_desktop::TaskStatus;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum WorkspaceView {
+    Projects,
     Explorer,
     Plugins,
     Tracks,
@@ -21,6 +22,7 @@ pub(crate) struct TopBarAction {
 impl WorkspaceView {
     pub(crate) fn title(self) -> &'static str {
         match self {
+            Self::Projects => "My Projects",
             Self::Explorer => "Explorer",
             Self::Plugins => "Plugins",
             Self::Tracks => "Work tracks",
@@ -28,6 +30,14 @@ impl WorkspaceView {
             Self::Agents => "AI agents",
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum WorkspaceLoadState {
+    Loading,
+    Empty,
+    Ready,
+    Error(String),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -10,6 +10,8 @@ pub mod report_store;
 pub mod signature_store;
 pub mod marketplace_store;
 pub mod collaboration_store;
+pub mod project_catalog_store;
+pub mod workspace_catalog_store;
 
 pub use workspace::WorkspaceStore;
 pub use plugin_store::PluginStore;
@@ -20,3 +22,5 @@ pub use permission_store::DbPermissionStore;
 pub use report_store::ReportStore;
 pub use marketplace_store::MarketplaceStore;
 pub use collaboration_store::CollaborationStore;
+pub use project_catalog_store::{DbProject, ProjectCatalogStore};
+pub use workspace_catalog_store::{DbWorkspace, WorkspaceCatalogStore};

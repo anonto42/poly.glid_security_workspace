@@ -8,7 +8,9 @@ This document is the permanent living reference for PolyGlid's architectural pri
 PolyGlid enforces strict decoupling through compiler-enforced crate boundaries:
 
 - **`polyglid-cli`**: Terminal user interfaces including the Ratatui Dashboard (TUI) and standard CLI matchers. Does not import `rusqlite` or access SQLite directly.
-- **`desktop`**: Tauri desktop packaging running React + TypeScript UI views, calling Rust IPC commands. Does not import `rusqlite` or access SQLite directly.
+- **`polyglid-desktop`**: Rust/Dioxus desktop UI and application adapter. It
+  consumes typed core services/events and does not import `rusqlite`, manipulate
+  the database directly, or invoke Wasmtime directly.
 - **`polyglid-core`**: Core domain logic and business rules. Houses:
   - `plugin_manager`: Lifecycle actions (validate, install, uninstall).
   - `execution`: Task scheduling, job queues, and serialization format exporters (JSON, HTML, Markdown, SARIF).

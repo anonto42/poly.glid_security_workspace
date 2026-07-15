@@ -296,4 +296,46 @@ pub const MIGRATIONS: &[Migration] = &[
             "#,
         ],
     },
+    Migration {
+        version: 5,
+        sqls: &[
+            r#"
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                root_path TEXT NOT NULL UNIQUE,
+                is_active INTEGER NOT NULL DEFAULT 0 CHECK(is_active IN (0, 1)),
+                discovery_state TEXT NOT NULL DEFAULT 'idle'
+                    CHECK(discovery_state IN ('idle', 'loading', 'ready', 'error')),
+                last_error TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                last_opened_at INTEGER
+            );
+            "#,
+            r#"
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_single_active
+                ON workspaces(is_active) WHERE is_active = 1;
+            "#,
+            r#"
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1)),
+                excluded INTEGER NOT NULL DEFAULT 0 CHECK(excluded IN (0, 1)),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(workspace_id, path),
+                FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+            );
+            "#,
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_projects_workspace
+                ON projects(workspace_id, archived, name);
+            "#,
+        ],
+    },
 ];
