@@ -2,7 +2,8 @@ use dioxus::prelude::*;
 
 use crate::backend::DesktopBackend;
 
-use super::state::AppState;
+use super::models::WorkspaceLoadState;
+use super::state::{activate_view, AppState};
 
 #[component]
 pub(crate) fn TitleBar() -> Element {
@@ -72,7 +73,7 @@ fn CommandCenter() -> Element {
             span { class: "search-icon", "⌕" }
             span { class: "command-copy", "Search workspace, actions, or plugins" }
             span { class: "command-mode", "COMMAND" }
-            kbd { "⌘ K" }
+            kbd { "Ctrl Shift P" }
         }
     }
 }
@@ -84,7 +85,7 @@ fn PluginActionSlot() -> Element {
         div { class: "plugin-action-slot", aria_label: "Plugin actions",
             span { class: "slot-label", "extensions" }
             for action in state.top_bar_actions.read().iter() {
-                button { id: "{action.id}", class: "topbar-icon plugin-action", title: "{action.source}: {action.label}", aria_label: "{action.label}", onclick: { let destination = action.destination; move |_| state.active_view.set(destination) }, span { "{action.icon}" } }
+                button { id: "{action.id}", class: "topbar-icon plugin-action", title: "{action.source}: {action.label}", aria_label: "{action.label}", onclick: { let destination = action.destination; move |_| activate_view(state, destination) }, span { "{action.icon}" } }
             }
             button { class: "topbar-icon", title: "More extension actions", aria_label: "More extension actions", onclick: move |_| state.command_open.set(true), "••" }
         }
@@ -94,10 +95,16 @@ fn PluginActionSlot() -> Element {
 #[component]
 fn SystemStatus() -> Element {
     let mut state = use_context::<AppState>();
+    let status = match &*state.workspace_load.read() {
+        WorkspaceLoadState::Loading => ("INDEXING", "workspace loading", false),
+        WorkspaceLoadState::Error(_) => ("ERROR", "workspace unavailable", false),
+        WorkspaceLoadState::Empty => ("LOCAL", "workspace empty", true),
+        WorkspaceLoadState::Ready => ("LOCAL", "workspace ready", true),
+    };
     rsx! {
         button { class: "system-status", title: "Open runtime settings", onclick: move |_| state.settings_open.set(true),
-            span { class: "status-orbit", span { class: "live-dot" } }
-            span { class: "status-copy", strong { "LOCAL" } small { "core ready" } }
+            span { class: "status-orbit", span { class: if status.2 { "live-dot" } else { "live-dot off" } } }
+            span { class: "status-copy", strong { "{status.0}" } small { "{status.1}" } }
         }
     }
 }
@@ -106,15 +113,24 @@ fn SystemStatus() -> Element {
 fn UserActions() -> Element {
     let mut state = use_context::<AppState>();
     let mut notifications_open = use_signal(|| false);
+    let workspace_error = match &*state.workspace_load.read() {
+        WorkspaceLoadState::Error(error) => Some(error.clone()),
+        _ => state.workspace_mutation_error.read().clone(),
+    };
     rsx! {
         div { class: "user-actions",
             div { class: "notification-wrap",
-                button { class: "topbar-icon notification-button", title: "Notifications", aria_label: "Notifications", onclick: move |_| notifications_open.toggle(), "○" span { class: "notification-badge", "2" } }
+                button { class: "topbar-icon notification-button", title: "Notifications", aria_label: "Notifications", onclick: move |_| notifications_open.toggle(), "○"
+                    if workspace_error.is_some() { span { class: "notification-badge", "1" } }
+                }
                 if *notifications_open.read() {
                     div { class: "topbar-menu notification-menu",
-                        div { class: "menu-heading", strong { "Activity" } span { "2 new" } }
-                        div { class: "notification-item", span { class: "event-dot good" } div { strong { "Workspace ready" } small { "All local services are available." } } }
-                        div { class: "notification-item", span { class: "event-dot" } div { strong { "Preview actions loaded" } small { "2 extension actions registered." } } }
+                        div { class: "menu-heading", strong { "Activity" } span { if workspace_error.is_some() { "1 issue" } else { "current" } } }
+                        if let Some(error) = workspace_error {
+                            div { class: "notification-item", span { class: "event-dot" } div { strong { "Workspace action failed" } small { "{error}" } } }
+                        } else {
+                            div { class: "notification-item", span { class: "event-dot good" } div { strong { "Workspace ready" } small { "{state.projects.read().len()} projects indexed locally." } } }
+                        }
                     }
                 }
             }

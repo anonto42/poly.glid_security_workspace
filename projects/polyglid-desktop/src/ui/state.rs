@@ -3,14 +3,20 @@ use polyglid_core::store::{DbProject, DbWorkspace};
 use polyglid_desktop::WorkspaceOverview;
 
 use super::models::{
-    BottomTab, EditorTab, PluginCard, ScanReport, SettingsTab, TopBarAction, TrackFilter,
-    WorkspaceLoadState, WorkspaceView,
+    BottomTab, EditorTab, PluginCard, ResizeAxis, ScanReport, SettingsTab, TopBarAction,
+    TrackFilter, WorkspaceLoadState, WorkspaceView,
 };
 use super::preview::{seed_overview, seed_plugins, seed_top_bar_actions};
 
 #[derive(Clone, Copy)]
 pub(crate) struct AppState {
     pub(crate) active_view: Signal<WorkspaceView>,
+    pub(crate) open_views: Signal<Vec<WorkspaceView>>,
+    pub(crate) sidebar_visible: Signal<bool>,
+    pub(crate) bottom_panel_visible: Signal<bool>,
+    pub(crate) sidebar_width: Signal<f64>,
+    pub(crate) bottom_panel_height: Signal<f64>,
+    pub(crate) resizing: Signal<Option<ResizeAxis>>,
     pub(crate) workspace_load: Signal<WorkspaceLoadState>,
     pub(crate) workspaces: Signal<Vec<DbWorkspace>>,
     pub(crate) projects: Signal<Vec<DbProject>>,
@@ -39,6 +45,12 @@ pub(crate) struct AppState {
 pub(crate) fn use_app_state() -> AppState {
     AppState {
         active_view: use_signal(|| WorkspaceView::Projects),
+        open_views: use_signal(|| vec![WorkspaceView::Projects]),
+        sidebar_visible: use_signal(|| true),
+        bottom_panel_visible: use_signal(|| true),
+        sidebar_width: use_signal(|| 280.0),
+        bottom_panel_height: use_signal(|| 210.0),
+        resizing: use_signal(|| None),
         workspace_load: use_signal(|| WorkspaceLoadState::Loading),
         workspaces: use_signal(Vec::new),
         projects: use_signal(Vec::new),
@@ -68,5 +80,29 @@ pub(crate) fn use_app_state() -> AppState {
         track_filter: use_signal(|| TrackFilter::All),
         selected_track: use_signal(|| None),
         overview: use_signal(seed_overview),
+    }
+}
+
+pub(crate) fn activate_view(mut state: AppState, view: WorkspaceView) {
+    if !state.open_views.read().contains(&view) {
+        state.open_views.write().push(view);
+    }
+    state.active_view.set(view);
+}
+
+pub(crate) fn close_view(mut state: AppState, view: WorkspaceView) {
+    let active = *state.active_view.read();
+    let mut views = state.open_views.write();
+    if views.len() == 1 {
+        return;
+    }
+    let Some(index) = views.iter().position(|candidate| *candidate == view) else {
+        return;
+    };
+    views.remove(index);
+    if active == view {
+        let next = views[index.saturating_sub(1).min(views.len() - 1)];
+        drop(views);
+        state.active_view.set(next);
     }
 }

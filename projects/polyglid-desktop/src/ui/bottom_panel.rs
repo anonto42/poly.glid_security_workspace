@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
 
+use crate::backend::DesktopBackend;
+
+use super::commands::{execute, ShellCommand};
 use super::components::BottomTabButton;
 use super::models::{BottomTab, ScanReport};
 use super::state::AppState;
@@ -7,15 +10,18 @@ use super::state::AppState;
 #[component]
 pub(crate) fn BottomPanel() -> Element {
     let mut state = use_context::<AppState>();
+    let backend = use_context::<DesktopBackend>();
     let report = state.report.read().clone();
     let issue_count = report.as_ref().map_or(0, |value| value.findings.len());
     rsx! {
-        section { class: "bottom-panel",
+        section { class: "bottom-panel", style: "height: {state.bottom_panel_height}px; flex-basis: {state.bottom_panel_height}px",
             div { class: "bottom-tabs",
                 BottomTabButton { label: "Problems", count: Some(issue_count), active: *state.bottom_tab.read() == BottomTab::Problems, onclick: move |_| state.bottom_tab.set(BottomTab::Problems) }
                 BottomTabButton { label: "Output", count: None, active: *state.bottom_tab.read() == BottomTab::Output, onclick: move |_| state.bottom_tab.set(BottomTab::Output) }
                 BottomTabButton { label: "Terminal", count: None, active: *state.bottom_tab.read() == BottomTab::Terminal, onclick: move |_| state.bottom_tab.set(BottomTab::Terminal) }
-                div { class: "panel-actions", "⌃  □  ×" }
+                div { class: "panel-actions",
+                    button { title: "Collapse panel (Ctrl+J)", onclick: move |_| execute(state, ShellCommand::TogglePanel, backend.clone()), "×" }
+                }
             }
             div { class: "bottom-content",
                 match *state.bottom_tab.read() {
@@ -43,14 +49,19 @@ fn ProblemsPanel(report: Option<ScanReport>) -> Element {
 fn OutputPanel(report: Option<ScanReport>) -> Element {
     let state = use_context::<AppState>();
     rsx! { div { class: "console",
-        p { span { class: "dim", "[info]" } " control plane initialized" }
-        p { span { class: "dim", "[info]" } " Wasmtime sandbox ready · fuel {state.fuel_limit}" }
-        p { span { class: "success", "[ready]" } " local workspace indexed" }
+        p { span { class: "dim", "[shell]" } " VS Code-style workbench controls active" }
+        p { span { class: "success", "[workspace]" } " {state.projects.read().len()} local projects indexed" }
         if let Some(value) = report { p { span { class: "accent", "[scan]" } " recon-probe completed for {value.target}" } }
     } }
 }
 
 #[component]
 fn TerminalPanel() -> Element {
-    rsx! { div { class: "console terminal", p { class: "dim", "PolyGlid interactive host shell" } p { "polyglid workspace verify" } p { class: "success", "✓ contracts  ✓ permissions  ✓ runtime" } p { span { class: "prompt", "❯" } " _" } } }
+    rsx! { div { class: "terminal-reserved",
+        div { class: "terminal-icon", ">_" }
+        div { h3 { "Terminal integration is reserved" }
+            p { "The panel is functional, but host command execution is disabled until the audited PTY service is implemented." }
+            small { "Use Ctrl+` to focus this panel · no fake commands are executed" }
+        }
+    } }
 }

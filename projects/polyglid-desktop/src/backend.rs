@@ -1,14 +1,18 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use polyglid_core::services::WorkspaceCatalogService;
 use polyglid_core::store::{DbProject, DbWorkspace};
+
+mod shell_preferences;
+pub(crate) use shell_preferences::ShellPreferences;
 
 #[derive(Clone, Debug)]
 pub(crate) struct WorkspaceSnapshot {
     pub(crate) workspaces: Vec<DbWorkspace>,
     pub(crate) active: DbWorkspace,
     pub(crate) projects: Vec<DbProject>,
+    pub(crate) shell: ShellPreferences,
 }
 
 #[derive(Clone)]
@@ -16,21 +20,29 @@ pub(crate) struct DesktopBackend {
     service: Option<WorkspaceCatalogService>,
     startup_error: Option<String>,
     default_root: PathBuf,
+    database_path: PathBuf,
 }
 
 impl DesktopBackend {
     pub(crate) fn open_default() -> Self {
         let default_root = default_workspace_root();
-        match open_service() {
-            Ok(service) => Self {
+        let opened = data_directory()
+            .map(|directory| directory.join("polyglid.db"))
+            .and_then(|database_path| {
+                open_service(&database_path).map(|service| (service, database_path))
+            });
+        match opened {
+            Ok((service, database_path)) => Self {
                 service: Some(service),
                 startup_error: None,
                 default_root,
+                database_path,
             },
             Err(error) => Self {
                 service: None,
                 startup_error: Some(error),
                 default_root,
+                database_path: PathBuf::new(),
             },
         }
     }
@@ -65,6 +77,7 @@ impl DesktopBackend {
             workspaces,
             active,
             projects,
+            shell: self.load_shell_preferences()?,
         })
     }
 
@@ -99,15 +112,17 @@ impl DesktopBackend {
     }
 }
 
-fn open_service() -> Result<WorkspaceCatalogService, String> {
-    let data_dir = data_directory()?;
-    fs::create_dir_all(&data_dir).map_err(|err| {
+fn open_service(database_path: &Path) -> Result<WorkspaceCatalogService, String> {
+    let data_dir = database_path
+        .parent()
+        .ok_or_else(|| "database path has no parent".to_string())?;
+    fs::create_dir_all(data_dir).map_err(|err| {
         format!(
             "failed to create PolyGlid data directory '{}': {err}",
             data_dir.display()
         )
     })?;
-    WorkspaceCatalogService::open(&data_dir.join("polyglid.db"))
+    WorkspaceCatalogService::open(database_path)
 }
 
 fn data_directory() -> Result<PathBuf, String> {

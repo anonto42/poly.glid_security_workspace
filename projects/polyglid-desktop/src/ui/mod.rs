@@ -1,5 +1,6 @@
 mod app;
 mod bottom_panel;
+mod commands;
 mod components;
 mod editor;
 mod features;

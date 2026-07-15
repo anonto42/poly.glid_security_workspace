@@ -104,6 +104,9 @@ Exit: multi-plugin success/failure/restart tests pass.
 
 ## Gate 7 — Command, notifications, and shell polish
 
+Status: shell foundation implemented on 2026-07-15; typed event toasts and the
+audited PTY service remain.
+
 - Typed command registry with fuzzy search and keyboard activation.
 - Workspace switcher reads real workspace records.
 - Event-driven toast queue: maximum four, dismissible, five-second default.

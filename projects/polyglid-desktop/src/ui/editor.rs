@@ -7,7 +7,7 @@ use super::features::{
 };
 use super::models::{BottomTab, EditorTab, WorkspaceView};
 use super::preview::sample_report;
-use super::state::AppState;
+use super::state::{activate_view, close_view, AppState};
 
 #[component]
 pub(crate) fn EditorWorkspace() -> Element {
@@ -15,13 +15,43 @@ pub(crate) fn EditorWorkspace() -> Element {
     let active_view = *state.active_view.read();
     rsx! {
         main { class: "editor",
-            match active_view {
-                WorkspaceView::Projects => rsx! { ProjectsDashboard {} },
-                WorkspaceView::Explorer => rsx! { ExplorerEditor {} },
-                WorkspaceView::Plugins => rsx! { PluginsEditor {} },
-                WorkspaceView::Tracks => rsx! { TracksEditor {} },
-                WorkspaceView::Automation => rsx! { AutomationDashboard {} },
-                WorkspaceView::Agents => rsx! { AgentsDashboard {} },
+            WorkspaceEditorTabs {}
+            div { class: "editor-surface",
+                match active_view {
+                    WorkspaceView::Projects => rsx! { ProjectsDashboard {} },
+                    WorkspaceView::Explorer => rsx! { ExplorerEditor {} },
+                    WorkspaceView::Plugins => rsx! { PluginsEditor {} },
+                    WorkspaceView::Tracks => rsx! { TracksEditor {} },
+                    WorkspaceView::Automation => rsx! { AutomationDashboard {} },
+                    WorkspaceView::Agents => rsx! { AgentsDashboard {} },
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn WorkspaceEditorTabs() -> Element {
+    let state = use_context::<AppState>();
+    let active = *state.active_view.read();
+    let views = state.open_views.read().clone();
+    rsx! {
+        div { class: "workbench-tabs", role: "tablist", aria_label: "Open editors",
+            for view in views {
+                button {
+                    class: if view == active { "workbench-tab active" } else { "workbench-tab" },
+                    role: "tab",
+                    aria_selected: view == active,
+                    onclick: move |_| activate_view(state, view),
+                    span { class: "tab-icon", "{view.icon()}" }
+                    span { "{view.title()}" }
+                    span {
+                        class: "tab-close",
+                        title: "Close editor",
+                        onclick: move |event| { event.stop_propagation(); close_view(state, view); },
+                        "×"
+                    }
+                }
             }
         }
     }

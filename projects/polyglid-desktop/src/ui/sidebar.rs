@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
 
+use crate::backend::DesktopBackend;
+
+use super::commands::{execute, ShellCommand};
 use super::components::SidebarOption;
 use super::models::{EditorTab, TrackFilter, WorkspaceView};
 use super::state::AppState;
@@ -7,10 +10,13 @@ use super::state::AppState;
 #[component]
 pub(crate) fn WorkspaceSidebar() -> Element {
     let state = use_context::<AppState>();
+    let backend = use_context::<DesktopBackend>();
     let active_view = *state.active_view.read();
     rsx! {
-        aside { class: "sidebar",
-            div { class: "sidebar-heading", span { "{active_view.title()}" } button { "•••" } }
+        aside { class: "sidebar", style: "width: {state.sidebar_width}px; flex-basis: {state.sidebar_width}px",
+            div { class: "sidebar-heading", span { "{active_view.title()}" }
+                button { title: "Hide side bar (Ctrl+B)", aria_label: "Hide side bar", onclick: move |_| execute(state, ShellCommand::ToggleSidebar, backend.clone()), "‹" }
+            }
             match active_view {
                 WorkspaceView::Projects => rsx! { ProjectsSidebar {} },
                 WorkspaceView::Explorer => rsx! { ExplorerSidebar {} },

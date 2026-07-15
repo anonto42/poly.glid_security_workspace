@@ -16,6 +16,17 @@ Verified: 2026-07-15.
 - Dioxus loads the project catalog asynchronously through `WorkspaceCatalogService`,
   shows loading/empty/error/ready states, and supports create, rename, catalog removal,
   explicitly confirmed file deletion, refresh, and persisted workspace selection.
+- The desktop shell now follows the VS Code workbench interaction model: rail
+  destinations open persistent editor tabs, tabs close with controls or `Ctrl+W`,
+  and active editors switch without discarding other open destinations.
+- Real global shortcuts include `Ctrl+1…6`, `Ctrl+B`, `Ctrl+J`, Ctrl+backtick,
+  `Ctrl+P`, `Ctrl+Shift+P`, and `F1`. The command palette provides fuzzy search,
+  arrow-key selection, Enter activation, and Escape dismissal.
+- Sidebar and bottom-panel visibility and drag-resized dimensions persist through
+  the core settings store. Dioxus still does not access SQLite directly.
+- The Terminal tab is an honest reserved surface. It switches and opens normally,
+  but does not execute or display fake host commands while an audited PTY service
+  is absent.
 - Discovery scans direct child directories without following directory symlinks and
   classifies Rust, Node, Python, and general projects from their manifest files.
 - Interactive preview behavior remains for targets/scanner results, plugin toggles,
@@ -48,6 +59,8 @@ Verified: 2026-07-15.
 - `git diff --check`: passes.
 - The desktop launched on 2026-07-15 with isolated data and discovered 10 real
   project folders from the repository `projects/` directory.
+- The VS Code-style workbench shell launched successfully on 2026-07-15 using an
+  isolated database under `/tmp/polyglid-shell-final`.
 - CSS is compiled into the binary with `include_str!`; plain `cargo run` does not
   depend on the Dioxus CLI asset pipeline.
 
@@ -71,5 +84,6 @@ Use `projects/polyglid-desktop/README.md` for the visual checklist.
 
 Gate 1 workspaces/projects is implemented as the first real vertical slice. It still
 needs broader UI acceptance at all target window sizes before being marked closed.
-Next, finish Gate 0 shared errors/platform paths and then integrate persisted plugin
-management as Gate 2. Follow `polyglid-production-desktop-plan.md` in gate order.
+Gate 7 shell foundations are also implemented, but event-driven toasts and PTY
+execution remain open. Next, finish Gate 0 shared errors/platform paths and then
+integrate persisted plugin management as Gate 2.

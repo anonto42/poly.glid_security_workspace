@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 
+use crate::backend::DesktopBackend;
+
+use super::commands::{execute, CommandDefinition, COMMANDS};
 use super::components::SettingsButton;
-use super::models::{SettingsTab, WorkspaceView};
+use super::models::SettingsTab;
 use super::state::AppState;
 
 #[component]
@@ -79,15 +82,81 @@ fn PluginSettings() -> Element {
 #[component]
 fn CommandPalette() -> Element {
     let mut state = use_context::<AppState>();
+    let backend = use_context::<DesktopBackend>();
+    let mut query = use_signal(String::new);
+    let mut selected = use_signal(|| 0usize);
+    let commands = filtered_commands(&query.read());
     rsx! {
         div { class: "modal-backdrop command-backdrop", onclick: move |_| state.command_open.set(false),
             div { class: "command-palette", onclick: move |event| event.stop_propagation(),
-                input { autofocus: true, placeholder: "Type a command or search the workspace…" }
-                p { class: "section-label", "Quick navigation" }
-                button { onclick: move |_| { state.active_view.set(WorkspaceView::Explorer); state.command_open.set(false); }, "⚡ Open scanner" span { "Explorer" } }
-                button { onclick: move |_| { state.active_view.set(WorkspaceView::Tracks); state.command_open.set(false); }, "☷ Open work tracks" span { "Project" } }
-                button { onclick: move |_| { state.active_view.set(WorkspaceView::Automation); state.command_open.set(false); }, "⚙ Run workspace verification" span { "Automation" } }
+                input {
+                    autofocus: true,
+                    value: "{query}",
+                    placeholder: "Type a command…",
+                    aria_label: "Command palette search",
+                    oninput: move |event| { query.set(event.value()); selected.set(0); },
+                    onkeydown: move |event| {
+                        let available = filtered_commands(&query.read());
+                        match event.key().to_string().as_str() {
+                            "ArrowDown" if !available.is_empty() => {
+                                event.prevent_default();
+                                let next = (*selected.read() + 1).min(available.len() - 1);
+                                selected.set(next);
+                            }
+                            "ArrowUp" => {
+                                event.prevent_default();
+                                let next = selected.read().saturating_sub(1);
+                                selected.set(next);
+                            }
+                            "Enter" => if let Some(command) = available.get(*selected.read()) {
+                                event.prevent_default();
+                                execute(state, command.action, backend.clone());
+                            },
+                            "Escape" => state.command_open.set(false),
+                            _ => {}
+                        }
+                    }
+                }
+                div { class: "command-results", role: "listbox",
+                    if commands.is_empty() {
+                        div { class: "command-empty", "No matching commands" }
+                    }
+                    for (index, command) in commands.into_iter().enumerate() {
+                        button {
+                            class: if index == *selected.read() { "selected" } else { "" },
+                            role: "option",
+                            aria_selected: index == *selected.read(),
+                            onmouseenter: move |_| selected.set(index),
+                            onclick: {
+                                let backend = backend.clone();
+                                move |_| execute(state, command.action, backend.clone())
+                            },
+                            div { strong { "{command.title}" } small { "{command.category}" } }
+                            if !command.shortcut.is_empty() { kbd { "{command.shortcut}" } }
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+fn filtered_commands(query: &str) -> Vec<CommandDefinition> {
+    let query = query.trim().to_lowercase();
+    COMMANDS
+        .iter()
+        .copied()
+        .filter(|command| {
+            query.is_empty()
+                || fuzzy_match(&command.title.to_lowercase(), &query)
+                || fuzzy_match(&command.category.to_lowercase(), &query)
+        })
+        .collect()
+}
+
+fn fuzzy_match(candidate: &str, query: &str) -> bool {
+    let mut characters = candidate.chars();
+    query
+        .chars()
+        .all(|needle| characters.by_ref().any(|candidate| candidate == needle))
 }

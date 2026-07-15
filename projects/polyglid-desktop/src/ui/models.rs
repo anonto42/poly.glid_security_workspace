@@ -30,6 +30,23 @@ impl WorkspaceView {
             Self::Agents => "AI agents",
         }
     }
+
+    pub(crate) fn icon(self) -> &'static str {
+        match self {
+            Self::Projects => "▦",
+            Self::Explorer => "⌕",
+            Self::Plugins => "◇",
+            Self::Tracks => "☷",
+            Self::Automation => "⚙",
+            Self::Agents => "✦",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ResizeAxis {
+    Sidebar,
+    BottomPanel,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -1,0 +1,45 @@
+.developer-space.resizing { user-select: none; cursor: col-resize; }
+.activity-rail { width: 48px; flex-basis: 48px; padding-right: 4px; padding-left: 4px; }
+.rail-button { height: 46px; border-radius: 4px; }
+.rail-button small { left: 43px; }
+.sidebar { width: 280px; flex-basis: 280px; }
+.resize-handle { position: relative; z-index: 15; flex: 0 0 4px; background: transparent; }
+.resize-handle::after { position: absolute; content: ""; background: transparent; transition: background var(--ease); }
+.resize-handle:hover::after, .resizing .resize-handle::after { background: var(--accent); }
+.resize-handle.vertical { margin-left: -2px; cursor: col-resize; }
+.resize-handle.vertical::after { inset: 0 1px; }
+.resize-handle.horizontal { height: 4px; margin-top: -2px; cursor: row-resize; }
+.resize-handle.horizontal::after { inset: 1px 0; }
+.workbench-tabs { height: 36px; flex: 0 0 36px; display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--surface-1); }
+.workbench-tab { min-width: 120px; max-width: 210px; height: 36px; padding: 0 7px 0 11px; display: grid; grid-template-columns: auto minmax(0, 1fr) 20px; align-items: center; gap: 7px; border: 0; border-right: 1px solid var(--line); border-top: 1px solid transparent; color: var(--text-muted); background: var(--canvas-deep); font-size: 11px; text-align: left; cursor: pointer; }
+.workbench-tab > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workbench-tab:hover { color: var(--text); background: var(--surface-2); }
+.workbench-tab.active { border-top-color: var(--accent); color: var(--text-strong); background: var(--canvas); }
+.tab-icon { color: var(--accent-muted); font: 11px ui-monospace, monospace; }
+.tab-close { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; color: transparent; font-size: 15px; }
+.workbench-tab:hover .tab-close, .workbench-tab.active .tab-close { color: var(--text-dim); }
+.tab-close:hover { color: var(--text-strong) !important; background: var(--surface-hover); }
+.editor-surface { min-height: 0; flex: 1; overflow: hidden; }
+.editor-surface > .dashboard-scroll { height: 100%; }
+.bottom-panel { height: 210px; flex-basis: 210px; }
+.panel-actions { padding: 4px 8px; }
+.panel-actions button, .status-control { border: 0; color: inherit; background: transparent; cursor: pointer; }
+.panel-actions button { width: 28px; height: 28px; border-radius: 4px; }
+.panel-actions button:hover { color: var(--text); background: var(--surface-hover); }
+.status-control { height: 20px; padding: 0 7px; border-radius: 3px; }
+.status-control:hover { color: #fff; background: rgba(255,255,255,.12); }
+.terminal-reserved { height: 100%; padding: 20px 24px; display: flex; align-items: flex-start; gap: 14px; color: var(--text-muted); background: var(--canvas-deep); }
+.terminal-icon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--accent); background: var(--surface-2); font: 11px ui-monospace, monospace; }
+.terminal-reserved h3 { margin: 2px 0 7px; color: var(--text); font-size: 12px; }
+.terminal-reserved p { max-width: 660px; margin: 0 0 8px; font-size: 10px; line-height: 1.6; }
+.terminal-reserved small { color: var(--text-dim); font: 8px ui-monospace, monospace; }
+.command-palette { padding: 0; }
+.command-palette > input { margin: 8px; width: calc(100% - 16px); }
+.command-results { max-height: 390px; padding: 0 8px 8px; overflow-y: auto; }
+.command-results button { align-items: center; }
+.command-results button.selected { color: var(--text-strong); background: var(--surface-hover); }
+.command-results button div { display: grid; gap: 3px; }
+.command-results button strong { font-size: 10px; font-weight: 500; }
+.command-results button small { color: var(--text-dim); font-size: 8px; }
+.command-empty { padding: 28px; color: var(--text-dim); font-size: 10px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
