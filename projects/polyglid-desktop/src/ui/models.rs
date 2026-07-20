@@ -110,25 +110,25 @@ impl TrackFilter {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PluginCard {
-    pub(crate) id: &'static str,
-    pub(crate) name: &'static str,
-    pub(crate) version: &'static str,
-    pub(crate) description: &'static str,
-    pub(crate) capabilities: Vec<&'static str>,
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) description: String,
+    pub(crate) capabilities: Vec<String>,
     pub(crate) enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Finding {
-    pub(crate) severity: &'static str,
-    pub(crate) title: &'static str,
-    pub(crate) description: &'static str,
-    pub(crate) recommendation: &'static str,
+    pub(crate) severity: String,
+    pub(crate) title: String,
+    pub(crate) description: String,
+    pub(crate) recommendation: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ScanReport {
     pub(crate) target: String,
-    pub(crate) summary: &'static str,
+    pub(crate) summary: String,
     pub(crate) findings: Vec<Finding>,
 }

@@ -4187,8 +4187,11 @@ name = "polyglid-desktop"
 version = "0.1.0"
 dependencies = [
  "dioxus",
+ "polyglid-config",
  "polyglid-core",
  "polyglid-events",
+ "polyglid-plugin-api",
+ "polyglid-runtime",
  "serde",
  "thiserror 2.0.18",
  "tokio",

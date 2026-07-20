@@ -1,6 +1,6 @@
 use polyglid_desktop::{TaskStatus, WorkTrack, WorkspaceOverview};
 
-use super::models::{Finding, PluginCard, ScanReport, TopBarAction, WorkspaceView};
+use super::models::{PluginCard, TopBarAction, WorkspaceView};
 
 pub(crate) const PLUGIN_SOURCE: &str = r#"//! Sandboxed first-party diagnostic plugin.
 
@@ -19,27 +19,21 @@ impl Guest for ReconProbe {
 pub(crate) fn seed_plugins() -> Vec<PluginCard> {
     vec![
         PluginCard {
-            id: "recon-probe",
-            name: "Recon Probe",
-            version: "0.1.0",
-            description: "Safe DNS and target diagnostics rendered through native panels.",
-            capabilities: vec!["dns-resolve", "report-write"],
+            id: "recon-probe".into(),
+            name: "Recon Probe".into(),
+            version: "0.1.0".into(),
+            description: "Safe DNS and target diagnostics rendered through native panels.".into(),
+            capabilities: vec!["dns-resolve".into(), "report-write".into()],
             enabled: true,
         },
         PluginCard {
-            id: "dependency-audit",
-            name: "Dependency Audit",
-            version: "0.1.0",
-            description: "Reviews Rust dependency metadata and produces bounded findings.",
-            capabilities: vec!["workspace-read"],
+            id: "dependency-audit".into(), name: "Dependency Audit".into(), version: "0.1.0".into(),
+            description: "Reviews Rust dependency metadata and produces bounded findings.".into(), capabilities: vec!["workspace-read".into()],
             enabled: true,
         },
         PluginCard {
-            id: "code-review",
-            name: "Code Review",
-            version: "0.1.0",
-            description: "Local-first static review helper behind explicit approval gates.",
-            capabilities: vec!["workspace-read", "ai-inference"],
+            id: "code-review".into(), name: "Code Review".into(), version: "0.1.0".into(),
+            description: "Local-first static review helper behind explicit approval gates.".into(), capabilities: vec!["workspace-read".into(), "ai-inference".into()],
             enabled: false,
         },
     ]
@@ -62,29 +56,6 @@ pub(crate) fn seed_top_bar_actions() -> Vec<TopBarAction> {
             destination: WorkspaceView::Automation,
         },
     ]
-}
-
-pub(crate) fn sample_report(target: String) -> ScanReport {
-    ScanReport {
-        target,
-        summary:
-            "The target responded normally. Two low-risk configuration observations need review.",
-        findings: vec![
-            Finding {
-                severity: "LOW",
-                title: "DNS response exposes multiple addresses",
-                description: "The target resolves through more than one public endpoint.",
-                recommendation: "Confirm every endpoint belongs to the intended deployment.",
-            },
-            Finding {
-                severity: "INFO",
-                title: "Report evidence created",
-                description:
-                    "The sandbox wrote a structured report through the scoped host capability.",
-                recommendation: "Review and sign the evidence before sharing it.",
-            },
-        ],
-    }
 }
 
 pub(crate) fn seed_overview() -> WorkspaceOverview {

@@ -13,6 +13,7 @@ pub(crate) fn ScannerDashboard(
     on_plugin: EventHandler<String>,
     on_run: EventHandler<MouseEvent>,
 ) -> Element {
+    let state = use_context::<crate::ui::state::AppState>();
     let selected_enabled = plugins
         .iter()
         .find(|plugin| plugin.id == selected_plugin)
@@ -29,7 +30,10 @@ pub(crate) fn ScannerDashboard(
                 }
                 div { class: "permission-strip", span { "◈ WASI sandbox" } span { "◎ scoped DNS" } span { "▣ report write" } }
                 if !selected_enabled { p { class: "error-text", "This plugin is disabled. Enable it from Plugin management." } }
-                button { class: "primary run-button", disabled: !selected_enabled, onclick: move |event| on_run.call(event), "▶ Run analysis" }
+                if let Some(error) = state.execution_error.read().as_ref() { p { class: "error-text", "{error}" } }
+                button { class: "primary run-button", disabled: !selected_enabled || *state.execution_running.read(), onclick: move |event| on_run.call(event),
+                    if *state.execution_running.read() { "Running…" } else { "▶ Run analysis" }
+                }
             }
         }
     }

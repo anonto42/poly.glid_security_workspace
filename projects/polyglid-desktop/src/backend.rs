@@ -1,8 +1,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 
+use polyglid_config::{plugin_registry::PluginStatus, AppConfig};
+use polyglid_core::execution::{ExecutionConfig, ExecutionEvent, ExecutionManager};
+use polyglid_core::plugin_manager::PluginManager;
 use polyglid_core::services::WorkspaceCatalogService;
-use polyglid_core::store::{DbProject, DbWorkspace};
+use polyglid_core::store::{DbProject, DbWorkspace, WorkspaceStore};
+use polyglid_plugin_api::{PluginId, PluginReport};
+use polyglid_runtime::WasmRuntime;
 
 mod shell_preferences;
 pub(crate) use shell_preferences::ShellPreferences;
@@ -13,11 +20,14 @@ pub(crate) struct WorkspaceSnapshot {
     pub(crate) active: DbWorkspace,
     pub(crate) projects: Vec<DbProject>,
     pub(crate) shell: ShellPreferences,
+    pub(crate) plugins: Vec<polyglid_config::plugin_registry::PluginRegistryEntry>,
 }
 
 #[derive(Clone)]
 pub(crate) struct DesktopBackend {
     service: Option<WorkspaceCatalogService>,
+    plugins: Option<Arc<PluginManager<WasmRuntime>>>,
+    executions: Option<Arc<ExecutionManager<WasmRuntime>>>,
     startup_error: Option<String>,
     default_root: PathBuf,
     database_path: PathBuf,
@@ -29,17 +39,21 @@ impl DesktopBackend {
         let opened = data_directory()
             .map(|directory| directory.join("polyglid.db"))
             .and_then(|database_path| {
-                open_service(&database_path).map(|service| (service, database_path))
+                open_services(&database_path).map(|services| (services, database_path))
             });
         match opened {
-            Ok((service, database_path)) => Self {
+            Ok(((service, plugins, executions), database_path)) => Self {
                 service: Some(service),
+                plugins: Some(plugins),
+                executions: Some(executions),
                 startup_error: None,
                 default_root,
                 database_path,
             },
             Err(error) => Self {
                 service: None,
+                plugins: None,
+                executions: None,
                 startup_error: Some(error),
                 default_root,
                 database_path: PathBuf::new(),
@@ -78,6 +92,7 @@ impl DesktopBackend {
             active,
             projects,
             shell: self.load_shell_preferences()?,
+            plugins: self.list_plugins()?,
         })
     }
 
@@ -103,6 +118,49 @@ impl DesktopBackend {
         self.service()?.remove_project(project_id, delete_files)
     }
 
+    pub(crate) fn list_plugins(&self) -> Result<Vec<polyglid_config::plugin_registry::PluginRegistryEntry>, String> {
+        Ok(self.plugin_manager()?.get_plugins())
+    }
+
+    pub(crate) fn toggle_plugin(&self, id: &str, enabled: bool) -> Result<(), String> {
+        let id = PluginId::new(id).map_err(|error| error.to_string())?;
+        self.plugin_manager()?.toggle_plugin_enabled(&id, enabled)
+    }
+
+    pub(crate) fn run_plugin(&self, id: &str, target: &str, fuel_limit: u64) -> Result<PluginReport, String> {
+        let id = PluginId::new(id).map_err(|error| error.to_string())?;
+        let entry = self.plugin_manager()?.get_plugin(&id)
+            .ok_or_else(|| format!("plugin '{}' is not installed", id.as_str()))?;
+        if entry.status != PluginStatus::Enabled {
+            return Err(format!("plugin '{}' is not enabled", id.as_str()));
+        }
+        let manager = self.execution_manager()?;
+        let mut events = manager.subscribe();
+        let job_id = manager.submit_job(
+            entry.path.to_string_lossy().into_owned(),
+            target.to_string(),
+            ExecutionConfig {
+                fuel_limit,
+                timeout: Duration::from_secs(30),
+                memory_limit: None,
+                allowed_capabilities: entry.capabilities,
+            },
+        );
+        loop {
+            match events.blocking_recv() {
+                Ok(ExecutionEvent::JobFinished { job_id: finished, report, .. }) if finished == job_id => return Ok(report),
+                Ok(ExecutionEvent::JobFailed { job_id: failed, error, .. }) if failed == job_id => return Err(error),
+                Ok(ExecutionEvent::JobStateChanged { job_id: changed, state, .. })
+                    if changed == job_id && matches!(state, polyglid_core::execution::JobState::Cancelled | polyglid_core::execution::JobState::TimedOut) =>
+                {
+                    return Err(format!("plugin execution ended with state {state:?}"));
+                }
+                Ok(_) => {}
+                Err(error) => return Err(format!("execution event stream closed: {error}")),
+            }
+        }
+    }
+
     fn service(&self) -> Result<&WorkspaceCatalogService, String> {
         self.service.as_ref().ok_or_else(|| {
             self.startup_error
@@ -110,9 +168,21 @@ impl DesktopBackend {
                 .unwrap_or_else(|| "desktop services are unavailable".to_string())
         })
     }
+
+    fn plugin_manager(&self) -> Result<&Arc<PluginManager<WasmRuntime>>, String> {
+        self.plugins.as_ref().ok_or_else(|| self.unavailable_message())
+    }
+
+    fn execution_manager(&self) -> Result<&Arc<ExecutionManager<WasmRuntime>>, String> {
+        self.executions.as_ref().ok_or_else(|| self.unavailable_message())
+    }
+
+    fn unavailable_message(&self) -> String {
+        self.startup_error.clone().unwrap_or_else(|| "desktop services are unavailable".to_string())
+    }
 }
 
-fn open_service(database_path: &Path) -> Result<WorkspaceCatalogService, String> {
+fn open_services(database_path: &Path) -> Result<(WorkspaceCatalogService, Arc<PluginManager<WasmRuntime>>, Arc<ExecutionManager<WasmRuntime>>), String> {
     let data_dir = database_path
         .parent()
         .ok_or_else(|| "database path has no parent".to_string())?;
@@ -122,7 +192,18 @@ fn open_service(database_path: &Path) -> Result<WorkspaceCatalogService, String>
             data_dir.display()
         )
     })?;
-    WorkspaceCatalogService::open(database_path)
+    let catalog = WorkspaceCatalogService::open(database_path)?;
+    let store = WorkspaceStore::new(database_path)?;
+    let config = AppConfig {
+        plugin_dir: data_dir.join("plugins"),
+        reports_dir: data_dir.join("reports"),
+        ..AppConfig::development()
+    };
+    let runtime = Arc::new(WasmRuntime::new());
+    let plugins = Arc::new(PluginManager::new(runtime, &config, store.clone())?);
+    plugins.sync_directory()?;
+    let executions = Arc::new(ExecutionManager::new(WasmRuntime::new(), Some(store)));
+    Ok((catalog, plugins, executions))
 }
 
 fn data_directory() -> Result<PathBuf, String> {

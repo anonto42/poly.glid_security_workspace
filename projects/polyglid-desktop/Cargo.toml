@@ -9,6 +9,9 @@ description = "Local-first workspace project manager and execution control plane
 dioxus = { version = "0.7", features = ["desktop"] }
 polyglid-core = { path = "../polyglid-core" }
 polyglid-events = { path = "../polyglid-events" }
+polyglid-config = { path = "../polyglid-config" }
+polyglid-plugin-api = { path = "../polyglid-plugin-api" }
+polyglid-runtime = { path = "../polyglid-runtime" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 tokio = { version = "1", features = ["rt"] }

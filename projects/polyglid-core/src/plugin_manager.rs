@@ -331,20 +331,19 @@ where
             return Err("signature check failed: publisher is untrusted".to_string());
         }
 
-        self.store.transaction(|tx| {
-            let plugin_store = self.store.plugins();
-
-            let new_ver = Version::parse(&metadata.version)
-                .map_err(|err| format!("invalid semantic version '{}': {err}", metadata.version))?;
-
-            if let Some(existing) = self.get_plugin(&manifest.id) {
-                if existing.version >= new_ver {
-                    return Err(format!(
-                        "version conflict: workspace already contains equal or newer version '{}' for plugin '{}'",
-                        existing.version, manifest.id.as_str()
-                    ));
-                }
+        let new_ver = Version::parse(&metadata.version)
+            .map_err(|err| format!("invalid semantic version '{}': {err}", metadata.version))?;
+        if let Some(existing) = self.get_plugin(&manifest.id) {
+            if existing.version >= new_ver {
+                return Err(format!(
+                    "version conflict: workspace already contains equal or newer version '{}' for plugin '{}'",
+                    existing.version, manifest.id.as_str()
+                ));
             }
+        }
+
+        let entry = self.store.transaction(|tx| {
+            let plugin_store = self.store.plugins();
 
             let dest_path = self.repository.install(&manifest.id, src_path, &self.plugin_dir)?;
 
@@ -383,15 +382,15 @@ where
                 sig_store.insert_with_conn(tx, &sig_rec)?;
             }
 
-            let audit_details = serde_json::json!({
-                "version": metadata.version,
-                "author": metadata.author,
-                "signature_status": sig_status.to_string()
-            });
-            let _ = self.store.audit_logger().log("PluginInstalled", Some(manifest.id.as_str()), audit_details);
-
             Ok(entry)
-        })
+        })?;
+        let audit_details = serde_json::json!({
+            "version": metadata.version,
+            "author": metadata.author,
+            "signature_status": sig_status.to_string()
+        });
+        let _ = self.store.audit_logger().log("PluginInstalled", Some(manifest.id.as_str()), audit_details);
+        Ok(entry)
     }
 
     pub fn uninstall_plugin(&self, id: &PluginId) -> Result<(), String> {
@@ -492,7 +491,6 @@ mod tests {
     use super::*;
     use crate::PluginManifest;
     use crate::store::WorkspaceStore;
-    use polyglid_config::plugin_registry::JsonRegistryStorage;
     use polyglid_plugin_api::{ApiPluginMetadata, PluginId};
 
     struct TestManagerRuntime;
