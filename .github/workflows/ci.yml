@@ -252,7 +252,13 @@ jobs:
   pages:
     name: Website · Deploy GitHub Pages
     needs: [detect, site-build, result]
-    if: always() && needs.result.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true')
+    if: >-
+      always() &&
+      needs.result.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'push' &&
+        (needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true' || needs.detect.outputs.workflows == 'true')) ||
+       github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
       pages: write

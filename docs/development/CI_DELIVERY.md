@@ -45,7 +45,7 @@ flowchart TD
 
     Result --> Delivery[Delivery result]
     Result -->|Product push to main or manual run| Preview[Linux preview artifact]
-    Result -->|Site or root push to main| Pages[Pages reusable workflow]
+    Result -->|Site, root, or workflow push to main; manual main run| Pages[Pages reusable workflow]
     Result -->|repinfo.json push to main| Metadata[Repository metadata sync]
     Result -->|New vX.Y.Z tag| Release[Release reusable workflow]
 
@@ -80,7 +80,7 @@ top-level GitHub graph.
 | `sdk/**` | SDK | Template, Hello World, and Recon examples compile for `wasm32-wasip1` from the locked SDK workspace | Feeds `CI result` |
 | `tools/ai/**` | AI | The separately locked AI engine builds in release mode | Feeds `CI result` |
 | `docs/**` or root documentation | Docs | Required project and delivery documents exist and are non-empty | Feeds `CI result` |
-| `.github/**` or `scripts/**` | Operations | Node and shell syntax, detector regression cases, and all Actions YAML pass | Workflow-definition changes force a full run |
+| `.github/**` or `scripts/**` | Operations | Node and shell syntax, detector regression cases, and all Actions YAML pass | Workflow-definition changes force a full run and can verify Pages deployment from `main` |
 | `infrastructure/**` | Infrastructure | The current required WPM SQL file exists and is non-empty | Feeds `CI result` |
 | `site/**` or root Cargo version | Website build | The static site generator succeeds | May deploy Pages after `CI result` |
 | `repinfo.json` | Metadata | The requested repository metadata is applied with the configured token | Runs only on `main` after `CI result` |
@@ -113,8 +113,8 @@ cargo test --locked -p polyglid-core \
 | Event | Validation scope | Delivery outcome |
 | --- | --- | --- |
 | Pull request to `main` | Changed areas; unknown/workflow changes force all | Validation only; no artifact, metadata write, deployment, or release |
-| Push to `main` | Changed areas; unknown/workflow changes force all | Linux preview for product or full-validation changes, Pages for site/root changes, metadata sync for `repinfo.json` |
-| Manual **Run workflow** | Every validation branch | Linux preview retained for 14 days; never a formal release |
+| Push to `main` | Changed areas; unknown/workflow changes force all | Linux preview for product or full-validation changes, Pages for site/root/workflow changes, metadata sync for `repinfo.json` |
+| Manual **Run workflow** on `main` | Every validation branch | Linux preview and Pages deployment; never a formal release |
 | Newly created tag such as `v0.10.0` | Every validation branch | Four native archives, Recon component, checksums, GitHub Release, and latest-link verification |
 | Deleted or force-moved version tag | No release publication | The release condition rejects it |
 
@@ -167,13 +167,15 @@ to this tag and contains every download used by the public site.
 
 ## Website And Metadata
 
-A site/root change on `main` calls `deploy-site.yml` only after `CI result`.
-That nested workflow resolves the latest published GitHub Release, generates the
-site, uploads the Pages artifact, and deploys it from `main`. If no public
-release exists, download buttons remain hidden. Browser-side release discovery
-updates the displayed version and reveals stable `releases/latest/download`
-links as soon as the first release is published, so a tag workflow does not need
-a tag-context Pages deployment.
+A site/root/workflow change on `main`, or a manual full run from `main`, calls
+`deploy-site.yml` only after `CI result`. Including workflow changes makes a
+failed or updated deployment pipeline recoverable without an unrelated website
+edit. The nested workflow resolves the latest published GitHub Release,
+generates the site, uploads the Pages artifact, and deploys it from `main`. If
+no public release exists, download buttons remain hidden. Browser-side release
+discovery updates the displayed version and reveals stable
+`releases/latest/download` links as soon as the first release is published, so
+a tag workflow does not need a tag-context Pages deployment.
 
 A `repinfo.json` change on `main` calls `repo-sync.yml` after `CI result`.
 It requires `GH_PAT`; a missing token fails `Delivery result`. Prefer a

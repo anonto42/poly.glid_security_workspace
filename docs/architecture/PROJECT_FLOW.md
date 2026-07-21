@@ -98,7 +98,7 @@ flowchart TD
 
     Result --> DeliveryResult[Delivery result]
     Result -->|product push to main| Preview[Package Linux preview]
-    Result -->|site or root push to main| Pages[Deploy GitHub Pages]
+    Result -->|site, root, or workflow push to main; manual main run| Pages[Deploy GitHub Pages]
     Result -->|repinfo.json on main| Metadata[Sync repository metadata]
     Result -->|new version tag| Release[Build and publish cross-platform release]
     Release --> Latest[Verify stable latest-release website links]
