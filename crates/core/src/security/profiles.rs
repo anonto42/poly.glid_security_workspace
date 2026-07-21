@@ -27,10 +27,7 @@ impl SecurityProfile {
     pub fn balanced() -> Self {
         Self {
             name: "Balanced".to_string(),
-            allowed_capabilities: vec![
-                Capability::DnsResolve,
-                Capability::ReportWrite,
-            ],
+            allowed_capabilities: vec![Capability::DnsResolve, Capability::ReportWrite],
             max_fuel: Some(200_000),
             max_memory_bytes: Some(30 * 1024 * 1024),
             timeout_seconds: 15,

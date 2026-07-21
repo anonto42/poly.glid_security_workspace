@@ -1,9 +1,9 @@
+use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginSource, PluginStatus};
+use polyglid_plugin_api::{Capability, PluginId};
+use rusqlite::{params, Connection, OptionalExtension};
+use semver::Version;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use rusqlite::{params, Connection, OptionalExtension};
-use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginStatus, PluginSource};
-use polyglid_plugin_api::{PluginId, Capability};
-use semver::Version;
 
 pub struct PluginStore {
     conn: Arc<Mutex<Connection>>,
@@ -19,7 +19,11 @@ impl PluginStore {
         self.insert_with_conn(&conn, entry)
     }
 
-    pub fn insert_with_conn(&self, conn: &Connection, entry: &PluginRegistryEntry) -> Result<(), String> {
+    pub fn insert_with_conn(
+        &self,
+        conn: &Connection,
+        entry: &PluginRegistryEntry,
+    ) -> Result<(), String> {
         let capabilities_json = serde_json::to_string(&entry.capabilities)
             .map_err(|err| format!("failed to serialize capabilities: {err}"))?;
         let source_json = serde_json::to_string(&entry.source)
@@ -77,7 +81,20 @@ impl PluginStore {
         ).optional().map_err(|err| format!("failed to query plugin: {err}"))?;
 
         match row {
-            Some((name, version_str, author, description, caps_json, checksum, status_str, source_json, file_size, path_str, created_at, updated_at)) => {
+            Some((
+                name,
+                version_str,
+                author,
+                description,
+                caps_json,
+                checksum,
+                status_str,
+                source_json,
+                file_size,
+                path_str,
+                created_at,
+                updated_at,
+            )) => {
                 let version = Version::parse(&version_str)
                     .map_err(|err| format!("invalid semver in DB: {err}"))?;
                 let capabilities: Vec<Capability> = serde_json::from_str(&caps_json)
@@ -108,7 +125,7 @@ impl PluginStore {
                     path: PathBuf::from(path_str),
                 }))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -118,28 +135,45 @@ impl PluginStore {
             "SELECT id, name, version, author, description, capabilities, checksum, status, source, file_size, path, created_at, updated_at FROM plugins ORDER BY id"
         ).map_err(|err| format!("failed to prepare query: {err}"))?;
 
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, i64>(9)?,
-                row.get::<_, String>(10)?,
-                row.get::<_, i64>(11)?,
-                row.get::<_, i64>(12)?,
-            ))
-        }).map_err(|err| format!("failed to map query: {err}"))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, i64>(9)?,
+                    row.get::<_, String>(10)?,
+                    row.get::<_, i64>(11)?,
+                    row.get::<_, i64>(12)?,
+                ))
+            })
+            .map_err(|err| format!("failed to map query: {err}"))?;
 
         let mut list = Vec::new();
         for row in rows {
-            let (id_str, name, version_str, author, description, caps_json, checksum, status_str, source_json, file_size, path_str, created_at, updated_at) = row.map_err(|err| format!("failed to read row: {err}"))?;
-            let id = PluginId::new(&id_str).map_err(|err| format!("invalid plugin id in DB: {err}"))?;
+            let (
+                id_str,
+                name,
+                version_str,
+                author,
+                description,
+                caps_json,
+                checksum,
+                status_str,
+                source_json,
+                file_size,
+                path_str,
+                created_at,
+                updated_at,
+            ) = row.map_err(|err| format!("failed to read row: {err}"))?;
+            let id =
+                PluginId::new(&id_str).map_err(|err| format!("invalid plugin id in DB: {err}"))?;
             let version = Version::parse(&version_str)
                 .map_err(|err| format!("invalid semver in DB: {err}"))?;
             let capabilities: Vec<Capability> = serde_json::from_str(&caps_json)
@@ -184,11 +218,15 @@ impl PluginStore {
     pub fn toggle_enabled(&self, id: &PluginId, enabled: bool) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         let status = if enabled { "Enabled" } else { "Disabled" };
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
         conn.execute(
             "UPDATE plugins SET status = ?, updated_at = ? WHERE id = ?",
             params![status, now, id.as_str()],
-        ).map_err(|err| format!("failed to update plugin status: {err}"))?;
+        )
+        .map_err(|err| format!("failed to update plugin status: {err}"))?;
         Ok(())
     }
 }

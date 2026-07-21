@@ -52,8 +52,8 @@
     <section class="hero">
       <h1><span>Sandboxed</span> security testing.<br>Zero trust by default.</h1>
       <p>{{ tagline }}</p>
-      <div class="version">v{{ version }}</div>
-      <div class="downloads">
+      <div class="version" data-polyglid-version>{% if release_available %}v{{ version }}{% else %}No public release yet{% endif %}</div>
+      <div class="downloads" id="release-downloads"{% if not release_available %} hidden{% endif %}>
         <a href="{{ download_base }}/polyglid-linux-x86_64.tar.gz">🐧 Linux x86_64</a>
         <a href="{{ download_base }}/polyglid-macos-aarch64.tar.gz">🍎 macOS Apple</a>
         <a href="{{ download_base }}/polyglid-macos-x86_64.tar.gz">🍎 macOS Intel</a>
@@ -107,25 +107,24 @@
 
     <section class="section">
       <h2>Get started</h2>
-      <p>Install a plugin with a single command:</p>
+      <p>Inspect and run the bundled MVP component:</p>
       <div class="diagram">
 <pre>
-$ polyglid plugin install recon-probe.wasm
-🔍 Validating plugin...
-✓ Recon Probe v0.1.0
-  Requests: dns-resolve, report-write
-  Publisher: unknown (unsigned)
-? Approve capabilities? [Y/n] Y
-◇ Installed.
+$ polyglid plugin inspect plugins/recon-probe.component.wasm
+id: polyglid.recon_probe
+name: Reconnaissance Probe
+version: {{ version }}
+requested capabilities:
+- dns-resolve
+- report-write
 
-$ polyglid plugin run recon-probe --target example.com
-🔎 Scanning example.com...
-✓ DNS resolved: 93.184.216.34
-  ─────────────────────────────────
-  Open ports:   80, 443
-  HTTP banner:  ECS (ecs-123)
-  ─────────────────────────────────
-  Report saved to reports/example.com-20260721.json
+$ polyglid plugin run plugins/recon-probe.component.wasm \
+    --target localhost --allow dns-resolve --allow report-write
+plugin: PolyGlid Recon Probe
+target: localhost
+summary: 1 demo observation(s) reported for localhost.
+issues:
+- [info] Loopback target
 </pre>
       </div>
     </section>
@@ -133,8 +132,27 @@ $ polyglid plugin run recon-probe --target example.com
 
   <footer>
     <div class="container">
-      {{ name }} v{{ version }} — built with Rust &middot; <a href="https://github.com/anonto42/poly.glid_security_workspace">GitHub</a>
+      {{ name }} <span data-polyglid-version>{% if release_available %}v{{ version }}{% else %}development build{% endif %}</span> — built with Rust &middot; <a href="https://github.com/anonto42/poly.glid_security_workspace">GitHub</a>
     </div>
   </footer>
+  <script>
+    fetch("https://api.github.com/repos/anonto42/poly.glid_security_workspace/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" }
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+        return response.json();
+      })
+      .then((release) => {
+        if (!release.tag_name) return;
+        document.querySelectorAll("[data-polyglid-version]").forEach((element) => {
+          element.textContent = release.tag_name;
+        });
+        document.getElementById("release-downloads")?.removeAttribute("hidden");
+      })
+      .catch(() => {
+        // Keep the release version embedded at deploy time when the API is unavailable.
+      });
+  </script>
 </body>
 </html>

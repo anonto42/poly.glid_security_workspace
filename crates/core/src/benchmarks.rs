@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod benches {
-    use std::time::{Instant, SystemTime, UNIX_EPOCH};
+    use crate::execution::reports::{ExportedReport, ReportMetadata};
+    use crate::store::WorkspaceStore;
+    use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginSource, PluginStatus};
+    use polyglid_plugin_api::{Capability, Issue, PluginId, PluginReport, Severity};
     use std::fs;
     use std::path::PathBuf;
-    use crate::store::WorkspaceStore;
-    use crate::execution::reports::{ExportedReport, ReportMetadata};
-    use polyglid_plugin_api::{PluginReport, Issue, Severity, PluginId, Capability};
-    use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginStatus, PluginSource};
+    use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     #[test]
     fn run_real_workload_benchmarks() {
@@ -22,7 +22,10 @@ mod benches {
         let store = WorkspaceStore::new(&db_path).unwrap();
         let startup_duration = start_time.elapsed();
         println!("- Workspace startup and migrations: {:?}", startup_duration);
-        assert!(startup_duration.as_secs_f64() < 1.0, "Startup target < 1.0s failed");
+        assert!(
+            startup_duration.as_secs_f64() < 1.0,
+            "Startup target < 1.0s failed"
+        );
 
         // 2. Load workspace with 500 mock execution logs
         let start_write = Instant::now();
@@ -70,12 +73,15 @@ mod benches {
         let per_query_latency = write_duration / 500;
         println!("- 500 mock execution logs written: {:?}", write_duration);
         println!("- Average SQLite query latency: {:?}", per_query_latency);
-        assert!(per_query_latency.as_millis() < 10, "SQLite query latency target < 10ms failed");
+        assert!(
+            per_query_latency.as_millis() < 10,
+            "SQLite query latency target < 10ms failed"
+        );
 
         // 3. Install 10 mock plugins concurrently
         let start_install = Instant::now();
         for i in 0..10 {
-            let pid = PluginId::new(&format!("plugin.mock.{i}")).unwrap();
+            let pid = PluginId::new(format!("plugin.mock.{i}")).unwrap();
             let entry = PluginRegistryEntry {
                 id: pid,
                 name: format!("Mock Plugin {i}"),
@@ -94,8 +100,14 @@ mod benches {
             store.plugins().insert(&entry).unwrap();
         }
         let install_duration = start_install.elapsed();
-        println!("- 10 mock plugins discovery/installation: {:?}", install_duration);
-        assert!(install_duration.as_millis() < 100, "Plugin discovery target < 100ms failed");
+        println!(
+            "- 10 mock plugins discovery/installation: {:?}",
+            install_duration
+        );
+        assert!(
+            install_duration.as_millis() < 100,
+            "Plugin discovery target < 100ms failed"
+        );
 
         // 4. Export a large report and measure serialization latency
         let mut issues = Vec::new();
@@ -123,20 +135,20 @@ mod benches {
                 target_tested: "example.com".to_string(),
                 issues,
                 summary: "Benchmark execution completed with 1000 issues.".to_string(),
-            }
+            },
         };
 
         let start_export = Instant::now();
         let json_report = crate::execution::reports::json::export(&report).unwrap();
         let export_duration = start_export.elapsed();
         println!("- Large JSON export (1000 issues): {:?}", export_duration);
-        assert!(json_report.len() > 0);
+        assert!(!json_report.is_empty());
 
         let start_sarif = Instant::now();
         let sarif_report = crate::execution::reports::sarif::export(&report).unwrap();
         let sarif_duration = start_sarif.elapsed();
         println!("- Large SARIF export (1000 issues): {:?}", sarif_duration);
-        assert!(sarif_report.len() > 0);
+        assert!(!sarif_report.is_empty());
 
         let _ = fs::remove_file(&db_path);
     }

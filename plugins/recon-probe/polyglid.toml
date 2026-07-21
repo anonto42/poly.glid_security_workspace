@@ -1,6 +1,6 @@
 id = "polyglid.recon_probe"
 name = "Recon Probe"
-version = "0.1.0"
+version = "0.10.0"
 entry_world = "security-tool"
 capabilities = ["dns-resolve"]
 

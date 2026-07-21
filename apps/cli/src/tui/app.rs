@@ -85,9 +85,14 @@ impl App {
     pub fn new() -> Self {
         let runtime = Arc::new(WasmRuntime::new());
         let config = AppConfig::load_from_env().unwrap_or_else(|_| AppConfig::development());
-        let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+        let db_path = config
+            .plugin_dir
+            .parent()
+            .unwrap_or(&config.plugin_dir)
+            .join("polyglid.db");
         let store = polyglid_core::store::WorkspaceStore::new(&db_path).unwrap();
-        let pm = Arc::new(PluginManager::new(Arc::clone(&runtime), &config, store.clone()).unwrap());
+        let pm =
+            Arc::new(PluginManager::new(Arc::clone(&runtime), &config, store.clone()).unwrap());
         let _ = pm.sync_directory();
 
         Self {

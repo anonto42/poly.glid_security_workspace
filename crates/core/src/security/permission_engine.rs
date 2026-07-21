@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
-use rusqlite::{params, Connection};
-use std::time::{SystemTime, UNIX_EPOCH};
-use polyglid_plugin_api::{Capability, PluginId};
 use crate::PermissionDecision;
+use polyglid_plugin_api::{Capability, PluginId};
+use rusqlite::{params, Connection};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct PermissionEngine {
     conn: Arc<Mutex<Connection>>,
@@ -20,7 +20,7 @@ impl PermissionEngine {
         scope: &str,
         workspace: &str,
         decision: PermissionDecision,
-        expiration_seconds: Option<u64>
+        expiration_seconds: Option<u64>,
     ) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         let now = SystemTime::now()
@@ -29,7 +29,13 @@ impl PermissionEngine {
             .as_secs();
 
         let expiration = expiration_seconds.map(|secs| now + secs);
-        let id = format!("{}_{}_{}_{}", plugin_id.as_str(), capability, scope, workspace);
+        let id = format!(
+            "{}_{}_{}_{}",
+            plugin_id.as_str(),
+            capability,
+            scope,
+            workspace
+        );
 
         let decision_str = match decision {
             PermissionDecision::Allow => "Allow",
@@ -51,7 +57,7 @@ impl PermissionEngine {
         plugin_id: &PluginId,
         capability: &Capability,
         _scope: &str,
-        workspace: &str
+        workspace: &str,
     ) -> Result<Option<PermissionDecision>, String> {
         let conn = self.conn.lock().unwrap();
         let now = SystemTime::now()
@@ -64,10 +70,17 @@ impl PermissionEngine {
             .map_err(|err| format!("failed to prepare query: {err}"))?;
 
         let mut rows = stmt
-            .query(params![plugin_id.as_str(), capability.to_string(), workspace])
+            .query(params![
+                plugin_id.as_str(),
+                capability.to_string(),
+                workspace
+            ])
             .map_err(|err| format!("query failed: {err}"))?;
 
-        if let Some(row) = rows.next().map_err(|err| format!("row retrieve failed: {err}"))? {
+        if let Some(row) = rows
+            .next()
+            .map_err(|err| format!("row retrieve failed: {err}"))?
+        {
             let decision_str: String = row.get(0).unwrap();
             let expiration: Option<u64> = row.get(1).unwrap();
 

@@ -1,34 +1,20 @@
 name: Deploy site to GitHub Pages
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Release version displayed on the site
-        required: false
-        type: string
   workflow_call:
-    inputs:
-      release_tag:
-        required: false
-        type: string
-  schedule:
-    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -38,23 +24,40 @@ jobs:
         with:
           workspaces: site
 
+      - id: release
+        name: Resolve the release displayed by download links
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          if [ -n "$tag" ]; then
+            echo "Using published release $tag"
+          else
+            echo "No published release found; using the workspace version"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Generate site
         env:
-          POLYGLID_RELEASE_TAG: ${{ inputs.release_tag }}
+          POLYGLID_RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: node scripts/ops/polyglid-ops.mjs site-build
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: site/public
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

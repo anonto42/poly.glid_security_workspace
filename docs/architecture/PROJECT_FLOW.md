@@ -83,12 +83,11 @@ flowchart TD
     Detect -->|infrastructure| Infra[Validate infrastructure layout]
 
     Detect -->|site| SiteBuild[Generate static website]
-    SiteBuild -->|push to main| Pages[Deploy GitHub Pages]
-
-    Detect -->|repinfo.json on main| Metadata[Sync repository metadata]
+    Detect -->|full run or product change| Smoke[Real CLI and WASM smoke test]
 
     Tests --> Result[CI result]
     WasmTest --> Result
+    Smoke --> Result
     Config --> Result
     SDK --> Result
     AI --> Result
@@ -96,30 +95,45 @@ flowchart TD
     Ops --> Result
     Infra --> Result
     SiteBuild --> Result
+
+    Result --> DeliveryResult[Delivery result]
+    Result -->|product push to main| Preview[Package Linux preview]
+    Result -->|site or root push to main| Pages[Deploy GitHub Pages]
+    Result -->|repinfo.json on main| Metadata[Sync repository metadata]
+    Result -->|new version tag| Release[Build and publish cross-platform release]
+    Release --> Latest[Verify stable latest-release website links]
+    Preview --> DeliveryResult
+    Pages --> DeliveryResult
+    Metadata --> DeliveryResult
+    Latest --> DeliveryResult
 ```
 
-- Each box above is a separate Actions job, so GitHub renders the same dependency graph in the workflow run overview.
+- GitHub renders top-level jobs and reusable-workflow caller nodes in the run overview; opening a reusable call shows its nested jobs and steps.
 - `ci.yml` detects changes and connects the validation, build, test, deployment, and final-result jobs.
+- Pull requests and ordinary `main` pushes are selective. Manual runs, new version tags, workflow changes, and unknown paths force every validation branch.
 - `deploy-site.yml` is a reusable workflow called by CI after a successful site build on `main`.
 - `repo-sync.yml` is a reusable workflow called by CI when `repinfo.json` changes on `main`.
 - `scripts/ops/polyglid-ops.mjs` is the shared local and CI entry point.
+- `docs/development/CI_DELIVERY.md` explains the event, preview, and release lifecycle step by step.
 
 ## Release Flow
 
 ```mermaid
 flowchart LR
-    Tag[Push version tag] --> Matrix[Native build matrix]
+    Tag[Push new version tag] --> CI[Full CI result]
+    CI --> Preflight[Validate exact versions and main ancestry]
+    Preflight --> Plugin[Build and inspect Recon component]
+    Plugin --> Matrix[Native build matrix]
     Matrix --> Linux[Linux x86_64]
     Matrix --> Windows[Windows x86_64]
     Matrix --> MacIntel[macOS Intel]
     Matrix --> MacArm[macOS Apple Silicon]
-    Tag --> Plugin[Recon Probe WASM component]
-    Linux --> Release[GitHub Release + SHA256SUMS]
-    Windows --> Release
-    MacIntel --> Release
-    MacArm --> Release
-    Plugin --> Release
-    Release --> Website[Refresh GitHub Pages downloads]
+    Linux --> Draft[Draft release + SHA256SUMS]
+    Windows --> Draft
+    MacIntel --> Draft
+    MacArm --> Draft
+    Draft --> Publish[Verify assets and publish]
+    Publish --> Website[Verify latest website download links]
 ```
 
 ## Generated State

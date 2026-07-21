@@ -6,7 +6,7 @@ pub fn export(report: &ExportedReport) -> Result<String, String> {
 
     for (index, issue) in report.report.issues.iter().enumerate() {
         let rule_id = format!("PG{:04}", index + 1);
-        
+
         let sarif_severity = match format!("{:?}", issue.severity).to_lowercase().as_str() {
             "critical" | "high" => "error",
             "medium" => "warning",

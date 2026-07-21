@@ -10,10 +10,10 @@ use polyglid_config::AppConfig;
 use polyglid_events::VecEventSink;
 use polyglid_plugin_api::{Capability, PluginId, PluginReport};
 
+use crate::store::WorkspaceStore;
 use crate::{
     CoreEngine, InMemoryPermissionStore, PluginRef, PluginRunRequest, PluginRuntime, Target,
 };
-use crate::store::WorkspaceStore;
 
 pub mod reports;
 
@@ -148,7 +148,7 @@ where
                 }
             }
         }
-        
+
         jobs_list.reverse();
 
         Self {
@@ -196,7 +196,10 @@ where
                 &plugin_id,
                 &target,
                 "Queued",
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
             );
         }
 
@@ -225,7 +228,9 @@ where
                 }
             }
             if let Some(ref store) = store_clone {
-                let _ = store.executions().update_job(&job_id, "Starting", 0, 0, None);
+                let _ = store
+                    .executions()
+                    .update_job(&job_id, "Starting", 0, 0, None);
             }
             let _ = tx_clone.send(ExecutionEvent::JobStateChanged {
                 job_id,
@@ -243,7 +248,9 @@ where
                 }
             }
             if let Some(ref store) = store_clone {
-                let _ = store.executions().update_job(&job_id, "Running", 0, 0, None);
+                let _ = store
+                    .executions()
+                    .update_job(&job_id, "Running", 0, 0, None);
             }
             let _ = tx_clone.send(ExecutionEvent::JobStateChanged {
                 job_id,
@@ -319,7 +326,7 @@ where
             let duration = start_time.elapsed();
             let metrics = JobMetrics {
                 duration,
-                fuel_consumed: Some(config.fuel_limit), 
+                fuel_consumed: Some(config.fuel_limit),
                 memory_used: None,
                 timestamp,
                 stage: Some("Finished".to_string()),
@@ -362,8 +369,7 @@ where
                             &job_id,
                             &plugin_id_obj,
                             &target_clone,
-                            &report.summary,
-                            &report.issues,
+                            &report,
                             &filepath,
                         );
                     }
@@ -488,13 +494,9 @@ fn fail_job(
 
     if let Some(ref s) = store {
         let duration = start_time.elapsed().as_millis() as u64;
-        let _ = s.executions().update_job(
-            &job_id,
-            "Failed",
-            duration,
-            0,
-            Some(&error),
-        );
+        let _ = s
+            .executions()
+            .update_job(&job_id, "Failed", duration, 0, Some(&error));
     }
 
     let _ = tx.send(ExecutionEvent::JobFailed {
@@ -507,7 +509,7 @@ fn fail_job(
 use std::cell::Cell;
 
 thread_local! {
-    pub static CURRENT_JOB_ID: Cell<Option<Uuid>> = Cell::new(None);
+    pub static CURRENT_JOB_ID: Cell<Option<Uuid>> = const { Cell::new(None) };
 }
 
 #[cfg(test)]
@@ -560,9 +562,12 @@ mod tests {
 
     #[test]
     fn test_successful_job_execution() {
-        let manager = ExecutionManager::new(MockRuntime {
-            delay: Duration::from_millis(10),
-        }, None);
+        let manager = ExecutionManager::new(
+            MockRuntime {
+                delay: Duration::from_millis(10),
+            },
+            None,
+        );
         let mut rx = manager.subscribe();
 
         let config = ExecutionConfig {
@@ -606,9 +611,12 @@ mod tests {
 
     #[test]
     fn test_job_execution_timeout() {
-        let manager = ExecutionManager::new(MockRuntime {
-            delay: Duration::from_millis(100),
-        }, None);
+        let manager = ExecutionManager::new(
+            MockRuntime {
+                delay: Duration::from_millis(100),
+            },
+            None,
+        );
         let mut rx = manager.subscribe();
 
         let config = ExecutionConfig {
@@ -624,12 +632,10 @@ mod tests {
         let mut timed_out = false;
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(2) {
-            if let Ok(event) = rx.try_recv() {
-                if let ExecutionEvent::JobStateChanged { job_id: id, state } = event {
-                    if id == job_id && state == JobState::TimedOut {
-                        timed_out = true;
-                        break;
-                    }
+            if let Ok(ExecutionEvent::JobStateChanged { job_id: id, state }) = rx.try_recv() {
+                if id == job_id && state == JobState::TimedOut {
+                    timed_out = true;
+                    break;
                 }
             }
             std::thread::sleep(Duration::from_millis(5));
@@ -644,9 +650,12 @@ mod tests {
 
     #[test]
     fn test_job_execution_cancellation() {
-        let manager = ExecutionManager::new(MockRuntime {
-            delay: Duration::from_millis(200),
-        }, None);
+        let manager = ExecutionManager::new(
+            MockRuntime {
+                delay: Duration::from_millis(200),
+            },
+            None,
+        );
         let mut rx = manager.subscribe();
 
         let config = ExecutionConfig {
@@ -667,12 +676,10 @@ mod tests {
         let mut cancelled = false;
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(2) {
-            if let Ok(event) = rx.try_recv() {
-                if let ExecutionEvent::JobStateChanged { job_id: id, state } = event {
-                    if id == job_id && state == JobState::Cancelled {
-                        cancelled = true;
-                        break;
-                    }
+            if let Ok(ExecutionEvent::JobStateChanged { job_id: id, state }) = rx.try_recv() {
+                if id == job_id && state == JobState::Cancelled {
+                    cancelled = true;
+                    break;
                 }
             }
             std::thread::sleep(Duration::from_millis(5));

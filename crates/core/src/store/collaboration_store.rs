@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbUser {
@@ -72,18 +72,24 @@ impl CollaborationStore {
         let mut stmt = conn.prepare(
             "SELECT id, username, password_hash, salt, role, created_at, updated_at FROM users WHERE id = ?1",
         ).map_err(|e| format!("prepare get_user: {e}"))?;
-        let result: Result<Vec<DbUser>, _> = stmt.query_map([id], |row| {
-            Ok(DbUser {
-                id: row.get(0)?,
-                username: row.get(1)?,
-                password_hash: row.get(2)?,
-                salt: row.get(3)?,
-                role: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+        let result: Result<Vec<DbUser>, _> = stmt
+            .query_map([id], |row| {
+                Ok(DbUser {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    password_hash: row.get(2)?,
+                    salt: row.get(3)?,
+                    role: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
             })
-        }).map_err(|e| format!("query get_user: {e}"))?.collect();
-        Ok(result.map_err(|e| format!("row get_user: {e}"))?.into_iter().next())
+            .map_err(|e| format!("query get_user: {e}"))?
+            .collect();
+        Ok(result
+            .map_err(|e| format!("row get_user: {e}"))?
+            .into_iter()
+            .next())
     }
 
     pub fn get_user_by_username(&self, username: &str) -> Result<Option<DbUser>, String> {
@@ -91,18 +97,24 @@ impl CollaborationStore {
         let mut stmt = conn.prepare(
             "SELECT id, username, password_hash, salt, role, created_at, updated_at FROM users WHERE username = ?1",
         ).map_err(|e| format!("prepare get_user_by_username: {e}"))?;
-        let result: Result<Vec<DbUser>, _> = stmt.query_map([username], |row| {
-            Ok(DbUser {
-                id: row.get(0)?,
-                username: row.get(1)?,
-                password_hash: row.get(2)?,
-                salt: row.get(3)?,
-                role: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+        let result: Result<Vec<DbUser>, _> = stmt
+            .query_map([username], |row| {
+                Ok(DbUser {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    password_hash: row.get(2)?,
+                    salt: row.get(3)?,
+                    role: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
             })
-        }).map_err(|e| format!("query get_user_by_username: {e}"))?.collect();
-        Ok(result.map_err(|e| format!("row get_user_by_username: {e}"))?.into_iter().next())
+            .map_err(|e| format!("query get_user_by_username: {e}"))?
+            .collect();
+        Ok(result
+            .map_err(|e| format!("row get_user_by_username: {e}"))?
+            .into_iter()
+            .next())
     }
 
     pub fn count_users(&self) -> Result<i64, String> {
@@ -116,17 +128,20 @@ impl CollaborationStore {
         let mut stmt = conn.prepare(
             "SELECT id, username, password_hash, salt, role, created_at, updated_at FROM users ORDER BY username ASC",
         ).map_err(|e| format!("prepare list_users: {e}"))?;
-        let result: Result<Vec<DbUser>, _> = stmt.query_map([], |row| {
-            Ok(DbUser {
-                id: row.get(0)?,
-                username: row.get(1)?,
-                password_hash: row.get(2)?,
-                salt: row.get(3)?,
-                role: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+        let result: Result<Vec<DbUser>, _> = stmt
+            .query_map([], |row| {
+                Ok(DbUser {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    password_hash: row.get(2)?,
+                    salt: row.get(3)?,
+                    role: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
             })
-        }).map_err(|e| format!("query list_users: {e}"))?.collect();
+            .map_err(|e| format!("query list_users: {e}"))?
+            .collect();
         result.map_err(|e| format!("row list_users: {e}"))
     }
 
@@ -150,18 +165,24 @@ impl CollaborationStore {
              JOIN users u ON t.user_id = u.id \
              WHERE t.token = ?1 AND t.expires_at > ?2",
         ).map_err(|e| format!("prepare validate_token: {e}"))?;
-        let result: Result<Vec<DbUser>, _> = stmt.query_map(params![token, now], |row| {
-            Ok(DbUser {
-                id: row.get(0)?,
-                username: row.get(1)?,
-                password_hash: row.get(2)?,
-                salt: row.get(3)?,
-                role: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+        let result: Result<Vec<DbUser>, _> = stmt
+            .query_map(params![token, now], |row| {
+                Ok(DbUser {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    password_hash: row.get(2)?,
+                    salt: row.get(3)?,
+                    role: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
             })
-        }).map_err(|e| format!("query validate_token: {e}"))?.collect();
-        Ok(result.map_err(|e| format!("row validate_token: {e}"))?.into_iter().next())
+            .map_err(|e| format!("query validate_token: {e}"))?
+            .collect();
+        Ok(result
+            .map_err(|e| format!("row validate_token: {e}"))?
+            .into_iter()
+            .next())
     }
 
     pub fn revoke_token(&self, token: &str) -> Result<(), String> {
@@ -185,16 +206,20 @@ impl CollaborationStore {
 
     pub fn list_teams(&self) -> Result<Vec<DbTeam>, String> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id, name, created_at, updated_at FROM teams ORDER BY name ASC")
+        let mut stmt = conn
+            .prepare("SELECT id, name, created_at, updated_at FROM teams ORDER BY name ASC")
             .map_err(|e| format!("prepare list_teams: {e}"))?;
-        let result: Result<Vec<DbTeam>, _> = stmt.query_map([], |row| {
-            Ok(DbTeam {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?,
-                updated_at: row.get(3)?,
+        let result: Result<Vec<DbTeam>, _> = stmt
+            .query_map([], |row| {
+                Ok(DbTeam {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                })
             })
-        }).map_err(|e| format!("query list_teams: {e}"))?.collect();
+            .map_err(|e| format!("query list_teams: {e}"))?
+            .collect();
         result.map_err(|e| format!("row list_teams: {e}"))
     }
 
@@ -227,19 +252,22 @@ impl CollaborationStore {
              JOIN users u ON m.user_id = u.id \
              WHERE m.team_id = ?1 ORDER BY u.username ASC",
         ).map_err(|e| format!("prepare list_team_members: {e}"))?;
-        let result: Result<Vec<(DbUser, String)>, _> = stmt.query_map([team_id], |row| {
-            let user = DbUser {
-                id: row.get(0)?,
-                username: row.get(1)?,
-                password_hash: row.get(2)?,
-                salt: row.get(3)?,
-                role: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-            };
-            let member_role: String = row.get(7)?;
-            Ok((user, member_role))
-        }).map_err(|e| format!("query list_team_members: {e}"))?.collect();
+        let result: Result<Vec<(DbUser, String)>, _> = stmt
+            .query_map([team_id], |row| {
+                let user = DbUser {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    password_hash: row.get(2)?,
+                    salt: row.get(3)?,
+                    role: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                };
+                let member_role: String = row.get(7)?;
+                Ok((user, member_role))
+            })
+            .map_err(|e| format!("query list_team_members: {e}"))?
+            .collect();
         result.map_err(|e| format!("row list_team_members: {e}"))
     }
 }
@@ -257,7 +285,7 @@ mod tests {
     fn test_collaboration_users_and_tokens() {
         let ws = make_store();
         let store = ws.collaboration();
-        
+
         let user = DbUser {
             id: "u1".to_string(),
             username: "alice".to_string(),
@@ -349,4 +377,3 @@ mod tests {
         assert_eq!(members_empty.len(), 0);
     }
 }
-

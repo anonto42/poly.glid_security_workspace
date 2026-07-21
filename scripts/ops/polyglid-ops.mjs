@@ -20,6 +20,7 @@ Commands:
   detect [base] [head]  Detect changed product areas as JSON
   repo-sync             Apply repinfo.json to GitHub repository metadata
   site-build            Generate the static website
+  mvp-smoke             Run the real CLI-to-WASM MVP smoke test
   validate              Validate metadata, scripts, formatting, and workspace
   help                  Show this help`);
 }
@@ -33,7 +34,10 @@ switch (command) {
     run(process.execPath, ['scripts/ops/sync-repo.mjs']);
     break;
   case 'site-build':
-    run('cargo', ['run', '-p', 'polyglid-site']);
+    run('cargo', ['run', '--locked', '-p', 'polyglid-site']);
+    break;
+  case 'mvp-smoke':
+    run('bash', ['scripts/ops/mvp-smoke.sh']);
     break;
   case 'validate':
     run(process.execPath, ['-e', "JSON.parse(require('fs').readFileSync('repinfo.json','utf8'))"]);

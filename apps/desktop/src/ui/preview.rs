@@ -27,13 +27,19 @@ pub(crate) fn seed_plugins() -> Vec<PluginCard> {
             enabled: true,
         },
         PluginCard {
-            id: "dependency-audit".into(), name: "Dependency Audit".into(), version: "0.1.0".into(),
-            description: "Reviews Rust dependency metadata and produces bounded findings.".into(), capabilities: vec!["workspace-read".into()],
+            id: "dependency-audit".into(),
+            name: "Dependency Audit".into(),
+            version: "0.1.0".into(),
+            description: "Reviews Rust dependency metadata and produces bounded findings.".into(),
+            capabilities: vec!["workspace-read".into()],
             enabled: true,
         },
         PluginCard {
-            id: "code-review".into(), name: "Code Review".into(), version: "0.1.0".into(),
-            description: "Local-first static review helper behind explicit approval gates.".into(), capabilities: vec!["workspace-read".into(), "ai-inference".into()],
+            id: "code-review".into(),
+            name: "Code Review".into(),
+            version: "0.1.0".into(),
+            description: "Local-first static review helper behind explicit approval gates.".into(),
+            capabilities: vec!["workspace-read".into(), "ai-inference".into()],
             enabled: false,
         },
     ]

@@ -16,7 +16,7 @@ use super::app::{App, Focus, Mode};
 pub fn handle_key(app: &mut App, key: KeyEvent) {
     if app.show_help {
         if key.code == KeyCode::Char('?') || key.code == KeyCode::Esc {
-            app.show_help = false;
+            app.toggle_help();
         }
         return;
     }
@@ -37,7 +37,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
 fn handle_normal_key(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('q') => app.quit = true,
-        KeyCode::Char('?') => app.show_help = true,
+        KeyCode::Char('?') => app.toggle_help(),
         KeyCode::Char(':') => app.enter_command_mode(),
         KeyCode::Tab => app.focus = app.focus.next(),
         KeyCode::Enter => {
@@ -107,7 +107,7 @@ fn execute_command(app: &mut App, cmd: &str) {
                     app.log_info(format!("Cancelled scan: {}", job.id));
                 }
             } else {
-                app.log_error("No active scan selected to cancel");
+                app.log_warn("No active scan selected to cancel");
             }
         }
         "inspect" => {
@@ -124,8 +124,8 @@ fn execute_command(app: &mut App, cmd: &str) {
                     app.log_info(format!("Plugin ID: {}", entry.id.as_str()));
                     app.log_info(format!("Display Name: {}", entry.name));
                     app.log_info(format!("Version: {}", entry.version));
-                    app.log_info(format!("Status: {}", entry.status.to_string()));
-                    app.log_info(format!("Source: {}", entry.source.to_string()));
+                    app.log_info(format!("Status: {}", entry.status));
+                    app.log_info(format!("Source: {}", entry.source));
                     app.log_info(format!("Checksum: {}", entry.checksum));
                     if entry.capabilities.is_empty() {
                         app.log_info("Requested capabilities: none");

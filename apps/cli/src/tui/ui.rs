@@ -70,7 +70,10 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
         Span::styled("Security Workspace", Style::default().fg(TEXT)),
-        Span::styled("  v0.1.0", Style::default().fg(TEXT_DIM)),
+        Span::styled(
+            concat!("  v", env!("CARGO_PKG_VERSION")),
+            Style::default().fg(TEXT_DIM),
+        ),
         Span::styled(
             format!("  │  uptime: {}m {}s ", uptime / 60, uptime % 60),
             Style::default().fg(TEXT_DIM),

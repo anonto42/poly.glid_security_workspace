@@ -6,14 +6,35 @@ pub fn export(report: &ExportedReport) -> Result<String, String> {
     md.push_str("## Metadata\n\n");
     md.push_str("| Key | Value |\n");
     md.push_str("|---|---|\n");
-    md.push_str(&format!("| **PolyGlid Version** | {} |\n", report.metadata.polyglid_version));
-    md.push_str(&format!("| **Plugin ID** | {} |\n", report.metadata.plugin_id));
-    md.push_str(&format!("| **Plugin Version** | {} |\n", report.metadata.plugin_version));
+    md.push_str(&format!(
+        "| **PolyGlid Version** | {} |\n",
+        report.metadata.polyglid_version
+    ));
+    md.push_str(&format!(
+        "| **Plugin ID** | {} |\n",
+        report.metadata.plugin_id
+    ));
+    md.push_str(&format!(
+        "| **Plugin Version** | {} |\n",
+        report.metadata.plugin_version
+    ));
     md.push_str(&format!("| **Target** | {} |\n", report.metadata.target));
-    md.push_str(&format!("| **Timestamp** | {} |\n", report.metadata.timestamp));
-    md.push_str(&format!("| **Security Profile** | {} |\n", report.metadata.security_profile));
-    md.push_str(&format!("| **Execution Duration** | {} ms |\n", report.metadata.execution_duration_ms));
-    md.push_str(&format!("| **Report Format Version** | {} |\n\n", report.metadata.report_format_version));
+    md.push_str(&format!(
+        "| **Timestamp** | {} |\n",
+        report.metadata.timestamp
+    ));
+    md.push_str(&format!(
+        "| **Security Profile** | {} |\n",
+        report.metadata.security_profile
+    ));
+    md.push_str(&format!(
+        "| **Execution Duration** | {} ms |\n",
+        report.metadata.execution_duration_ms
+    ));
+    md.push_str(&format!(
+        "| **Report Format Version** | {} |\n\n",
+        report.metadata.report_format_version
+    ));
 
     md.push_str("## Summary\n\n");
     md.push_str(&format!("{}\n\n", report.report.summary));

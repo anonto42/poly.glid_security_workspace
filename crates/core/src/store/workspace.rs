@@ -1,7 +1,7 @@
+use crate::store::migrations::MigrationManager;
+use rusqlite::Connection;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use rusqlite::Connection;
-use crate::store::migrations::MigrationManager;
 
 pub struct WorkspaceStore {
     pub(crate) conn: Arc<Mutex<Connection>>,
@@ -22,7 +22,11 @@ impl WorkspaceStore {
 
         MigrationManager::run(&mut conn)?;
 
-        let profile_default = if cfg!(test) { "Development" } else { "Balanced" };
+        let profile_default = if cfg!(test) {
+            "Development"
+        } else {
+            "Balanced"
+        };
         let _ = conn.execute(
             "INSERT OR IGNORE INTO settings (key, value, scope, created_at, updated_at) VALUES ('security_profile', ?, 'Workspace', 0, 0)",
             [profile_default],
@@ -85,7 +89,9 @@ impl WorkspaceStore {
         crate::store::project_catalog_store::ProjectCatalogStore::new(Arc::clone(&self.conn))
     }
 
-    pub fn workspace_catalog(&self) -> crate::store::workspace_catalog_store::WorkspaceCatalogStore {
+    pub fn workspace_catalog(
+        &self,
+    ) -> crate::store::workspace_catalog_store::WorkspaceCatalogStore {
         crate::store::workspace_catalog_store::WorkspaceCatalogStore::new(Arc::clone(&self.conn))
     }
 

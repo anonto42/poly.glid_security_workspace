@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use rusqlite::{params, Connection};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct DbTrustStore {
@@ -56,7 +56,10 @@ impl DbTrustStore {
             .query(params![id])
             .map_err(|err| format!("query failed: {err}"))?;
 
-        if let Some(row) = rows.next().map_err(|err| format!("row retrieve failed: {err}"))? {
+        if let Some(row) = rows
+            .next()
+            .map_err(|err| format!("row retrieve failed: {err}"))?
+        {
             Ok(Some(PublisherRecord {
                 id: row.get(0).unwrap(),
                 name: row.get(1).unwrap(),
@@ -72,7 +75,10 @@ impl DbTrustStore {
         }
     }
 
-    pub fn get_publisher_by_fingerprint(&self, fingerprint: &str) -> Result<Option<PublisherRecord>, String> {
+    pub fn get_publisher_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<PublisherRecord>, String> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare("SELECT id, name, public_key, fingerprint, created_at, last_verified_at, trust_level, revocation_status FROM trusted_publishers WHERE fingerprint = ?")
@@ -82,7 +88,10 @@ impl DbTrustStore {
             .query(params![fingerprint])
             .map_err(|err| format!("query failed: {err}"))?;
 
-        if let Some(row) = rows.next().map_err(|err| format!("row retrieve failed: {err}"))? {
+        if let Some(row) = rows
+            .next()
+            .map_err(|err| format!("row retrieve failed: {err}"))?
+        {
             Ok(Some(PublisherRecord {
                 id: row.get(0).unwrap(),
                 name: row.get(1).unwrap(),

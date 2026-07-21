@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use rusqlite::{params, Connection};
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

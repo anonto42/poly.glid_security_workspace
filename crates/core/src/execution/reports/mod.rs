@@ -1,6 +1,6 @@
+pub mod html;
 pub mod json;
 pub mod markdown;
-pub mod html;
 pub mod sarif;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

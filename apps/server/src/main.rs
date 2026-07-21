@@ -1,27 +1,33 @@
 use axum::{
-    extract::{Path as AxumPath, Query, State, ws::{Message, WebSocket, WebSocketUpgrade}},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Path as AxumPath, Query, State,
+    },
     http::{header, HeaderMap, StatusCode},
     middleware,
     response::IntoResponse,
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Json, Router,
 };
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
 use polyglid_config::AppConfig;
-use polyglid_plugin_api::PluginId;
-use polyglid_runtime::WasmRuntime;
 use polyglid_core::{
     execution::ExecutionManager,
     plugin_manager::PluginManager,
-    store::WorkspaceStore,
-    services::{PluginService, ExecutionService, TargetService, ReportService, SettingsService, MarketplaceService, CollaborationService},
+    services::{
+        CollaborationService, ExecutionService, MarketplaceService, PluginService, ReportService,
+        SettingsService, TargetService,
+    },
+    store::collaboration_store::{DbTeam, DbUser},
     store::marketplace_store::{DbMarketplacePackage, DbMarketplaceRating, DbPublisherProfile},
-    store::collaboration_store::{DbUser, DbTeam},
+    store::WorkspaceStore,
 };
+use polyglid_plugin_api::PluginId;
+use polyglid_runtime::WasmRuntime;
 
 mod auth;
 #[cfg(test)]
@@ -44,12 +50,19 @@ struct ServerState {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load_from_env().unwrap_or_else(|_| AppConfig::development());
     let runtime = std::sync::Arc::new(WasmRuntime::new());
-    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
-    
+    let db_path = config
+        .plugin_dir
+        .parent()
+        .unwrap_or(&config.plugin_dir)
+        .join("polyglid.db");
+
     let store = WorkspaceStore::new(&db_path)?;
     let pm = Arc::new(PluginManager::new(runtime.clone(), &config, store.clone())?);
-    let em = Arc::new(ExecutionManager::new(WasmRuntime::new(), Some(store.clone())));
-    
+    let em = Arc::new(ExecutionManager::new(
+        WasmRuntime::new(),
+        Some(store.clone()),
+    ));
+
     // Sync plugins
     let _ = pm.sync_directory();
 
@@ -82,7 +95,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/auth/users", get(list_users))
         // Teams
         .route("/teams", get(list_teams).post(create_team))
-        .route("/teams/:id/members", get(list_team_members).post(add_team_member))
+        .route(
+            "/teams/:id/members",
+            get(list_team_members).post(add_team_member),
+        )
         .route("/teams/:id/members/:user_id", delete(remove_team_member))
         // Plugins
         .route("/plugins", get(get_plugins).post(install_plugin))
@@ -103,10 +119,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/marketplace", get(marketplace_list))
         .route("/marketplace/search", get(marketplace_search))
         .route("/marketplace/packages/:id", get(marketplace_get_package))
-        .route("/marketplace/packages/:id/ratings", get(marketplace_list_ratings).post(marketplace_add_rating))
-        .route("/marketplace/packages/:id/install", post(marketplace_install))
+        .route(
+            "/marketplace/packages/:id/ratings",
+            get(marketplace_list_ratings).post(marketplace_add_rating),
+        )
+        .route(
+            "/marketplace/packages/:id/install",
+            post(marketplace_install),
+        )
         .route("/marketplace/publish", post(marketplace_publish))
-        .route("/marketplace/publishers", get(marketplace_list_publishers).post(marketplace_register_publisher))
+        .route(
+            "/marketplace/publishers",
+            get(marketplace_list_publishers).post(marketplace_register_publisher),
+        )
         .layer(middleware::from_fn_with_state(
             auth_state,
             auth::auth_middleware,
@@ -149,8 +174,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn get_plugins(
     State(state): State<ServerState>,
-) -> Result<Json<Vec<polyglid_config::plugin_registry::PluginRegistryEntry>>, (StatusCode, String)> {
-    state.plugin_service.list_plugins()
+) -> Result<Json<Vec<polyglid_config::plugin_registry::PluginRegistryEntry>>, (StatusCode, String)>
+{
+    state
+        .plugin_service
+        .list_plugins()
         .map(Json)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -166,9 +194,14 @@ async fn install_plugin(
     Json(req): Json<InstallRequest>,
 ) -> Result<Json<polyglid_config::plugin_registry::PluginRegistryEntry>, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can install plugins".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can install plugins".to_string(),
+        ));
     }
-    state.plugin_service.install_plugin(Path::new(&req.path))
+    state
+        .plugin_service
+        .install_plugin(Path::new(&req.path))
         .map(Json)
         .map_err(|err| (StatusCode::BAD_REQUEST, err))
 }
@@ -179,10 +212,15 @@ async fn uninstall_plugin(
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can uninstall plugins".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can uninstall plugins".to_string(),
+        ));
     }
     let pid = PluginId::new(&id).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
-    state.plugin_service.uninstall_plugin(&pid)
+    state
+        .plugin_service
+        .uninstall_plugin(&pid)
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -199,10 +237,15 @@ async fn toggle_plugin(
     Json(req): Json<ToggleRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners or Editors can toggle plugins".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners or Editors can toggle plugins".to_string(),
+        ));
     }
     let pid = PluginId::new(&id).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
-    state.plugin_service.toggle_plugin(&pid, req.enabled)
+    state
+        .plugin_service
+        .toggle_plugin(&pid, req.enabled)
         .map(|_| StatusCode::OK)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -224,10 +267,16 @@ async fn run_execution(
     Json(req): Json<RunExecutionRequest>,
 ) -> Result<(StatusCode, Json<RunExecutionResponse>), (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners or Editors can run scans".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners or Editors can run scans".to_string(),
+        ));
     }
-    let pid = PluginId::new(&req.plugin_id).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
-    state.execution_service.run_plugin(&pid, &req.target)
+    let pid =
+        PluginId::new(&req.plugin_id).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
+    state
+        .execution_service
+        .run_plugin(&pid, &req.target)
         .map(|job_id| (StatusCode::ACCEPTED, Json(RunExecutionResponse { job_id })))
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -235,7 +284,9 @@ async fn run_execution(
 async fn list_executions(
     State(state): State<ServerState>,
 ) -> Result<Json<Vec<polyglid_core::store::execution_store::DbJobRecord>>, (StatusCode, String)> {
-    state.execution_service.list_executions()
+    state
+        .execution_service
+        .list_executions()
         .map(Json)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -244,7 +295,9 @@ async fn get_execution(
     State(state): State<ServerState>,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<polyglid_core::store::execution_store::DbJobRecord>, (StatusCode, String)> {
-    state.execution_service.get_execution(&id)
+    state
+        .execution_service
+        .get_execution(&id)
         .and_then(|opt| opt.ok_or_else(|| "Execution not found".to_string()))
         .map(Json)
         .map_err(|err| (StatusCode::NOT_FOUND, err))
@@ -253,7 +306,9 @@ async fn get_execution(
 async fn list_targets(
     State(state): State<ServerState>,
 ) -> Result<Json<Vec<String>>, (StatusCode, String)> {
-    state.target_service.list_targets()
+    state
+        .target_service
+        .list_targets()
         .map(Json)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -269,9 +324,14 @@ async fn add_target(
     Json(req): Json<AddTargetRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners or Editors can add targets".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners or Editors can add targets".to_string(),
+        ));
     }
-    state.target_service.add_target(&req.name)
+    state
+        .target_service
+        .add_target(&req.name)
         .map(|_| StatusCode::CREATED)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -282,9 +342,14 @@ async fn remove_target(
     AxumPath(name): AxumPath<String>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can remove targets".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can remove targets".to_string(),
+        ));
     }
-    state.target_service.remove_target(&name)
+    state
+        .target_service
+        .remove_target(&name)
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -292,7 +357,9 @@ async fn remove_target(
 async fn list_reports(
     State(state): State<ServerState>,
 ) -> Result<Json<Vec<polyglid_core::store::report_store::DbReportRecord>>, (StatusCode, String)> {
-    state.report_service.list_reports()
+    state
+        .report_service
+        .list_reports()
         .map(Json)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -301,7 +368,9 @@ async fn get_report(
     State(state): State<ServerState>,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<polyglid_core::store::report_store::DbReportRecord>, (StatusCode, String)> {
-    state.report_service.get_report(&id)
+    state
+        .report_service
+        .get_report(&id)
         .and_then(|opt| opt.ok_or_else(|| "Report not found".to_string()))
         .map(Json)
         .map_err(|err| (StatusCode::NOT_FOUND, err))
@@ -333,7 +402,9 @@ async fn download_report(
         "json".to_string()
     });
 
-    let content = state.report_service.export_report(&id, &format)
+    let content = state
+        .report_service
+        .export_report(&id, &format)
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))?;
 
     let content_type = match format.as_str() {
@@ -346,16 +417,16 @@ async fn download_report(
     let response = axum::response::Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
-        .header(header::CONTENT_DISPOSITION, format!("attachment; filename=\"report-{}.{}\"", id, format))
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"report-{}.{}\"", id, format),
+        )
         .body(axum::body::Body::from(content))
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     Ok(response)
 }
 
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<ServerState>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<ServerState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state.execution_manager.clone()))
 }
 
@@ -380,12 +451,17 @@ async fn configure_plugin(
     Json(req): Json<std::collections::HashMap<String, String>>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners or Editors can configure plugins".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners or Editors can configure plugins".to_string(),
+        ));
     }
     let pid = PluginId::new(&id).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     for (k, v) in req {
         let setting_key = format!("plugin:{}:{}", pid.as_str(), k);
-        state.settings_service.set_setting(&setting_key, &v)
+        state
+            .settings_service
+            .set_setting(&setting_key, &v)
             .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))?;
     }
     Ok(StatusCode::OK)
@@ -403,7 +479,9 @@ struct MarketplaceSearchQuery {
 async fn marketplace_list(
     State(state): State<ServerState>,
 ) -> Result<Json<Vec<DbMarketplacePackage>>, (StatusCode, String)> {
-    state.marketplace_service.list_featured()
+    state
+        .marketplace_service
+        .list_featured()
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
@@ -414,7 +492,9 @@ async fn marketplace_search(
 ) -> Result<Json<Vec<DbMarketplacePackage>>, (StatusCode, String)> {
     let query = params.q.as_deref().unwrap_or("");
     let category = params.category.as_deref();
-    state.marketplace_service.search(query, category)
+    state
+        .marketplace_service
+        .search(query, category)
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
@@ -423,7 +503,9 @@ async fn marketplace_get_package(
     State(state): State<ServerState>,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<DbMarketplacePackage>, (StatusCode, String)> {
-    state.marketplace_service.get_package(&id)
+    state
+        .marketplace_service
+        .get_package(&id)
         .and_then(|opt| opt.ok_or_else(|| "Package not found".to_string()))
         .map(Json)
         .map_err(|e| (StatusCode::NOT_FOUND, e))
@@ -435,9 +517,14 @@ async fn marketplace_publish(
     Json(pkg): Json<DbMarketplacePackage>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can publish marketplace packages".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can publish marketplace packages".to_string(),
+        ));
     }
-    state.marketplace_service.publish(&pkg)
+    state
+        .marketplace_service
+        .publish(&pkg)
         .map(|_| StatusCode::CREATED)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
@@ -454,14 +541,21 @@ async fn marketplace_install(
     Json(req): Json<MarketplaceInstallRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can install marketplace packages".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can install marketplace packages".to_string(),
+        ));
     }
     // Get the package's download_url so the caller can install via PluginService
-    let _url = state.marketplace_service.get_package_download_url(&id)
+    let _url = state
+        .marketplace_service
+        .get_package_download_url(&id)
         .map_err(|e| (StatusCode::NOT_FOUND, e))?;
 
     // Record the install tracking
-    state.marketplace_service.record_package_install(&id, req.plugin_id)
+    state
+        .marketplace_service
+        .record_package_install(&id, req.plugin_id)
         .map(|_| StatusCode::OK)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
@@ -470,7 +564,9 @@ async fn marketplace_list_ratings(
     State(state): State<ServerState>,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<Vec<DbMarketplaceRating>>, (StatusCode, String)> {
-    state.marketplace_service.list_ratings(&id)
+    state
+        .marketplace_service
+        .list_ratings(&id)
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
@@ -482,13 +578,18 @@ async fn marketplace_add_rating(
     Json(mut rating): Json<DbMarketplaceRating>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners or Editors can add ratings".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners or Editors can add ratings".to_string(),
+        ));
     }
     rating.package_id = id;
     if rating.id.is_empty() {
         rating.id = format!("r-{}", uuid_hex());
     }
-    state.marketplace_service.add_rating(&rating)
+    state
+        .marketplace_service
+        .add_rating(&rating)
         .map(|_| StatusCode::CREATED)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
@@ -496,7 +597,9 @@ async fn marketplace_add_rating(
 async fn marketplace_list_publishers(
     State(state): State<ServerState>,
 ) -> Result<Json<Vec<DbPublisherProfile>>, (StatusCode, String)> {
-    state.marketplace_service.list_publishers()
+    state
+        .marketplace_service
+        .list_publishers()
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
@@ -507,12 +610,17 @@ async fn marketplace_register_publisher(
     Json(mut profile): Json<DbPublisherProfile>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can register publishers".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can register publishers".to_string(),
+        ));
     }
     if profile.id.is_empty() {
         profile.id = format!("pub-{}", uuid_hex());
     }
-    state.marketplace_service.register_publisher(&profile)
+    state
+        .marketplace_service
+        .register_publisher(&profile)
         .map(|_| StatusCode::CREATED)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
@@ -522,8 +630,11 @@ fn uuid_hex() -> String {
     use std::hash::{Hash, Hasher};
     let mut h = DefaultHasher::new();
     std::time::Instant::now().hash(&mut h);
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default().subsec_nanos().hash(&mut h);
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos()
+        .hash(&mut h);
     format!("{:016x}", h.finish())
 }
 
@@ -548,18 +659,25 @@ async fn register_user(
     State(state): State<ServerState>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<DbUser>), (StatusCode, String)> {
-    let count = state.collaboration_service.count_users()
+    let count = state
+        .collaboration_service
+        .count_users()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     let final_role = if count == 0 {
         "Owner".to_string()
     } else if req.role == "Owner" || req.role == "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owner can register Owner or Editor accounts".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owner can register Owner or Editor accounts".to_string(),
+        ));
     } else {
         "Viewer".to_string()
     };
 
-    let user = state.collaboration_service.register_user(&req.username, &req.password, &final_role)
+    let user = state
+        .collaboration_service
+        .register_user(&req.username, &req.password, &final_role)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     Ok((StatusCode::CREATED, Json(user)))
 }
@@ -574,14 +692,14 @@ async fn login_user(
     State(state): State<ServerState>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, String)> {
-    let (user, token) = state.collaboration_service.login_user(&req.username, &req.password)
+    let (user, token) = state
+        .collaboration_service
+        .login_user(&req.username, &req.password)
         .map_err(|e| (StatusCode::UNAUTHORIZED, e))?;
     Ok(Json(AuthResponse { token, user }))
 }
 
-async fn get_current_user(
-    axum::Extension(user): axum::Extension<DbUser>,
-) -> Json<DbUser> {
+async fn get_current_user(axum::Extension(user): axum::Extension<DbUser>) -> Json<DbUser> {
     Json(user)
 }
 
@@ -590,9 +708,14 @@ async fn list_users(
     State(state): State<ServerState>,
 ) -> Result<Json<Vec<DbUser>>, (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners or Editors can list users".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners or Editors can list users".to_string(),
+        ));
     }
-    state.collaboration_service.list_users()
+    state
+        .collaboration_service
+        .list_users()
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
@@ -610,9 +733,14 @@ async fn create_team(
     Json(req): Json<CreateTeamRequest>,
 ) -> Result<(StatusCode, Json<DbTeam>), (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners or Editors can create teams".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners or Editors can create teams".to_string(),
+        ));
     }
-    let team = state.collaboration_service.create_team(&req.name)
+    let team = state
+        .collaboration_service
+        .create_team(&req.name)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     Ok((StatusCode::CREATED, Json(team)))
 }
@@ -620,7 +748,9 @@ async fn create_team(
 async fn list_teams(
     State(state): State<ServerState>,
 ) -> Result<Json<Vec<DbTeam>>, (StatusCode, String)> {
-    state.collaboration_service.list_teams()
+    state
+        .collaboration_service
+        .list_teams()
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
@@ -638,9 +768,14 @@ async fn add_team_member(
     Json(req): Json<AddMemberRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can manage team memberships".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can manage team memberships".to_string(),
+        ));
     }
-    state.collaboration_service.add_team_member(&team_id, &req.user_id, &req.role)
+    state
+        .collaboration_service
+        .add_team_member(&team_id, &req.user_id, &req.role)
         .map(|_| StatusCode::OK)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
@@ -651,9 +786,14 @@ async fn remove_team_member(
     AxumPath((team_id, user_id)): AxumPath<(String, String)>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
-        return Err((StatusCode::FORBIDDEN, "Only Owners can manage team memberships".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only Owners can manage team memberships".to_string(),
+        ));
     }
-    state.collaboration_service.remove_team_member(&team_id, &user_id)
+    state
+        .collaboration_service
+        .remove_team_member(&team_id, &user_id)
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
@@ -662,7 +802,9 @@ async fn list_team_members(
     State(state): State<ServerState>,
     AxumPath(team_id): AxumPath<String>,
 ) -> Result<Json<Vec<(DbUser, String)>>, (StatusCode, String)> {
-    state.collaboration_service.list_team_members(&team_id)
+    state
+        .collaboration_service
+        .list_team_members(&team_id)
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }

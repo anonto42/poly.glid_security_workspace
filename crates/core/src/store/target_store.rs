@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use rusqlite::{params, Connection};
+use std::sync::{Arc, Mutex};
 
 pub struct TargetStore {
     conn: Arc<Mutex<Connection>>,
@@ -41,7 +41,9 @@ impl TargetStore {
             .map_err(|err| format!("failed to prepare target query: {err}"))?;
 
         let rows = stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            })
             .map_err(|err| format!("failed to map target query: {err}"))?;
 
         let mut list = Vec::new();

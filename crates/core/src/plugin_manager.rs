@@ -126,7 +126,7 @@ impl PluginRepository {
         for entry in entries {
             let entry = entry.map_err(|err| format!("failed to read entry: {err}"))?;
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "wasm") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "wasm") {
                 files.push(path);
             }
         }
@@ -200,7 +200,13 @@ where
         &self,
         src_path: &std::path::Path,
         plugin_id: &PluginId,
-    ) -> Result<(crate::security::SignatureStatus, Option<crate::store::signature_store::PluginSignatureRecord>), String> {
+    ) -> Result<
+        (
+            crate::security::SignatureStatus,
+            Option<crate::store::signature_store::PluginSignatureRecord>,
+        ),
+        String,
+    > {
         use crate::security::SignatureStatus;
         use std::fs;
 
@@ -210,11 +216,14 @@ where
                 .map_err(|err| format!("failed to read signature file: {err}"))?;
             let sig_json: serde_json::Value = serde_json::from_str(&data)
                 .map_err(|err| format!("invalid signature JSON: {err}"))?;
-            
-            let algorithm = sig_json["algorithm"].as_str().unwrap_or("Ed25519").to_string();
+
+            let algorithm = sig_json["algorithm"]
+                .as_str()
+                .unwrap_or("Ed25519")
+                .to_string();
             let key_id = sig_json["key_id"].as_str().unwrap_or("").to_string();
             let signature = sig_json["signature"].as_str().unwrap_or("").to_string();
-            
+
             Some((algorithm, key_id, signature))
         } else {
             None
@@ -225,29 +234,35 @@ where
             None => return Ok((SignatureStatus::Missing, None)),
         };
 
-        let fingerprint = crate::security::publisher::PublisherManager::compute_fingerprint(&key_id)?;
+        let fingerprint =
+            crate::security::publisher::PublisherManager::compute_fingerprint(&key_id)?;
 
-        let sig_bytes = hex::decode(&signature)
-            .map_err(|_| "invalid signature hex encoding".to_string())?;
-        let pub_key_bytes = hex::decode(&key_id)
-            .map_err(|_| "invalid key_id hex encoding".to_string())?;
+        let sig_bytes =
+            hex::decode(&signature).map_err(|_| "invalid signature hex encoding".to_string())?;
+        let pub_key_bytes =
+            hex::decode(&key_id).map_err(|_| "invalid key_id hex encoding".to_string())?;
 
-        let is_valid = crate::security::verifier::PluginVerifier::verify(src_path, &sig_bytes, &pub_key_bytes).is_ok();
+        let is_valid =
+            crate::security::verifier::PluginVerifier::verify(src_path, &sig_bytes, &pub_key_bytes)
+                .is_ok();
         if !is_valid {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
 
-            return Ok((SignatureStatus::Invalid, Some(crate::store::signature_store::PluginSignatureRecord {
-                plugin_id: plugin_id.as_str().to_string(),
-                algorithm,
-                key_id,
-                signature,
-                fingerprint,
-                verified_at: now,
-                status: "Invalid".to_string(),
-            })));
+            return Ok((
+                SignatureStatus::Invalid,
+                Some(crate::store::signature_store::PluginSignatureRecord {
+                    plugin_id: plugin_id.as_str().to_string(),
+                    algorithm,
+                    key_id,
+                    signature,
+                    fingerprint,
+                    verified_at: now,
+                    status: "Invalid".to_string(),
+                }),
+            ));
         }
 
         let trust_store = self.store.trust_store();
@@ -268,15 +283,18 @@ where
             .unwrap_or_default()
             .as_secs();
 
-        Ok((status, Some(crate::store::signature_store::PluginSignatureRecord {
-            plugin_id: plugin_id.as_str().to_string(),
-            algorithm,
-            key_id,
-            signature,
-            fingerprint,
-            verified_at: now,
-            status: status_str,
-        })))
+        Ok((
+            status,
+            Some(crate::store::signature_store::PluginSignatureRecord {
+                plugin_id: plugin_id.as_str().to_string(),
+                algorithm,
+                key_id,
+                signature,
+                fingerprint,
+                verified_at: now,
+                status: status_str,
+            }),
+        ))
     }
 
     pub fn validate_plugin(
@@ -300,7 +318,9 @@ where
 
         let (sig_status, sig_record_opt) = self.verify_plugin_signature(src_path, &manifest.id)?;
 
-        let active_profile_name = self.store.settings()
+        let active_profile_name = self
+            .store
+            .settings()
             .get("security_profile")
             .unwrap_or(None)
             .unwrap_or_else(|| "Balanced".to_string());
@@ -311,23 +331,39 @@ where
             _ => crate::security::profiles::SecurityProfile::balanced(),
         };
 
-        if profile.require_signature && (sig_status == crate::security::SignatureStatus::Missing || sig_status == crate::security::SignatureStatus::Invalid) {
+        if profile.require_signature
+            && (sig_status == crate::security::SignatureStatus::Missing
+                || sig_status == crate::security::SignatureStatus::Invalid)
+        {
             let audit_details = serde_json::json!({
                 "wasm_path": src_path.display().to_string(),
                 "status": sig_status.to_string(),
                 "reason": "Signature required by security profile policies."
             });
-            let _ = self.store.audit_logger().log("SignatureRejected", Some(manifest.id.as_str()), audit_details);
-            return Err(format!("signature check failed: plugin signature is {}", sig_status));
+            let _ = self.store.audit_logger().log(
+                "SignatureRejected",
+                Some(manifest.id.as_str()),
+                audit_details,
+            );
+            return Err(format!(
+                "signature check failed: plugin signature is {}",
+                sig_status
+            ));
         }
 
-        if profile.require_trusted_publisher && sig_status == crate::security::SignatureStatus::UnknownPublisher {
+        if profile.require_trusted_publisher
+            && sig_status == crate::security::SignatureStatus::UnknownPublisher
+        {
             let audit_details = serde_json::json!({
                 "wasm_path": src_path.display().to_string(),
                 "status": sig_status.to_string(),
                 "reason": "Trusted publisher required by security profile policies."
             });
-            let _ = self.store.audit_logger().log("SignatureRejected", Some(manifest.id.as_str()), audit_details);
+            let _ = self.store.audit_logger().log(
+                "SignatureRejected",
+                Some(manifest.id.as_str()),
+                audit_details,
+            );
             return Err("signature check failed: publisher is untrusted".to_string());
         }
 
@@ -345,7 +381,9 @@ where
         let entry = self.store.transaction(|tx| {
             let plugin_store = self.store.plugins();
 
-            let dest_path = self.repository.install(&manifest.id, src_path, &self.plugin_dir)?;
+            let dest_path = self
+                .repository
+                .install(&manifest.id, src_path, &self.plugin_dir)?;
 
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -389,7 +427,11 @@ where
             "author": metadata.author,
             "signature_status": sig_status.to_string()
         });
-        let _ = self.store.audit_logger().log("PluginInstalled", Some(manifest.id.as_str()), audit_details);
+        let _ = self.store.audit_logger().log(
+            "PluginInstalled",
+            Some(manifest.id.as_str()),
+            audit_details,
+        );
         Ok(entry)
     }
 
@@ -489,8 +531,8 @@ fn compute_sha256(path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PluginManifest;
     use crate::store::WorkspaceStore;
+    use crate::PluginManifest;
     use polyglid_plugin_api::{ApiPluginMetadata, PluginId};
 
     struct TestManagerRuntime;

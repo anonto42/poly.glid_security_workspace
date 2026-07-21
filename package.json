@@ -11,6 +11,7 @@
     "ops": "node scripts/ops/polyglid-ops.mjs",
     "ops:detect": "node scripts/ops/polyglid-ops.mjs detect",
     "ops:validate": "node scripts/ops/polyglid-ops.mjs validate",
+    "ops:mvp": "node scripts/ops/polyglid-ops.mjs mvp-smoke",
     "ops:site": "node scripts/ops/polyglid-ops.mjs site-build",
     "ops:repo-sync": "node scripts/ops/polyglid-ops.mjs repo-sync"
   }

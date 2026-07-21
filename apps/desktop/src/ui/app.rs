@@ -5,8 +5,8 @@ use crate::backend::DesktopBackend;
 use super::bottom_panel::BottomPanel;
 use super::commands::{handle_shortcut, persist_shell};
 use super::editor::EditorWorkspace;
-use super::models::{ResizeAxis, WorkspaceLoadState};
 use super::models::PluginCard;
+use super::models::{ResizeAxis, WorkspaceLoadState};
 use super::overlays::WorkspaceOverlays;
 use super::shell::{ActivityRail, StatusBar};
 use super::sidebar::WorkspaceSidebar;
@@ -81,16 +81,30 @@ fn load_workspace_catalog(mut state: AppState, backend: DesktopBackend) {
                         WorkspaceLoadState::Ready
                     };
                     state.projects.set(snapshot.projects);
-                    let plugins = snapshot.plugins.into_iter().map(|entry| PluginCard {
-                        id: entry.id.as_str().to_string(),
-                        name: entry.name,
-                        version: entry.version.to_string(),
-                        description: entry.description,
-                        capabilities: entry.capabilities.into_iter().map(|capability| capability.as_str().to_string()).collect(),
-                        enabled: matches!(entry.status, polyglid_config::plugin_registry::PluginStatus::Enabled),
-                    }).collect::<Vec<_>>();
+                    let plugins = snapshot
+                        .plugins
+                        .into_iter()
+                        .map(|entry| PluginCard {
+                            id: entry.id.as_str().to_string(),
+                            name: entry.name,
+                            version: entry.version.to_string(),
+                            description: entry.description,
+                            capabilities: entry
+                                .capabilities
+                                .into_iter()
+                                .map(|capability| capability.as_str().to_string())
+                                .collect(),
+                            enabled: matches!(
+                                entry.status,
+                                polyglid_config::plugin_registry::PluginStatus::Enabled
+                            ),
+                        })
+                        .collect::<Vec<_>>();
                     if let Some(first) = plugins.first() {
-                        if !plugins.iter().any(|plugin| plugin.id == *state.selected_plugin.read()) {
+                        if !plugins
+                            .iter()
+                            .any(|plugin| plugin.id == *state.selected_plugin.read())
+                        {
                             state.selected_plugin.set(first.id.clone());
                         }
                     }

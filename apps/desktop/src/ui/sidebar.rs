@@ -148,7 +148,9 @@ fn start_plugin_install(mut state: AppState, backend: DesktopBackend, path: Stri
                     version: metadata.version,
                     author: metadata.author,
                     description: metadata.description,
-                    capabilities: manifest.requested_capabilities.into_iter()
+                    capabilities: manifest
+                        .requested_capabilities
+                        .into_iter()
                         .map(|req| req.capability.to_string())
                         .collect(),
                 }));

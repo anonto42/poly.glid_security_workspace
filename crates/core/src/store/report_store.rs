@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
+use polyglid_plugin_api::{Issue, PluginId, PluginReport};
 use rusqlite::{params, Connection, OptionalExtension};
-use polyglid_plugin_api::{Issue, PluginId};
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -30,12 +30,11 @@ impl ReportStore {
         job_id: &Uuid,
         plugin_id: &PluginId,
         target: &str,
-        summary: &str,
-        issues: &[Issue],
+        report: &PluginReport,
         filepath: &str,
     ) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
-        let issues_json = serde_json::to_string(issues)
+        let issues_json = serde_json::to_string(&report.issues)
             .map_err(|err| format!("failed to serialize issues: {err}"))?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -50,7 +49,7 @@ impl ReportStore {
                 job_id.to_string(),
                 plugin_id.as_str(),
                 target,
-                summary,
+                report.summary,
                 issues_json,
                 filepath,
                 now
@@ -63,28 +62,38 @@ impl ReportStore {
 
     pub fn get(&self, id: &str) -> Result<Option<DbReportRecord>, String> {
         let conn = self.conn.lock().unwrap();
-        let row = conn.query_row(
-            "SELECT id, job_id, plugin_id, target, summary, issues, filepath, created_at 
+        let row = conn
+            .query_row(
+                "SELECT id, job_id, plugin_id, target, summary, issues, filepath, created_at
              FROM reports WHERE id = ?",
-            [id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                    row.get::<_, String>(6)?,
-                    row.get::<_, i64>(7)?,
-                ))
-            },
-        )
-        .optional()
-        .map_err(|err| format!("failed to query report reference: {err}"))?;
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                        row.get::<_, i64>(7)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|err| format!("failed to query report reference: {err}"))?;
 
         match row {
-            Some((id, job_id_str, plugin_id_str, target, summary, issues_json, filepath, created_at)) => {
+            Some((
+                id,
+                job_id_str,
+                plugin_id_str,
+                target,
+                summary,
+                issues_json,
+                filepath,
+                created_at,
+            )) => {
                 let job_id = Uuid::parse_str(&job_id_str)
                     .map_err(|err| format!("invalid job UUID in DB: {err}"))?;
                 let issues: Vec<Issue> = serde_json::from_str(&issues_json)

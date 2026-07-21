@@ -1,15 +1,15 @@
-use std::path::Path;
-use std::sync::Arc;
-use polyglid_plugin_api::PluginId;
-use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginStatus, PluginSource};
-use crate::store::WorkspaceStore;
 use crate::execution::ExecutionManager;
 use crate::plugin_manager::PluginManager;
+use crate::store::WorkspaceStore;
 use crate::PluginRuntime;
+use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginSource, PluginStatus};
+use polyglid_plugin_api::PluginId;
+use std::path::Path;
+use std::sync::Arc;
 
+mod project_lifecycle;
 mod workspace_catalog;
 mod workspace_discovery;
-mod project_lifecycle;
 pub use workspace_catalog::WorkspaceCatalogService;
 
 #[cfg(test)]
@@ -33,7 +33,8 @@ impl<R: PluginRuntime + Send + Sync + 'static> PluginService<R> {
     }
 
     pub fn install_plugin(&self, src_path: &Path) -> Result<PluginRegistryEntry, String> {
-        self.pm.install_plugin(src_path, PluginSource::LocalPath(src_path.to_path_buf()))
+        self.pm
+            .install_plugin(src_path, PluginSource::LocalPath(src_path.to_path_buf()))
     }
 
     pub fn uninstall_plugin(&self, id: &PluginId) -> Result<(), String> {
@@ -56,12 +57,20 @@ impl<R: PluginRuntime + Send + Sync + 'static> ExecutionService<R> {
     }
 
     pub fn run_plugin(&self, plugin_id: &PluginId, target: &str) -> Result<String, String> {
-        let pm = PluginManager::new(self.em.runtime().clone(), &polyglid_config::AppConfig::development(), self.store.clone())?;
-        let entry = pm.get_plugin(plugin_id)
+        let pm = PluginManager::new(
+            self.em.runtime().clone(),
+            &polyglid_config::AppConfig::development(),
+            self.store.clone(),
+        )?;
+        let entry = pm
+            .get_plugin(plugin_id)
             .ok_or_else(|| format!("plugin '{}' not found in workspace", plugin_id.as_str()))?;
 
         if entry.status == PluginStatus::Disabled {
-            return Err(format!("plugin '{}' is currently disabled", plugin_id.as_str()));
+            return Err(format!(
+                "plugin '{}' is currently disabled",
+                plugin_id.as_str()
+            ));
         }
 
         let config = crate::execution::ExecutionConfig {
@@ -71,15 +80,24 @@ impl<R: PluginRuntime + Send + Sync + 'static> ExecutionService<R> {
             allowed_capabilities: entry.capabilities,
         };
 
-        let job_id = self.em.submit_job(entry.path.to_string_lossy().to_string(), target.to_string(), config);
+        let job_id = self.em.submit_job(
+            entry.path.to_string_lossy().to_string(),
+            target.to_string(),
+            config,
+        );
         Ok(job_id.to_string())
     }
 
-    pub fn list_executions(&self) -> Result<Vec<crate::store::execution_store::DbJobRecord>, String> {
+    pub fn list_executions(
+        &self,
+    ) -> Result<Vec<crate::store::execution_store::DbJobRecord>, String> {
         self.store.executions().list()
     }
 
-    pub fn get_execution(&self, job_id: &str) -> Result<Option<crate::store::execution_store::DbJobRecord>, String> {
+    pub fn get_execution(
+        &self,
+        job_id: &str,
+    ) -> Result<Option<crate::store::execution_store::DbJobRecord>, String> {
         let list = self.store.executions().list()?;
         Ok(list.into_iter().find(|r| r.job_id.to_string() == job_id))
     }
@@ -121,13 +139,17 @@ impl ReportService {
         self.store.reports().list()
     }
 
-    pub fn get_report(&self, id: &str) -> Result<Option<crate::store::report_store::DbReportRecord>, String> {
+    pub fn get_report(
+        &self,
+        id: &str,
+    ) -> Result<Option<crate::store::report_store::DbReportRecord>, String> {
         let list = self.store.reports().list()?;
         Ok(list.into_iter().find(|r| r.id == id))
     }
 
     pub fn export_report(&self, id: &str, format: &str) -> Result<String, String> {
-        let report_rec = self.get_report(id)?
+        let report_rec = self
+            .get_report(id)?
             .ok_or_else(|| format!("report '{}' not found", id))?;
 
         let issues = report_rec.issues.clone();
@@ -148,7 +170,7 @@ impl ReportService {
                 target_tested: report_rec.target.clone(),
                 issues,
                 summary: report_rec.summary,
-            }
+            },
         };
 
         match format.to_lowercase().as_str() {
@@ -184,7 +206,7 @@ impl SettingsService {
 // ─────────────────────────────────────────────────────────────────────────────
 
 use crate::store::marketplace_store::{
-    DbMarketplacePackage, DbMarketplaceRating, DbMarketplaceInstall, DbPublisherProfile,
+    DbMarketplaceInstall, DbMarketplacePackage, DbMarketplaceRating, DbPublisherProfile,
 };
 
 pub struct MarketplaceService {
@@ -216,7 +238,11 @@ impl MarketplaceService {
         self.store.marketplace().list_featured()
     }
 
-    pub fn search(&self, query: &str, category: Option<&str>) -> Result<Vec<DbMarketplacePackage>, String> {
+    pub fn search(
+        &self,
+        query: &str,
+        category: Option<&str>,
+    ) -> Result<Vec<DbMarketplacePackage>, String> {
         self.store.marketplace().search_packages(query, category)
     }
 
@@ -234,7 +260,9 @@ impl MarketplaceService {
         package_id: &str,
         plugin_id: Option<String>,
     ) -> Result<(), String> {
-        let pkg = self.store.marketplace()
+        let pkg = self
+            .store
+            .marketplace()
             .get_package(package_id)?
             .ok_or_else(|| format!("marketplace package '{}' not found", package_id))?;
 
@@ -245,13 +273,16 @@ impl MarketplaceService {
             installed_at: now_secs(),
         };
         self.store.marketplace().record_install(&install)?;
-        self.store.marketplace().increment_download_count(package_id)?;
+        self.store
+            .marketplace()
+            .increment_download_count(package_id)?;
         Ok(())
     }
 
     /// Get the download_url of a marketplace package (for the server to pass to PluginService).
     pub fn get_package_download_url(&self, package_id: &str) -> Result<String, String> {
-        self.store.marketplace()
+        self.store
+            .marketplace()
             .get_package(package_id)?
             .map(|p| p.download_url)
             .ok_or_else(|| format!("marketplace package '{}' not found", package_id))
@@ -276,7 +307,10 @@ impl MarketplaceService {
 
 fn uuid_v4() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().subsec_nanos();
+    let t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
     format!("mkt-{:x}-{:x}", t, rand_bits())
 }
 
@@ -299,8 +333,8 @@ fn now_secs() -> i64 {
 // Collaboration Service
 // ─────────────────────────────────────────────────────────────────────────────
 
-use crate::store::collaboration_store::{DbUser, DbTeam, DbTeamMember, DbUserToken};
-use sha2::{Sha256, Digest};
+use crate::store::collaboration_store::{DbTeam, DbTeamMember, DbUser, DbUserToken};
+use sha2::{Digest, Sha256};
 
 pub struct CollaborationService {
     store: WorkspaceStore,
@@ -322,7 +356,12 @@ impl CollaborationService {
         self.store.collaboration().count_users()
     }
 
-    pub fn register_user(&self, username: &str, password: &str, role: &str) -> Result<DbUser, String> {
+    pub fn register_user(
+        &self,
+        username: &str,
+        password: &str,
+        role: &str,
+    ) -> Result<DbUser, String> {
         if username.trim().is_empty() {
             return Err("Username cannot be empty".to_string());
         }
@@ -357,7 +396,8 @@ impl CollaborationService {
 
     pub fn login_user(&self, username: &str, password: &str) -> Result<(DbUser, String), String> {
         let store = self.store.collaboration();
-        let user = store.get_user_by_username(username)?
+        let user = store
+            .get_user_by_username(username)?
             .ok_or_else(|| "Invalid username or password".to_string())?;
 
         let hash = self.hash_password(password, &user.salt);
@@ -425,7 +465,9 @@ impl CollaborationService {
     }
 
     pub fn remove_team_member(&self, team_id: &str, user_id: &str) -> Result<(), String> {
-        self.store.collaboration().remove_team_member(team_id, user_id)
+        self.store
+            .collaboration()
+            .remove_team_member(team_id, user_id)
     }
 
     pub fn list_team_members(&self, team_id: &str) -> Result<Vec<(DbUser, String)>, String> {

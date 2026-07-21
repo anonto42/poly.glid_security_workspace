@@ -9,13 +9,13 @@ use polyglid_plugin_api::{
     Capability, CapabilityRequest, CapabilityScope, PluginId, PluginManifest, PluginReport,
 };
 
-pub mod execution;
-pub mod plugin_manager;
-pub mod store;
-pub mod security;
-pub mod services;
 #[cfg(test)]
 pub mod benchmarks;
+pub mod execution;
+pub mod plugin_manager;
+pub mod security;
+pub mod services;
+pub mod store;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginRef {
@@ -206,13 +206,18 @@ where
     pub fn run_plugin(&mut self, request: PluginRunRequest) -> Result<PluginReport, CoreError> {
         let manifest = self.runtime.inspect(&request.plugin)?;
 
-        let db_path = self.config.plugin_dir.parent().unwrap_or(&self.config.plugin_dir).join("polyglid.db");
+        let db_path = self
+            .config
+            .plugin_dir
+            .parent()
+            .unwrap_or(&self.config.plugin_dir)
+            .join("polyglid.db");
         if db_path.exists() {
             if let Ok(conn) = rusqlite::Connection::open(&db_path) {
                 if let Ok(status) = conn.query_row(
                     "SELECT status FROM plugins WHERE id = ?",
                     [manifest.id.as_str()],
-                    |row| row.get::<_, String>(0)
+                    |row| row.get::<_, String>(0),
                 ) {
                     if status == "Disabled" {
                         return Err(CoreError::Runtime(format!(
@@ -273,20 +278,21 @@ where
 
             if require_sig && (sig_status == "Missing" || sig_status == "Invalid") {
                 return Err(CoreError::Runtime(format!(
-                    "Signature check failed: plugin signature is {}", sig_status
+                    "Signature check failed: plugin signature is {}",
+                    sig_status
                 )));
             }
 
             if profile.require_trusted_publisher && sig_status == "UnknownPublisher" {
-                return Err(CoreError::Runtime(format!(
-                    "Signature check failed: publisher is untrusted"
-                )));
+                return Err(CoreError::Runtime(
+                    "Signature check failed: publisher is untrusted".to_string(),
+                ));
             }
 
             if sig_status == "Revoked" {
-                return Err(CoreError::Runtime(format!(
-                    "Signature check failed: publisher key is revoked"
-                )));
+                return Err(CoreError::Runtime(
+                    "Signature check failed: publisher key is revoked".to_string(),
+                ));
             }
 
             let mut actual_config = self.config.clone();
@@ -296,7 +302,10 @@ where
 
             for request_cap in &manifest.requested_capabilities {
                 let mut approved = false;
-                if profile.allowed_capabilities.contains(&request_cap.capability) {
+                if profile
+                    .allowed_capabilities
+                    .contains(&request_cap.capability)
+                {
                     approved = true;
                 } else {
                     if let Ok(conn) = rusqlite::Connection::open(&db_path) {

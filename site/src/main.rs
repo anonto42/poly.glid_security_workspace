@@ -6,13 +6,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tera = Tera::new(&format!("{}/templates/**/*", src.display()))?;
 
     let mut ctx = Context::new();
-    let release_tag = std::env::var("POLYGLID_RELEASE_TAG")
+    let published_release_tag = std::env::var("POLYGLID_RELEASE_TAG")
         .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| format!("v{}", env!("CARGO_PKG_VERSION")));
+        .filter(|value| !value.trim().is_empty());
+    let release_available = published_release_tag.is_some();
+    let release_tag =
+        published_release_tag.unwrap_or_else(|| format!("v{}", env!("CARGO_PKG_VERSION")));
     ctx.insert("version", release_tag.trim_start_matches('v'));
-    ctx.insert("release_url", "https://github.com/anonto42/poly.glid_security_workspace/releases/latest");
-    ctx.insert("download_base", "https://github.com/anonto42/poly.glid_security_workspace/releases/latest/download");
+    ctx.insert("release_available", &release_available);
+    ctx.insert(
+        "release_url",
+        "https://github.com/anonto42/poly.glid_security_workspace/releases/latest",
+    );
+    ctx.insert(
+        "download_base",
+        "https://github.com/anonto42/poly.glid_security_workspace/releases/latest/download",
+    );
     ctx.insert("name", "PolyGlid");
     ctx.insert(
         "tagline",

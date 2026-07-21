@@ -1,23 +1,25 @@
 name: Repo Sync
 
 on:
-  workflow_dispatch:
   workflow_call:
     secrets:
       GH_PAT:
-        required: false
+        required: true
+
+permissions:
+  contents: read
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Sync repo metadata
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::GH_PAT secret not set. Create a classic PAT (repo scope) at https://github.com/settings/tokens and add it as GH_PAT in repo settings → Secrets and variables → Actions"
+            echo "::error::GH_PAT is not set. Add a fine-grained token scoped to this repository with Administration write access under Settings → Secrets and variables → Actions."
             exit 1
           fi
           node scripts/ops/polyglid-ops.mjs repo-sync

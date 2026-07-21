@@ -119,7 +119,9 @@ impl DesktopBackend {
         self.service()?.remove_project(project_id, delete_files)
     }
 
-    pub(crate) fn list_plugins(&self) -> Result<Vec<polyglid_config::plugin_registry::PluginRegistryEntry>, String> {
+    pub(crate) fn list_plugins(
+        &self,
+    ) -> Result<Vec<polyglid_config::plugin_registry::PluginRegistryEntry>, String> {
         Ok(self.plugin_manager()?.get_plugins())
     }
 
@@ -128,11 +130,17 @@ impl DesktopBackend {
         self.plugin_manager()?.toggle_plugin_enabled(&id, enabled)
     }
 
-    pub(crate) fn validate_plugin(&self, path: &str) -> Result<(PluginManifest, polyglid_plugin_api::ApiPluginMetadata), String> {
+    pub(crate) fn validate_plugin(
+        &self,
+        path: &str,
+    ) -> Result<(PluginManifest, polyglid_plugin_api::ApiPluginMetadata), String> {
         self.plugin_manager()?.validate_plugin(path.as_ref())
     }
 
-    pub(crate) fn install_plugin(&self, path: &str) -> Result<polyglid_config::plugin_registry::PluginRegistryEntry, String> {
+    pub(crate) fn install_plugin(
+        &self,
+        path: &str,
+    ) -> Result<polyglid_config::plugin_registry::PluginRegistryEntry, String> {
         self.plugin_manager()?
             .install_plugin(path.as_ref(), PluginSource::LocalPath(PathBuf::from(path)))
     }
@@ -142,9 +150,16 @@ impl DesktopBackend {
         self.plugin_manager()?.uninstall_plugin(&id)
     }
 
-    pub(crate) fn run_plugin(&self, id: &str, target: &str, fuel_limit: u64) -> Result<PluginReport, String> {
+    pub(crate) fn run_plugin(
+        &self,
+        id: &str,
+        target: &str,
+        fuel_limit: u64,
+    ) -> Result<PluginReport, String> {
         let id = PluginId::new(id).map_err(|error| error.to_string())?;
-        let entry = self.plugin_manager()?.get_plugin(&id)
+        let entry = self
+            .plugin_manager()?
+            .get_plugin(&id)
             .ok_or_else(|| format!("plugin '{}' is not installed", id.as_str()))?;
         if entry.status != PluginStatus::Enabled {
             return Err(format!("plugin '{}' is not enabled", id.as_str()));
@@ -163,10 +178,26 @@ impl DesktopBackend {
         );
         loop {
             match events.blocking_recv() {
-                Ok(ExecutionEvent::JobFinished { job_id: finished, report, .. }) if finished == job_id => return Ok(report),
-                Ok(ExecutionEvent::JobFailed { job_id: failed, error, .. }) if failed == job_id => return Err(error),
-                Ok(ExecutionEvent::JobStateChanged { job_id: changed, state, .. })
-                    if changed == job_id && matches!(state, polyglid_core::execution::JobState::Cancelled | polyglid_core::execution::JobState::TimedOut) =>
+                Ok(ExecutionEvent::JobFinished {
+                    job_id: finished,
+                    report,
+                    ..
+                }) if finished == job_id => return Ok(report),
+                Ok(ExecutionEvent::JobFailed {
+                    job_id: failed,
+                    error,
+                    ..
+                }) if failed == job_id => return Err(error),
+                Ok(ExecutionEvent::JobStateChanged {
+                    job_id: changed,
+                    state,
+                    ..
+                }) if changed == job_id
+                    && matches!(
+                        state,
+                        polyglid_core::execution::JobState::Cancelled
+                            | polyglid_core::execution::JobState::TimedOut
+                    ) =>
                 {
                     return Err(format!("plugin execution ended with state {state:?}"));
                 }
@@ -185,19 +216,31 @@ impl DesktopBackend {
     }
 
     fn plugin_manager(&self) -> Result<&Arc<PluginManager<WasmRuntime>>, String> {
-        self.plugins.as_ref().ok_or_else(|| self.unavailable_message())
+        self.plugins
+            .as_ref()
+            .ok_or_else(|| self.unavailable_message())
     }
 
     fn execution_manager(&self) -> Result<&Arc<ExecutionManager<WasmRuntime>>, String> {
-        self.executions.as_ref().ok_or_else(|| self.unavailable_message())
+        self.executions
+            .as_ref()
+            .ok_or_else(|| self.unavailable_message())
     }
 
     fn unavailable_message(&self) -> String {
-        self.startup_error.clone().unwrap_or_else(|| "desktop services are unavailable".to_string())
+        self.startup_error
+            .clone()
+            .unwrap_or_else(|| "desktop services are unavailable".to_string())
     }
 }
 
-fn open_services(database_path: &Path) -> Result<(WorkspaceCatalogService, Arc<PluginManager<WasmRuntime>>, Arc<ExecutionManager<WasmRuntime>>), String> {
+type DesktopServices = (
+    WorkspaceCatalogService,
+    Arc<PluginManager<WasmRuntime>>,
+    Arc<ExecutionManager<WasmRuntime>>,
+);
+
+fn open_services(database_path: &Path) -> Result<DesktopServices, String> {
     let data_dir = database_path
         .parent()
         .ok_or_else(|| "database path has no parent".to_string())?;

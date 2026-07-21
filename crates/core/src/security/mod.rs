@@ -1,11 +1,11 @@
-pub mod verifier;
-pub mod trust_store;
-pub mod permission_engine;
 pub mod audit;
+pub mod permission_engine;
 pub mod profiles;
 pub mod publisher;
 #[cfg(test)]
 pub mod tests;
+pub mod trust_store;
+pub mod verifier;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SignatureStatus {

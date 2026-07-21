@@ -1,5 +1,5 @@
-use rusqlite::Connection;
 use crate::store::schema::MIGRATIONS;
+use rusqlite::Connection;
 
 pub struct MigrationManager;
 
@@ -29,8 +29,12 @@ impl MigrationManager {
                 tx.execute(&format!("PRAGMA user_version = {};", migration.version), [])
                     .map_err(|err| format!("failed to update user_version: {err}"))?;
 
-                tx.commit()
-                    .map_err(|err| format!("failed to commit migration version {}: {err}", migration.version))?;
+                tx.commit().map_err(|err| {
+                    format!(
+                        "failed to commit migration version {}: {err}",
+                        migration.version
+                    )
+                })?;
             }
         }
 

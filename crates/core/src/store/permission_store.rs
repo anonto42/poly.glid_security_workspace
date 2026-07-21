@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
-use std::str::FromStr;
-use rusqlite::{params, Connection};
-use polyglid_plugin_api::{Capability, CapabilityRequest, CapabilityScope, PluginId};
 use crate::{CoreError, PermissionDecision, PermissionStore};
+use polyglid_plugin_api::{Capability, CapabilityRequest, CapabilityScope, PluginId};
+use rusqlite::{params, Connection};
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 pub struct DbPermissionStore {
     conn: Arc<Mutex<Connection>>,
@@ -13,7 +13,11 @@ impl DbPermissionStore {
         Self { conn }
     }
 
-    pub fn grant(&self, plugin_id: Option<&PluginId>, request: &CapabilityRequest) -> Result<(), String> {
+    pub fn grant(
+        &self,
+        plugin_id: Option<&PluginId>,
+        request: &CapabilityRequest,
+    ) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         let pid_str = plugin_id.map(|id| id.as_str());
         let cap_str = request.capability.as_str();
@@ -34,7 +38,11 @@ impl DbPermissionStore {
         Ok(())
     }
 
-    pub fn revoke(&self, plugin_id: Option<&PluginId>, capability: Capability) -> Result<(), String> {
+    pub fn revoke(
+        &self,
+        plugin_id: Option<&PluginId>,
+        capability: Capability,
+    ) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         let pid_str = plugin_id.map(|id| id.as_str());
         let cap_str = capability.as_str();
@@ -73,7 +81,8 @@ impl DbPermissionStore {
 
         let mut list = Vec::new();
         for r in rows {
-            let (pid_str, cap_str, scope_json) = r.map_err(|err| format!("failed to read row: {err}"))?;
+            let (pid_str, cap_str, scope_json) =
+                r.map_err(|err| format!("failed to read row: {err}"))?;
             let plugin_id = pid_str.and_then(|s| PluginId::new(&s).ok());
             let capability = Capability::from_str(&cap_str)
                 .map_err(|err| format!("invalid capability in DB: {err}"))?;
@@ -83,10 +92,7 @@ impl DbPermissionStore {
                 CapabilityScope::Any
             };
 
-            list.push((
-                plugin_id,
-                CapabilityRequest { capability, scope },
-            ));
+            list.push((plugin_id, CapabilityRequest { capability, scope }));
         }
 
         Ok(list)
@@ -103,7 +109,7 @@ impl PermissionStore for DbPermissionStore {
         let mut stmt = conn
             .prepare(
                 "SELECT plugin_id, scope FROM permissions 
-                 WHERE (plugin_id = ?1 OR plugin_id IS NULL) AND capability = ?2"
+                 WHERE (plugin_id = ?1 OR plugin_id IS NULL) AND capability = ?2",
             )
             .map_err(|err| CoreError::PermissionStore(err.to_string()))?;
 
@@ -119,9 +125,11 @@ impl PermissionStore for DbPermissionStore {
             .map_err(|err| CoreError::PermissionStore(err.to_string()))?;
 
         for r in rows {
-            let (_pid_str, scope_json) = r.map_err(|err| CoreError::PermissionStore(err.to_string()))?;
+            let (_pid_str, scope_json) =
+                r.map_err(|err| CoreError::PermissionStore(err.to_string()))?;
             let scope = if let Some(json) = scope_json {
-                serde_json::from_str(&json).map_err(|err| CoreError::PermissionStore(err.to_string()))?
+                serde_json::from_str(&json)
+                    .map_err(|err| CoreError::PermissionStore(err.to_string()))?
             } else {
                 CapabilityScope::Any
             };

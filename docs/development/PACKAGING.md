@@ -176,15 +176,18 @@ Goal: desktop users install a normal app while the same Rust core still powers t
 
 ## Automated GitHub Release
 
-`.github/workflows/release.yml` runs for version tags matching `v*.*.*`.
+`.github/workflows/ci.yml` receives a newly created version tag matching
+`v*.*.*`, runs every validation branch, and then calls the reusable
+`.github/workflows/release.yml` workflow.
 
 ```text
 version tag
-  → native Linux, Windows, Intel macOS, and Apple macOS builds
+  → full CI and release preflight
   → Recon Probe WebAssembly component
+  → native Linux, Windows, Intel macOS, and Apple macOS builds
   → compressed archives and SHA256SUMS
-  → GitHub Release
-  → GitHub Pages refresh
+  → verified draft promoted to GitHub Release
+  → stable latest-release website links verified
 ```
 
 Archive names stay stable so the website can always use GitHub's
@@ -199,8 +202,10 @@ recon-probe.component.wasm
 SHA256SUMS
 ```
 
-Before tagging, the value under `[workspace.package]` in `Cargo.toml` must match
-the tag without its `v` prefix. The workflow rejects mismatched versions.
+Before tagging, the value under `[workspace.package]` in `Cargo.toml` and the
+version in `plugins/recon-probe/polyglid.toml` must match the tag without its
+`v` prefix. The tagged commit must already be contained in `main`; the workflow
+rejects mismatched or unmerged versions.
 
 ## Design Rule
 

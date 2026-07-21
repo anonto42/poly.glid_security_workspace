@@ -1,3 +1,7 @@
+// The generated WIT ABI functions mirror the component interface and cannot be
+// reshaped without changing that interface.
+#![allow(clippy::too_many_arguments)]
+
 //! Harmless first-party demo plugin logic.
 //!
 //! This plugin is a self-contained WASM component that exports:
@@ -64,9 +68,9 @@ impl Guest for ReconProbe {
 
     fn metadata() -> PluginMetadata {
         PluginMetadata {
-            name: "recon_probe".to_string(),
+            name: "polyglid.recon_probe".to_string(),
             display_name: "Reconnaissance Probe".to_string(),
-            version: "0.1.0".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
             description: "Performs secure DNS resolutions and reports network structure."
                 .to_string(),
             author: "PolyGlid Core Team".to_string(),

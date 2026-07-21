@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use rusqlite::{params, Connection, OptionalExtension};
+use std::sync::{Arc, Mutex};
 
 pub struct SettingsStore {
     conn: Arc<Mutex<Connection>>,
@@ -29,11 +29,9 @@ impl SettingsStore {
 
     pub fn get(&self, key: &str) -> Result<Option<String>, String> {
         let conn = self.conn.lock().unwrap();
-        conn.query_row(
-            "SELECT value FROM settings WHERE key = ?",
-            [key],
-            |row| row.get::<_, String>(0),
-        )
+        conn.query_row("SELECT value FROM settings WHERE key = ?", [key], |row| {
+            row.get::<_, String>(0)
+        })
         .optional()
         .map_err(|err| format!("failed to get setting: {err}"))
     }

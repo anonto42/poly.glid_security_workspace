@@ -1,15 +1,19 @@
-name: CI
+name: CI and Delivery
 
 on:
   push:
     branches: [main]
+    tags: ["v*.*.*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-delivery-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+permissions:
+  contents: read
 
 jobs:
   detect:
@@ -28,14 +32,20 @@ jobs:
       scripts: ${{ steps.check.outputs.scripts }}
       repinfo: ${{ steps.check.outputs.repinfo }}
       root: ${{ steps.check.outputs.root }}
+      unknown: ${{ steps.check.outputs.unknown }}
+      full: ${{ steps.check.outputs.full }}
+      run_all: ${{ steps.scope.outputs.run_all }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: check
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event.deleted || false }}" = "true" ]; then
+            base="${{ github.sha }}"
+            head="${{ github.sha }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
             head="${{ github.event.pull_request.head.sha }}"
           else
@@ -47,14 +57,31 @@ jobs:
           for key in $(echo "$result" | jq -r 'keys[]'); do
             echo "$key=$(echo "$result" | jq -r --arg key "$key" '.[$key]')" >> "$GITHUB_OUTPUT"
           done
+      - id: scope
+        name: Resolve selective or full run
+        shell: bash
+        env:
+          FULL_CHANGE: ${{ steps.check.outputs.full }}
+          DELETED_REF: ${{ github.event.deleted || false }}
+        run: |
+          run_all=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "$DELETED_REF" != "true" ]; then
+            run_all=true
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            run_all=true
+          elif [ "$FULL_CHANGE" = "true" ]; then
+            run_all=true
+          fi
+          echo "run_all=$run_all" >> "$GITHUB_OUTPUT"
+          echo "Full validation requested: $run_all"
 
   rust-format:
     name: Rust · Format check
     needs: detect
-    if: needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.root == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.root == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -65,19 +92,21 @@ jobs:
     needs: [detect, rust-format]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Install desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets --exclude polyglid-site
+      - run: cargo clippy --locked --workspace --all-targets --exclude polyglid-site -- -D warnings
 
   rust-build:
     name: Rust · Build workspace
     needs: rust-clippy
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install desktop dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
       - uses: dtolnay/rust-toolchain@stable
@@ -89,7 +118,7 @@ jobs:
     needs: rust-build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install desktop dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
       - uses: dtolnay/rust-toolchain@stable
@@ -99,10 +128,10 @@ jobs:
   wasm-build:
     name: WASM · Build Recon Probe
     needs: detect
-    if: needs.detect.outputs.wasm == 'true' || needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.root == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.root == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
@@ -114,93 +143,116 @@ jobs:
     needs: wasm-build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked -p recon-probe
 
   config-test:
-    name: Config · Test polyglid-config
+    name: Config · Test crate and syntax
     needs: detect
-    if: needs.detect.outputs.configs == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.configs == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked -p polyglid-config
+      - name: Check JavaScript configuration syntax
+        shell: bash
+        run: |
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find configs -type f -name '*.js' -print0)
 
   sdk:
-    name: SDK · Validate plugin template
+    name: SDK · Validate template and examples
     needs: detect
-    if: needs.detect.outputs.sdk == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
-      - run: cargo check --manifest-path sdk/plugin-template/Cargo.toml --target wasm32-wasip1
+      - run: cargo check --locked --manifest-path sdk/Cargo.toml --workspace --target wasm32-wasip1
 
   ai:
     name: AI · Build engine
     needs: detect
-    if: needs.detect.outputs.ai_engine == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.ai_engine == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tools/ai/rust
-      - run: cargo build --release --manifest-path tools/ai/rust/Cargo.toml
+      - run: cargo build --locked --release --manifest-path tools/ai/rust/Cargo.toml
 
   docs:
-    name: Docs · Validate files
+    name: Docs · Validate required files
     needs: detect
-    if: needs.detect.outputs.docs == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: test -f README.md && test -f docs/architecture/README.md && test -f docs/architecture/PROJECT_FLOW.md
+      - uses: actions/checkout@v7
+      - run: test -s README.md && test -s docs/architecture/README.md && test -s docs/architecture/PROJECT_FLOW.md && test -s docs/development/CI_DELIVERY.md
 
   workflows:
     name: Operations · Validate scripts
     needs: detect
-    if: needs.detect.outputs.workflows == 'true' || needs.detect.outputs.scripts == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.workflows == 'true' || needs.detect.outputs.scripts == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: node --check scripts/ops/polyglid-ops.mjs
       - run: node --check scripts/ops/sync-repo.mjs
       - run: bash -n scripts/ops/detect-changes.sh
+      - run: bash -n scripts/ops/test-detect-changes.sh
+      - run: bash -n scripts/ops/mvp-smoke.sh
+      - run: bash scripts/ops/test-detect-changes.sh
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
   infrastructure:
-    name: Infrastructure · Validate layout
+    name: Infrastructure · Validate required files
     needs: detect
-    if: needs.detect.outputs.infra == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: test -d infrastructure
+      - uses: actions/checkout@v7
+      - run: test -s infrastructure/wpm/init.sql
 
   site-build:
     name: Website · Generate static site
     needs: detect
-    if: needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true'
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: site
       - run: node scripts/ops/polyglid-ops.mjs site-build
 
+  mvp-smoke:
+    name: MVP · Run real CLI and WASM flow
+    needs: detect
+    if: needs.detect.outputs.run_all == 'true' || needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.scripts == 'true' || needs.detect.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/ops/mvp-smoke.sh
+
   pages:
     name: Website · Deploy GitHub Pages
-    needs: [detect, site-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [detect, site-build, result]
+    if: needs.result.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true')
     permissions:
       contents: read
       pages: write
@@ -209,8 +261,8 @@ jobs:
 
   metadata:
     name: Repository · Sync metadata
-    needs: detect
-    if: needs.detect.outputs.repinfo == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [detect, result]
+    if: needs.result.result == 'success' && needs.detect.outputs.repinfo == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/repo-sync.yml
     secrets: inherit
 
@@ -218,7 +270,12 @@ jobs:
     name: CI result
     if: always()
     needs:
+      - detect
+      - rust-format
+      - rust-clippy
+      - rust-build
       - rust-test
+      - wasm-build
       - wasm-test
       - config-test
       - sdk
@@ -227,14 +284,107 @@ jobs:
       - workflows
       - infrastructure
       - site-build
+      - mvp-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Require all executed validation branches to pass
         env:
           RESULTS: ${{ toJson(needs) }}
+          FULL_RUN: ${{ needs.detect.outputs.run_all }}
+        run: |
+          echo "$RESULTS" | jq .
+          if [ "$FULL_RUN" = "true" ] && echo "$RESULTS" | jq -e 'to_entries | any(.value.result != "success")' >/dev/null; then
+            echo "::error::A full run requires every validation branch to execute and pass"
+            exit 1
+          fi
+          if echo "$RESULTS" | jq -e '[.[] | .result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
+            echo "::error::One or more CI branches failed or were cancelled"
+            exit 1
+          fi
+
+  preview:
+    name: Preview · Package Linux snapshot
+    needs: [detect, result]
+    if: >-
+      needs.result.result == 'success' &&
+      !startsWith(github.ref, 'refs/tags/v') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+        (needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.configs == 'true' || needs.detect.outputs.root == 'true')) ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - name: Resolve preview version
+        id: version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
+          echo "label=v${version}-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Build preview applications and plugin
+        run: |
+          cargo build --locked --release -p polyglid-cli -p polyglid-desktop
+          cargo build --locked --release -p recon-probe --target wasm32-wasip1
+          target/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
+      - name: Package preview
+        run: |
+          mkdir -p package/plugins
+          cp target/release/polyglid package/
+          cp target/release/polyglid-desktop package/
+          cp recon-probe.component.wasm package/plugins/
+          cp README.md LICENSE-MIT LICENSE-APACHE package/
+          tar -C package -czf polyglid-linux-preview.tar.gz .
+          sha256sum polyglid-linux-preview.tar.gz > polyglid-linux-preview.tar.gz.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: polyglid-${{ steps.version.outputs.label }}-linux-x86_64
+          path: |
+            polyglid-linux-preview.tar.gz
+            polyglid-linux-preview.tar.gz.sha256
+          retention-days: 14
+          if-no-files-found: error
+      - name: Write preview summary
+        run: |
+          echo "### Preview ${{ steps.version.outputs.label }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download the Linux archive from this run's Artifacts section." >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Release · Build, publish, and verify
+    needs: result
+    if: >-
+      needs.result.result == 'success' &&
+      github.event_name == 'push' &&
+      github.event.created == true &&
+      github.event.deleted != true &&
+      startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ github.ref_name }}
+
+  delivery-result:
+    name: Delivery result
+    if: always()
+    needs:
+      - result
+      - pages
+      - metadata
+      - preview
+      - release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every executed delivery branch to pass
+        env:
+          RESULTS: ${{ toJson(needs) }}
         run: |
           echo "$RESULTS" | jq .
           if echo "$RESULTS" | jq -e '[.[] | .result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
-            echo "::error::One or more CI branches failed or were cancelled"
+            echo "::error::CI validation, preview, deployment, metadata synchronization, or release failed"
             exit 1
           fi

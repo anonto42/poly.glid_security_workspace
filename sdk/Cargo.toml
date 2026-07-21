@@ -1,0 +1,7 @@
+[workspace]
+members = [
+  "plugin-template",
+  "examples/hello_world",
+  "examples/recon_probe",
+]
+resolver = "2"

@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use rusqlite::{params, Connection};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PluginSignatureRecord {
@@ -40,7 +40,11 @@ impl PluginSignatureStore {
         Ok(())
     }
 
-    pub fn insert_with_conn(&self, conn: &Connection, record: &PluginSignatureRecord) -> Result<(), String> {
+    pub fn insert_with_conn(
+        &self,
+        conn: &Connection,
+        record: &PluginSignatureRecord,
+    ) -> Result<(), String> {
         conn.execute(
             "INSERT OR REPLACE INTO plugin_signatures (plugin_id, algorithm, key_id, signature, fingerprint, verified_at, status)
              VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -68,7 +72,10 @@ impl PluginSignatureStore {
             .query(params![plugin_id])
             .map_err(|err| format!("query failed: {err}"))?;
 
-        if let Some(row) = rows.next().map_err(|err| format!("row retrieve failed: {err}"))? {
+        if let Some(row) = rows
+            .next()
+            .map_err(|err| format!("row retrieve failed: {err}"))?
+        {
             Ok(Some(PluginSignatureRecord {
                 plugin_id: row.get(0).unwrap(),
                 algorithm: row.get(1).unwrap(),

@@ -75,11 +75,23 @@ fn run(args: Vec<String>) -> Result<(), String> {
         }
         [command] if command == "target" => target_help(),
         [command, subcommand] if command == "target" && subcommand == "list" => target_list(),
-        [command, subcommand, name] if command == "target" && subcommand == "add" => target_add(name),
-        [command, subcommand, name] if command == "target" && subcommand == "remove" => target_remove(name),
-        [command, subcommand] if command == "workspace" && subcommand == "verify" => workspace_verify(),
-        [command, subcommand, path] if command == "plugin" && subcommand == "verify" => plugin_verify(path),
-        [command, subcommand, path, flag, key_path] if command == "plugin" && subcommand == "sign" && flag == "--key" => plugin_sign(path, key_path),
+        [command, subcommand, name] if command == "target" && subcommand == "add" => {
+            target_add(name)
+        }
+        [command, subcommand, name] if command == "target" && subcommand == "remove" => {
+            target_remove(name)
+        }
+        [command, subcommand] if command == "workspace" && subcommand == "verify" => {
+            workspace_verify()
+        }
+        [command, subcommand, path] if command == "plugin" && subcommand == "verify" => {
+            plugin_verify(path)
+        }
+        [command, subcommand, path, flag, key_path]
+            if command == "plugin" && subcommand == "sign" && flag == "--key" =>
+        {
+            plugin_sign(path, key_path)
+        }
         _ => Err("unknown command; run `polyglid --help`".to_string()),
     }
 }
@@ -87,7 +99,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
 fn doctor() -> Result<(), String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
     println!("=== PolyGlid Doctor Status Report ===");
-    
+
     let plugin_dir = &config.plugin_dir;
     print!("plugin directory ({}): ", plugin_dir.display());
     if plugin_dir.exists() {
@@ -102,21 +114,28 @@ fn doctor() -> Result<(), String> {
         println!("ERROR (Not Found)");
     }
 
-    let db_path = plugin_dir.parent().unwrap_or(plugin_dir).join("polyglid.db");
+    let db_path = plugin_dir
+        .parent()
+        .unwrap_or(plugin_dir)
+        .join("polyglid.db");
     print!("database path ({}): ", db_path.display());
     if db_path.exists() {
         println!("OK");
         if let Ok(store) = polyglid_core::store::WorkspaceStore::new(&db_path) {
-            let integrity = store.verify_integrity().unwrap_or_else(|err| format!("Failed: {err}"));
+            let integrity = store
+                .verify_integrity()
+                .unwrap_or_else(|err| format!("Failed: {err}"));
             println!("- SQLite Integrity check: {}", integrity);
-            
+
             let ver = store.user_version().unwrap_or(0);
             println!("- Database User Version: {}", ver);
 
             let pubs = store.trust_store().list().unwrap_or_default();
             println!("- Trusted Publishers: {}", pubs.len());
 
-            let profile = store.settings().get("security_profile")
+            let profile = store
+                .settings()
+                .get("security_profile")
                 .unwrap_or(None)
                 .unwrap_or_else(|| "Balanced".to_string());
             println!("- Active Security Profile: {}", profile);
@@ -135,10 +154,16 @@ fn workspace_verify() -> Result<(), String> {
     let pm = manager()?;
     let store = pm.store;
     println!("=== PolyGlid Workspace Integrity Check ===");
-    
+
     let plugins = store.plugins().list().unwrap_or_default();
-    let enabled_count = plugins.iter().filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Enabled).count();
-    let disabled_count = plugins.iter().filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Disabled).count();
+    let enabled_count = plugins
+        .iter()
+        .filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Enabled)
+        .count();
+    let disabled_count = plugins
+        .iter()
+        .filter(|p| p.status == polyglid_config::plugin_registry::PluginStatus::Disabled)
+        .count();
     println!("Plugins:");
     println!("- Total Installed: {}", plugins.len());
     println!("- Enabled: {}", enabled_count);
@@ -150,8 +175,18 @@ fn workspace_verify() -> Result<(), String> {
         println!("- None registered");
     } else {
         for p in publishers {
-            let status = if p.revocation_status == 1 { "REVOKED" } else { "Active" };
-            println!("- {} (Key: {}, Trust Level: {}, Status: {})", p.name, &p.public_key[..12], p.trust_level, status);
+            let status = if p.revocation_status == 1 {
+                "REVOKED"
+            } else {
+                "Active"
+            };
+            println!(
+                "- {} (Key: {}, Trust Level: {}, Status: {})",
+                p.name,
+                &p.public_key[..12],
+                p.trust_level,
+                status
+            );
         }
     }
 
@@ -172,7 +207,8 @@ fn plugin_verify(wasm_path: &str) -> Result<(), String> {
     }
 
     println!("Verifying plugin binary '{}'...", wasm_path);
-    let (status, sig_opt) = pm.verify_plugin_signature(path, &polyglid_plugin_api::PluginId::new("temp").unwrap())?;
+    let (status, sig_opt) =
+        pm.verify_plugin_signature(path, &polyglid_plugin_api::PluginId::new("temp").unwrap())?;
     println!("Signature Status: {}", status);
 
     if let Some(sig) = sig_opt {
@@ -188,27 +224,28 @@ fn plugin_verify(wasm_path: &str) -> Result<(), String> {
 }
 
 fn plugin_sign(wasm_path: &str, key_path: &str) -> Result<(), String> {
-    use ed25519_dalek::{SigningKey, Signer};
-    
+    use ed25519_dalek::{Signer, SigningKey};
+
     let path = Path::new(wasm_path);
     if !path.exists() {
         return Err(format!("WASM binary not found at '{}'", wasm_path));
     }
 
-    let key_data = fs::read_to_string(key_path)
-        .map_err(|err| format!("failed to read key file: {err}"))?;
+    let key_data =
+        fs::read_to_string(key_path).map_err(|err| format!("failed to read key file: {err}"))?;
     let trimmed = key_data.trim();
-    let seed_bytes = hex::decode(trimmed)
-        .map_err(|err| format!("invalid hex formatting in key file: {err}"))?;
+    let seed_bytes =
+        hex::decode(trimmed).map_err(|err| format!("invalid hex formatting in key file: {err}"))?;
 
-    let seed: &[u8; 32] = seed_bytes.as_slice().try_into()
+    let seed: &[u8; 32] = seed_bytes
+        .as_slice()
+        .try_into()
         .map_err(|_| "private key seed must be exactly 32 bytes (64 hex characters)".to_string())?;
 
     let signing_key = SigningKey::from_bytes(seed);
     let verifying_key = signing_key.verifying_key();
 
-    let wasm_bytes = fs::read(path)
-        .map_err(|err| format!("failed to read WASM binary: {err}"))?;
+    let wasm_bytes = fs::read(path).map_err(|err| format!("failed to read WASM binary: {err}"))?;
     let signature = signing_key.sign(&wasm_bytes);
 
     let signature_hex = hex::encode(signature.to_bytes());
@@ -225,14 +262,21 @@ fn plugin_sign(wasm_path: &str, key_path: &str) -> Result<(), String> {
         .map_err(|err| format!("failed to write signature file: {err}"))?;
 
     println!("Successfully signed '{}'", wasm_path);
-    println!("Detached signature file written to '{}'", sig_path.display());
+    println!(
+        "Detached signature file written to '{}'",
+        sig_path.display()
+    );
     Ok(())
 }
 
 fn manager() -> Result<polyglid_core::plugin_manager::PluginManager<WasmRuntime>, String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
     let runtime = std::sync::Arc::new(WasmRuntime::new());
-    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let db_path = config
+        .plugin_dir
+        .parent()
+        .unwrap_or(&config.plugin_dir)
+        .join("polyglid.db");
     let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
     let pm = polyglid_core::plugin_manager::PluginManager::new(runtime, &config, store)?;
     let _ = pm.sync_directory();
@@ -274,8 +318,8 @@ fn plugin_inspect(id_or_path: &str) -> Result<(), String> {
             println!("version: {}", entry.version);
             println!("author: {}", entry.author);
             println!("description: {}", entry.description);
-            println!("status: {}", entry.status.to_string());
-            println!("source: {}", entry.source.to_string());
+            println!("status: {}", entry.status);
+            println!("source: {}", entry.source);
             println!("checksum: {}", entry.checksum);
             println!("size: {} bytes", entry.file_size);
             if entry.capabilities.is_empty() {
@@ -385,12 +429,20 @@ fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), St
     }
 
     let plugin_ref = PluginRef::from_path(&resolved_path);
-    let manifest = pm.runtime.inspect(&plugin_ref).map_err(|err| err.to_string())?;
+    let manifest = pm
+        .runtime
+        .inspect(&plugin_ref)
+        .map_err(|err| err.to_string())?;
 
-    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let db_path = config
+        .plugin_dir
+        .parent()
+        .unwrap_or(&config.plugin_dir)
+        .join("polyglid.db");
     if db_path.exists() {
         let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
-        let active_profile_name = store.settings()
+        let active_profile_name = store
+            .settings()
             .get("security_profile")
             .unwrap_or(None)
             .unwrap_or_else(|| "Balanced".to_string());
@@ -407,18 +459,18 @@ fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), St
             }
 
             let permission_engine = store.permission_engine();
-            let decision_opt = permission_engine.evaluate(
-                &manifest.id,
-                &request.capability,
-                "",
-                "Workspace"
-            )?;
+            let decision_opt =
+                permission_engine.evaluate(&manifest.id, &request.capability, "", "Workspace")?;
 
             let approved = match decision_opt {
                 Some(polyglid_core::PermissionDecision::Allow) => true,
                 Some(polyglid_core::PermissionDecision::Deny { .. }) => false,
                 None => {
-                    print!("Plugin '{}' requests capability '{}'. Approve? (y/N): ", manifest.id.as_str(), request.capability);
+                    print!(
+                        "Plugin '{}' requests capability '{}'. Approve? (y/N): ",
+                        manifest.id.as_str(),
+                        request.capability
+                    );
                     use std::io::Write;
                     let _ = std::io::stdout().flush();
                     let mut input = String::new();
@@ -431,7 +483,7 @@ fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), St
                             "",
                             "Workspace",
                             polyglid_core::PermissionDecision::Allow,
-                            None
+                            None,
                         );
                         let _ = store.audit_logger().log(
                             "PermissionGranted",
@@ -439,7 +491,7 @@ fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), St
                             serde_json::json!({
                                 "capability": request.capability.to_string(),
                                 "scope": "Workspace"
-                            })
+                            }),
                         );
                         true
                     } else {
@@ -451,7 +503,7 @@ fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), St
                             polyglid_core::PermissionDecision::Deny {
                                 reason: "Explicitly denied by user in CLI".to_string(),
                             },
-                            None
+                            None,
                         );
                         let _ = store.audit_logger().log(
                             "PermissionDenied",
@@ -459,7 +511,7 @@ fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), St
                             serde_json::json!({
                                 "capability": request.capability.to_string(),
                                 "scope": "Workspace"
-                            })
+                            }),
                         );
                         false
                     }
@@ -467,7 +519,10 @@ fn plugin_run(id_or_path: &str, target: &str, flags: &[String]) -> Result<(), St
             };
 
             if !approved {
-                return Err(format!("Permission denied for capability: {}", request.capability));
+                return Err(format!(
+                    "Permission denied for capability: {}",
+                    request.capability
+                ));
             }
         }
     }
@@ -568,7 +623,11 @@ fn target_help() -> Result<(), String> {
 
 fn target_list() -> Result<(), String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
-    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let db_path = config
+        .plugin_dir
+        .parent()
+        .unwrap_or(&config.plugin_dir)
+        .join("polyglid.db");
     let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
     let targets = store.targets().list()?;
     if targets.is_empty() {
@@ -585,7 +644,11 @@ fn target_list() -> Result<(), String> {
 
 fn target_add(name: &str) -> Result<(), String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
-    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let db_path = config
+        .plugin_dir
+        .parent()
+        .unwrap_or(&config.plugin_dir)
+        .join("polyglid.db");
     let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
     store.targets().add(name, None)?;
     println!("Target '{name}' added successfully.");
@@ -594,7 +657,11 @@ fn target_add(name: &str) -> Result<(), String> {
 
 fn target_remove(name: &str) -> Result<(), String> {
     let config = AppConfig::load_from_env().map_err(|err| err.to_string())?;
-    let db_path = config.plugin_dir.parent().unwrap_or(&config.plugin_dir).join("polyglid.db");
+    let db_path = config
+        .plugin_dir
+        .parent()
+        .unwrap_or(&config.plugin_dir)
+        .join("polyglid.db");
     let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
     store.targets().remove(name)?;
     println!("Target '{name}' removed successfully.");

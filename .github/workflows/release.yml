@@ -1,12 +1,10 @@
-name: Release PolyGlid
+name: Reusable · Release PolyGlid
 
 on:
-  push:
-    tags: ["v*.*.*"]
-  workflow_dispatch:
+  workflow_call:
     inputs:
       tag:
-        description: Existing version tag to release, for example v0.1.0
+        description: Existing version tag to release, for example v0.10.0
         required: true
         type: string
 
@@ -14,12 +12,58 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: polyglid-release
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Validate release tag and version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+      - id: version
+        name: Require an exact version match
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag must look exactly like v0.10.0"
+            exit 1
+          fi
+          version="${TAG#v}"
+          cargo_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
+          test "$cargo_version" = "$version" || {
+            echo "::error::Tag $TAG does not match workspace version v$cargo_version"
+            exit 1
+          }
+          plugin_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' plugins/recon-probe/polyglid.toml | head -n 1)
+          test "$plugin_version" = "$version" || {
+            echo "::error::Recon Probe manifest version $plugin_version does not match v$version"
+            exit 1
+          }
+          resolved=$(git rev-parse "$TAG^{commit}")
+          test "$resolved" = "$GITHUB_SHA" || {
+            echo "::error::The validated commit does not match $TAG"
+            exit 1
+          }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$TAG must point to a commit contained in main"
+            exit 1
+          }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.asset }}
+    needs: plugin
     strategy:
       fail-fast: false
       matrix:
@@ -42,9 +86,9 @@ jobs:
             archive: polyglid-macos-aarch64.tar.gz
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag }}
 
       - name: Install Linux desktop dependencies
         if: runner.os == 'Linux'
@@ -62,6 +106,12 @@ jobs:
       - name: Build native applications
         run: cargo build --locked --release --target ${{ matrix.target }} -p polyglid-cli -p polyglid-desktop
 
+      - name: Download bundled Recon Probe
+        uses: actions/download-artifact@v8
+        with:
+          name: recon-probe
+          path: package/plugins
+
       - name: Package Unix applications
         if: runner.os != 'Windows'
         shell: bash
@@ -69,7 +119,7 @@ jobs:
           mkdir -p package
           cp "target/${{ matrix.target }}/release/polyglid" package/
           cp "target/${{ matrix.target }}/release/polyglid-desktop" package/
-          cp README.md LICENSE* package/ 2>/dev/null || true
+          cp README.md LICENSE-MIT LICENSE-APACHE package/
           tar -C package -czf "${{ matrix.archive }}" .
 
       - name: Package Windows applications
@@ -79,10 +129,10 @@ jobs:
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/polyglid.exe" package/
           Copy-Item "target/${{ matrix.target }}/release/polyglid-desktop.exe" package/
-          Copy-Item README.md package/
+          Copy-Item -Path README.md, LICENSE-MIT, LICENSE-APACHE -Destination package/
           Compress-Archive -Path package/* -DestinationPath "${{ matrix.archive }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
           path: ${{ matrix.archive }}
@@ -90,11 +140,12 @@ jobs:
 
   plugin:
     name: Build Recon Probe component
+    needs: preflight
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
@@ -105,7 +156,16 @@ jobs:
       - run: cargo build --locked --release -p recon-probe --target wasm32-wasip1
       - name: Componentize plugin
         run: target/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
-      - uses: actions/upload-artifact@v4
+      - name: Verify component release metadata
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          target/release/polyglid plugin inspect recon-probe.component.wasm | tee plugin-metadata.txt
+          grep -F "id: polyglid.recon_probe" plugin-metadata.txt
+          grep -F "version: $VERSION" plugin-metadata.txt
+          grep -F -- "- dns-resolve" plugin-metadata.txt
+          grep -F -- "- report-write" plugin-metadata.txt
+      - uses: actions/upload-artifact@v7
         with:
           name: recon-probe
           path: recon-probe.component.wasm
@@ -113,30 +173,18 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [build, plugin]
+    needs: [preflight, build, plugin]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/download-artifact@v4
+          ref: ${{ inputs.tag }}
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
-      - id: version
-        name: Resolve and validate version
-        env:
-          REQUESTED_TAG: ${{ inputs.tag }}
-        run: |
-          tag="${REQUESTED_TAG:-${GITHUB_REF_NAME}}"
-          case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::Release tag must look like v0.1.0"; exit 1 ;; esac
-          cargo_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
-          test "v$cargo_version" = "$tag" || { echo "::error::Tag $tag does not match workspace version v$cargo_version"; exit 1; }
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Collect assets and checksums
         run: |
           mkdir release-assets
@@ -146,15 +194,88 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: gh release create "$TAG" release-assets/* --verify-tag --generate-notes --title "PolyGlid $TAG"
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        shell: bash
+        run: |
+          expected=(
+            polyglid-linux-x86_64.tar.gz
+            polyglid-windows-x86_64.zip
+            polyglid-macos-x86_64.tar.gz
+            polyglid-macos-aarch64.tar.gz
+            recon-probe.component.wasm
+            SHA256SUMS
+          )
 
-  deploy-site:
-    needs: publish
+          verify_assets() {
+            local assets
+            assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+            for name in "${expected[@]}"; do
+              grep -Fxq "$name" <<<"$assets" || return 1
+            done
+          }
+
+          state=missing
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ]; then
+              state=draft
+            else
+              state=published
+            fi
+          fi
+
+          if [ "$state" = "published" ]; then
+            verify_assets || {
+              echo "::error::Published release $TAG is missing one or more required assets"
+              exit 1
+            }
+            echo "Release $TAG is already complete"
+            exit 0
+          fi
+
+          if [ "$state" = "missing" ]; then
+            gh release create "$TAG" --verify-tag --draft --generate-notes --title "PolyGlid $TAG"
+          fi
+          gh release upload "$TAG" release-assets/* --clobber
+          verify_assets || {
+            echo "::error::Draft release $TAG is missing one or more required assets"
+            exit 1
+          }
+          gh release edit "$TAG" --draft=false
+
+  verify-downloads:
+    name: Website · Verify latest release assets
+    needs: [preflight, publish]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/deploy-site.yml
-    with:
-      release_tag: ${{ needs.publish.outputs.tag }}
+    steps:
+      - name: Require the website's latest-release links to resolve to this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        run: |
+          latest=""
+          for attempt in 1 2 3 4 5 6; do
+            latest=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+            [ "$latest" = "$TAG" ] && break
+            sleep $((attempt * 2))
+          done
+          test "$latest" = "$TAG" || {
+            echo "::error::Latest published release is ${latest:-unavailable}, expected $TAG"
+            exit 1
+          }
+          assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          for expected in \
+            polyglid-linux-x86_64.tar.gz \
+            polyglid-windows-x86_64.zip \
+            polyglid-macos-x86_64.tar.gz \
+            polyglid-macos-aarch64.tar.gz \
+            recon-probe.component.wasm \
+            SHA256SUMS; do
+            grep -Fxq "$expected" <<<"$assets" || {
+              echo "::error::Release asset $expected is missing"
+              exit 1
+            }
+          done

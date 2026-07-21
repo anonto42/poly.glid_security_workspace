@@ -1,34 +1,34 @@
 #[cfg(test)]
 mod integration_tests {
+    use crate::{auth, ServerState};
     use axum::{
         body::Body,
         http::{Request, StatusCode},
         Router,
     };
-    use tower::ServiceExt;
-    use std::sync::Arc;
-    use std::fs;
-    use polyglid_runtime::WasmRuntime;
     use polyglid_core::{
         execution::ExecutionManager,
         plugin_manager::PluginManager,
+        services::{
+            CollaborationService, ExecutionService, MarketplaceService, PluginService,
+            ReportService, SettingsService, TargetService,
+        },
         store::WorkspaceStore,
-        services::{PluginService, ExecutionService, TargetService, ReportService, SettingsService, MarketplaceService, CollaborationService},
     };
-    use crate::{auth, ServerState};
+    use polyglid_runtime::WasmRuntime;
+    use std::path::Path;
+    use std::sync::Arc;
+    use tower::ServiceExt;
 
     fn setup_test_app() -> (Router, String) {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("polyglid_server_test.db");
-        if db_path.exists() {
-            let _ = fs::remove_file(&db_path);
-        }
-
         let config = polyglid_config::AppConfig::development();
         let runtime = std::sync::Arc::new(WasmRuntime::new());
-        let store = WorkspaceStore::new(&db_path).unwrap();
+        let store = WorkspaceStore::new(Path::new(":memory:")).unwrap();
         let pm = Arc::new(PluginManager::new(runtime.clone(), &config, store.clone()).unwrap());
-        let em = Arc::new(ExecutionManager::new(WasmRuntime::new(), Some(store.clone())));
+        let em = Arc::new(ExecutionManager::new(
+            WasmRuntime::new(),
+            Some(store.clone()),
+        ));
 
         let admin_token = auth::initialize_auth_token(&store).unwrap();
         let col_service = Arc::new(CollaborationService::new(store.clone()));
@@ -54,8 +54,14 @@ mod integration_tests {
             .route("/auth/login", axum::routing::post(crate::login_user));
 
         let protected_routes = Router::new()
-            .route("/plugins", axum::routing::get(crate::get_plugins).post(crate::install_plugin))
-            .route("/targets", axum::routing::get(crate::list_targets).post(crate::add_target))
+            .route(
+                "/plugins",
+                axum::routing::get(crate::get_plugins).post(crate::install_plugin),
+            )
+            .route(
+                "/targets",
+                axum::routing::get(crate::list_targets).post(crate::add_target),
+            )
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 auth::auth_middleware,
@@ -123,7 +129,7 @@ mod integration_tests {
 
         let list_res = app.oneshot(list_req).await.unwrap();
         assert_eq!(list_res.status(), StatusCode::OK);
-     }
+    }
 
     #[tokio::test]
     async fn test_user_registration_login_and_role_access_control() {
@@ -134,7 +140,9 @@ mod integration_tests {
             .method("POST")
             .uri("/api/v1/auth/register")
             .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"username": "owner_alice", "password": "password123", "role": "Owner"}"#))
+            .body(Body::from(
+                r#"{"username": "owner_alice", "password": "password123", "role": "Owner"}"#,
+            ))
             .unwrap();
         let reg1_res = app.clone().oneshot(reg1_req).await.unwrap();
         assert_eq!(reg1_res.status(), StatusCode::CREATED);
@@ -144,7 +152,9 @@ mod integration_tests {
             .method("POST")
             .uri("/api/v1/auth/register")
             .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"username": "viewer_bob", "password": "password123", "role": "Viewer"}"#))
+            .body(Body::from(
+                r#"{"username": "viewer_bob", "password": "password123", "role": "Viewer"}"#,
+            ))
             .unwrap();
         let reg2_res = app.clone().oneshot(reg2_req).await.unwrap();
         assert_eq!(reg2_res.status(), StatusCode::CREATED);
@@ -154,13 +164,17 @@ mod integration_tests {
             .method("POST")
             .uri("/api/v1/auth/login")
             .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"username": "viewer_bob", "password": "password123"}"#))
+            .body(Body::from(
+                r#"{"username": "viewer_bob", "password": "password123"}"#,
+            ))
             .unwrap();
         let login_res = app.clone().oneshot(login_req).await.unwrap();
         assert_eq!(login_res.status(), StatusCode::OK);
 
         // Parse token
-        let body_bytes = axum::body::to_bytes(login_res.into_body(), 10000).await.unwrap();
+        let body_bytes = axum::body::to_bytes(login_res.into_body(), 10000)
+            .await
+            .unwrap();
         let auth_res: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let token = auth_res["token"].as_str().unwrap();
 

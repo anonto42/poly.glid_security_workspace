@@ -5,12 +5,12 @@ set -euo pipefail
 
 BASE="${1:-main}"
 HEAD="${2:-HEAD}"
+invalid_base=false
 
 if ! git rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1; then
-  BASE=$(git rev-list --max-parents=0 "$HEAD" | head -n 1)
+  BASE=$(git hash-object -t tree /dev/null)
+  invalid_base=true
 fi
-changed=$(git diff --name-only "$BASE" "$HEAD")
-
 # Initialize all flags
 site=false
 rust_core=false
@@ -24,8 +24,11 @@ sdk=false
 scripts=false
 repinfo=false
 root=false
+unknown=false
+full=$invalid_base
 
-for f in $changed; do
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
   case "$f" in
     site/*)                 site=true ;;
     Cargo.lock | Cargo.toml) site=true; root=true ;;
@@ -37,15 +40,23 @@ for f in $changed; do
     docs/*)                 docs=true ;;
     configs/*)              configs=true ;;
     infrastructure/*)       infra=true ;;
-    .github/*)              workflows=true ;;
+    .github/*)              workflows=true; full=true ;;
     tools/ai/*)             ai_engine=true ;;
     sdk/*)                  sdk=true ;;
+    scripts/ops/detect-changes.sh) scripts=true; full=true ;;
     scripts/*)              scripts=true ;;
     repinfo.json)           repinfo=true ;;
+    README.md | ARCHITECTURE.md | SUMMARY.md)
+      docs=true ;;
     Makefile | package.json | .gitignore | .gitattributes | .editorconfig)
       root=true ;;
+    *)                       unknown=true ;;
   esac
-done
+done < <(git diff --name-only "$BASE" "$HEAD" --)
+
+if [ "$unknown" = true ]; then
+  full=true
+fi
 
 jq -n \
   --argjson site "$site" \
@@ -60,4 +71,6 @@ jq -n \
   --argjson scripts "$scripts" \
   --argjson repinfo "$repinfo" \
   --argjson root "$root" \
-  '{site:$site, rust_core:$rust_core, wasm:$wasm, docs:$docs, configs:$configs, infra:$infra, workflows:$workflows, ai_engine:$ai_engine, sdk:$sdk, scripts:$scripts, repinfo:$repinfo, root:$root}'
+  --argjson unknown "$unknown" \
+  --argjson full "$full" \
+  '{site:$site, rust_core:$rust_core, wasm:$wasm, docs:$docs, configs:$configs, infra:$infra, workflows:$workflows, ai_engine:$ai_engine, sdk:$sdk, scripts:$scripts, repinfo:$repinfo, root:$root, unknown:$unknown, full:$full}'
