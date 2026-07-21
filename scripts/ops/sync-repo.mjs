@@ -20,7 +20,7 @@ const editArgs = [];
 if (info.description) editArgs.push(`--description '${info.description.replace(/'/g, "'\\''")}'`);
 if (info.homepage) editArgs.push(`--homepage '${info.homepage}'`);
 if (editArgs.length) {
-  execSync(`gh repo edit ${repo ? `--repo '${repo}'` : ''} ${editArgs.join(' ')}`, { stdio: 'inherit' });
+  execSync(`gh repo edit ${repo ? `'${repo}'` : ''} ${editArgs.join(' ')}`, { stdio: 'inherit' });
 }
 
 // Topics via API
