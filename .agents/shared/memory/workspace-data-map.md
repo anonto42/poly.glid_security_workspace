@@ -24,7 +24,7 @@ or another disposable cache location.
 | `releases/` | `manifests/`, `registry/` | Version manifests, service/dependency registry |
 | `security/` | `audits/`, `certificates/`, `policies/`, `secrets/` | Audit reports, TLS certs, security policies, encrypted secrets |
 | `state/` | `cache/`, `locks/`, `logs/`, `temp/` | Build caches, file locks, log archives, temporary files |
-| `templates/` | `infrastructure/`, `projects/` | Docker/K8s/Terraform templates, project starter templates |
+| `templates/` | `infrastructure/`, `slices/` | Docker/K8s/Terraform templates, project starter templates |
 
 `configs/`, `data/`, `docs/`, `quality/`, `releases/`, and `security/` are no
 longer purely skeletons. The AI CLI can generate or append content in these

@@ -93,7 +93,7 @@ Central Execution Engine
 ## Proposed Rust workspace shape
 
 ```text
-projects/polyglid-desktop/
+slices/apps/desktop/
   crates/
     wpm-domain/       # entities, value objects, state rules
     wpm-application/  # commands, queries, use cases, ports

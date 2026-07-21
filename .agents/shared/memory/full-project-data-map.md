@@ -20,7 +20,7 @@ poly.glid_security_workspace/
 ├── 📁 docs/                    # Documentation
 ├── 📁 extensions/              # IDE extensions & plugins
 ├── 📁 infrastructure/          # Docker, K8s, Terraform
-├── 📁 projects/                # All source code
+├── 📁 slices/                  # All source code
 ├── 📁 releases/                # Release artifacts
 ├── 📁 sdk/                     # SDK implementations
 ├── 📁 shared/                  # Shared resources
@@ -126,20 +126,20 @@ SQLite database for local development — plugin registry, execution history, pe
 
 ---
 
-### 5. `projects/` — All Source Code
+### 5. `slices/` — All Source Code
 
 | Path | Language | Contents | Status |
 |------|----------|----------|--------|
-| `projects/polyglid-desktop/` | Rust | Dioxus developer-space application and WPM UI | ✅ Live |
-| `projects/polyglid-core/` | Rust | Core engine: execution, plugins, security, and stores | ✅ Live |
-| `projects/polyglid-cli/` | Rust | CLI and Ratatui development dashboard | ✅ Live |
-| `projects/polyglid-server/` | Rust | HTTP backend: auth routes, server setup, tests | ✅ Live |
-| `projects/polyglid-runtime/` | Rust | Wasmtime component loading and sandboxed execution | ✅ Live |
-| `projects/polyglid-plugin-api/` | Rust | Plugin-facing types and capabilities | ✅ Live |
-| `projects/polyglid-config/` | Rust | Configuration and plugin registry | ✅ Live |
-| `projects/polyglid-events/` | Rust | Typed event system | ✅ Live |
-| `projects/polyglid-contracts/polyglid.wit` | WIT | Canonical host/plugin contract | ✅ Live |
-| `projects/recon-probe/` | Rust | First-party WASM diagnostic plugin | ✅ Live |
+| `slices/apps/desktop/` | Rust | Dioxus developer-space application and WPM UI | ✅ Live |
+| `slices/engine/core/` | Rust | Core engine: execution, plugins, security, and stores | ✅ Live |
+| `slices/apps/cli/` | Rust | CLI and Ratatui development dashboard | ✅ Live |
+| `slices/apps/server/` | Rust | HTTP backend: auth routes, server setup, tests | ✅ Live |
+| `slices/engine/runtime/` | Rust | Wasmtime component loading and sandboxed execution | ✅ Live |
+| `slices/contracts/plugin-api/` | Rust | Plugin-facing types and capabilities | ✅ Live |
+| `slices/configs/config/` | Rust | Configuration and plugin registry | ✅ Live |
+| `slices/contracts/events/` | Rust | Typed event system | ✅ Live |
+| `slices/contracts/wit/polyglid.wit` | WIT | Canonical host/plugin contract | ✅ Live |
+| `slices/plugins/recon-probe/` | Rust | First-party WASM diagnostic plugin | ✅ Live |
 
 ---
 
@@ -244,7 +244,7 @@ SQLite database for local development — plugin registry, execution history, pe
 | **`docs/`** | Documentation | architecture, planning, framework, security, dev | ✅ 28 files |
 | **`extensions/`** | IDE extensions | VSCode, IntelliJ, browser | ⬜ Skeleton |
 | **`infrastructure/`** | Infrastructure as Code | Docker, K8s, Terraform, monitoring | ⬜ Skeleton |
-| **`projects/`** | Source code | Rust (7 crates + 1 plugin), Node (2 frontends) | ✅ Live |
+| **`slices/`** | Source code | Rust (7 crates + 1 plugin), Node (2 frontends) | ✅ Live |
 | **`releases/`** | Release artifacts | notes, binaries, packages | ⬜ Skeleton |
 | **`sdk/`** | SDKs | plugin-template, examples, per-language stubs | ✅ Live |
 | **`shared/`** | Shared resources | configs, protocols, schemas, assets | ⬜ Skeleton |

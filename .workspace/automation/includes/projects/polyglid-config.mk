@@ -5,7 +5,7 @@
 PROJECT_NAME := polyglid-config
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := polyglid-config
-PROJECT_PATH := projects/polyglid-config
+PROJECT_PATH := slices/configs/config
 
 .PHONY: polyglid-config-build polyglid-config-test polyglid-config-clean
 

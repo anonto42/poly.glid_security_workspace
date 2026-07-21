@@ -5,7 +5,7 @@
 PROJECT_NAME := polyglid-events
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := polyglid-events
-PROJECT_PATH := projects/polyglid-events
+PROJECT_PATH := slices/contracts/events
 
 .PHONY: polyglid-events-build polyglid-events-test polyglid-events-clean
 

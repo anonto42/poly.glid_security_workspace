@@ -25,7 +25,7 @@ graph TB
     end
 
     subgraph "📁 WORKSPACE STRUCTURE"
-        W1[projects/]
+        W1[slices/]
         W2[infrastructure/]
         W3[tests/]
         W4[docs/]
@@ -107,10 +107,10 @@ graph TD
     end
 
     subgraph "📁 PRODUCT-ORIENTED PROJECT LAYER"
-        P1[projects/polyglid-desktop/]
-        P2[projects/polyglid-core/]
-        P3[projects/polyglid-server/]
-        P4[projects/recon-probe/]
+        P1[slices/apps/desktop/]
+        P2[slices/engine/core/]
+        P3[slices/apps/server/]
+        P4[slices/plugins/recon-probe/]
     end
 
     subgraph "📊 OUTPUT LAYER"
@@ -264,10 +264,10 @@ graph TD
     end
 
     subgraph "PRODUCT-ORIENTED PROJECTS"
-        P1[projects/polyglid-desktop/]
-        P2[projects/polyglid-core/]
-        P3[projects/polyglid-server/]
-        P4[projects/recon-probe/]
+        P1[slices/apps/desktop/]
+        P2[slices/engine/core/]
+        P3[slices/apps/server/]
+        P4[slices/plugins/recon-probe/]
     end
 
     subgraph "INFRASTRUCTURE"

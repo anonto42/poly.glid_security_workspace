@@ -4,7 +4,7 @@ Date: 2026-07-14
 
 ## What changed
 
-- Created the `projects/polyglid-desktop` Rust/Dioxus package (originally `wpm`).
+- Created the `slices/polyglid-desktop` Rust/Dioxus package (originally `wpm`).
 - Added initial domain rules and four passing tests.
 - Added an interactive, responsive work-tracks control-plane screen.
 - Documented Linux prerequisites and a manual visual test checklist.

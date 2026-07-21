@@ -5,7 +5,7 @@
 PROJECT_NAME := polyglid-desktop
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := polyglid-desktop
-PROJECT_PATH := projects/polyglid-desktop
+PROJECT_PATH := slices/apps/desktop
 
 .PHONY: polyglid-desktop-build polyglid-desktop-test polyglid-desktop-clean polyglid-desktop-dev
 

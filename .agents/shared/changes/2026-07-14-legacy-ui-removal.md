@@ -5,19 +5,19 @@ Date: 2026-07-14
 ## Decision
 
 PolyGlid now has one canonical user interface:
-`projects/polyglid-desktop`, implemented in Rust with Dioxus.
+`slices/polyglid-desktop`, implemented in Rust with Dioxus.
 
 ## Removed
 
-- `projects/polyglid-web-legacy`
-- `projects/polyglid-desktop-legacy`
+- `slices/polyglid-web-legacy`
+- `slices/polyglid-desktop-legacy`
 - Node, React, and Tauri project automation entries
 - Generated Node/Rust pseudo-project Make includes
 - The nested Dioxus `Cargo.lock` and nested workspace boundary
 
 ## Integrated
 
-- Added `projects/polyglid-desktop` to the root Cargo workspace.
+- Added `slices/polyglid-desktop` to the root Cargo workspace.
 - Added a `polyglid-desktop.mk` automation entry.
 - Updated root Make targets to build, test, clean, and run Rust projects only.
 - Updated workspace metadata, architecture notes, command references, and plans.

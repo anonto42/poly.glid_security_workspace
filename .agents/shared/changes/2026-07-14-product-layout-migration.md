@@ -4,14 +4,14 @@ Date: 2026-07-14
 
 ## Changed
 
-- Removed language grouping from `projects/`.
-- Moved every Rust crate directly under `projects/<product-name>`.
+- Removed language grouping from `slices/`.
+- Moved every Rust crate directly under `slices/<product-name>`.
 - Renamed `wpm` to `polyglid-desktop` and its Cargo package/binary accordingly.
-- Moved the WIT contract to `projects/polyglid-contracts`.
-- Moved the plugin to `projects/recon-probe`.
+- Moved the WIT contract to `slices/polyglid-contracts`.
+- Moved the plugin to `slices/recon-probe`.
 - Initially preserved the React and Tauri clients; both were removed after Dioxus
   was selected as the canonical desktop.
-- Moved the Rust config example into `projects/polyglid-config`.
+- Moved the Rust config example into `slices/polyglid-config`.
 - Updated Cargo paths, Make targets, automation, documentation, diagrams, project
   registry, and agent placement rules.
 

@@ -5,7 +5,7 @@
 PROJECT_NAME := polyglid-plugin-api
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := polyglid-plugin-api
-PROJECT_PATH := projects/polyglid-plugin-api
+PROJECT_PATH := slices/contracts/plugin-api
 
 .PHONY: polyglid-plugin-api-build polyglid-plugin-api-test polyglid-plugin-api-clean
 

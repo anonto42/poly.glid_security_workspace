@@ -5,7 +5,7 @@
 PROJECT_NAME := polyglid-core
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := polyglid-core
-PROJECT_PATH := projects/polyglid-core
+PROJECT_PATH := slices/engine/core
 
 .PHONY: polyglid-core-build polyglid-core-test polyglid-core-clean
 

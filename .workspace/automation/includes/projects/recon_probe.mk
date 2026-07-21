@@ -5,7 +5,7 @@
 PROJECT_NAME := recon_probe
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := recon-probe
-PROJECT_PATH := projects/recon-probe
+PROJECT_PATH := slices/plugins/recon-probe
 
 .PHONY: recon_probe-build recon_probe-test recon_probe-clean
 

@@ -5,14 +5,14 @@ Updated: 2026-07-14.
 
 ## Decision direction
 
-Organize `projects/` by product, service, library, or plugin. Do not group source
-under `projects/rust`, `projects/node`, `projects/go`, or `projects/python`.
+Organize `slices/` by product, service, library, or plugin. Do not group source
+under `slices/rust`, `slices/node`, `slices/go`, or `slices/python`.
 Languages are implementation details declared inside each project.
 
 ## Proposed target
 
 ```text
-projects/
+slices/
 ├── polyglid-desktop/          # Rust + Dioxus; current WPM UI
 ├── polyglid-cli/              # Rust terminal client
 ├── polyglid-server/           # Rust service/API
@@ -40,7 +40,7 @@ language-specific internal folders only when its own build requires them.
 ## Completed migration
 
 1. Preserved the Dioxus baseline in commit `063723b`.
-2. Renamed `projects/wpm` to `projects/polyglid-desktop`.
+2. Renamed `slices/wpm` to `slices/polyglid-desktop`.
 3. Moved Rust crates, WIT, and the plugin to direct product paths.
 4. Updated Cargo members, path dependencies, scripts, docs, and agent references.
 5. Removed the retired React and Tauri clients after selecting Dioxus as canonical.

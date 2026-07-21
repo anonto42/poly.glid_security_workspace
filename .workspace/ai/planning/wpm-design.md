@@ -12,7 +12,7 @@ A full project management tool integrated into the PolyGlid workspace: dashboard
 
 ## Project Structure
 ```
-projects/polyglid-desktop/
+slices/apps/desktop/
 ├── Cargo.toml
 ├── Dockerfile
 ├── src/
@@ -201,8 +201,8 @@ make wpm-run          # start server on :8080
 
 Makefile targets to create:
 - `init-wpm` — scaffold project directory, create Cargo.toml, copy templates
-- `wpm-build` — build through `projects/polyglid-desktop/Cargo.toml`
-- `wpm-run` — run through `projects/polyglid-desktop/Cargo.toml`
+- `wpm-build` — build through `slices/apps/desktop/Cargo.toml`
+- `wpm-run` — run through `slices/apps/desktop/Cargo.toml`
 - `wpm-db-setup` — create DB + run migrations
 - `wpm-test` — run wpm tests
 - `wpm-docker-up` — `docker compose -f infrastructure/wpm/docker-compose.yml up`

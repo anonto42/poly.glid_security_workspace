@@ -7,9 +7,9 @@
 - Host: trusted Rust engine with hexagonal boundaries.
 - Plugins: untrusted WebAssembly components behind WIT contracts.
 - First client: `polyglid-cli` development harness.
-- Primary desktop: `projects/polyglid-desktop` using Rust/Dioxus.
+- Primary desktop: `slices/apps/desktop` using Rust/Dioxus.
 - Runtime: Wasmtime Component Model.
-- Contract source: `projects/polyglid-contracts/polyglid.wit`.
+- Contract source: `slices/contracts/wit/polyglid.wit`.
 
 ## References
 
@@ -44,7 +44,7 @@ default.
 - `polyglid-config` owns config schema, validation, persistence.
 - `polyglid-events` owns typed host/UI/runtime events.
 - `polyglid-cli` owns development commands and harness behavior.
-- `projects/polyglid-desktop` owns the Dioxus workspace UI.
+- `slices/apps/desktop` owns the Dioxus workspace UI.
 
 ## Security Defaults
 

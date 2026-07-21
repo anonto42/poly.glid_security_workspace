@@ -1,14 +1,14 @@
 [workspace]
 members = [
-  "projects/polyglid-cli",
-  "projects/polyglid-config",
-  "projects/polyglid-core",
-  "projects/polyglid-events",
-  "projects/polyglid-plugin-api",
-  "projects/polyglid-runtime",
-  "projects/recon-probe",
-  "projects/polyglid-desktop",
-  "projects/polyglid-server",
+  "slices/apps/cli",
+  "slices/apps/desktop",
+  "slices/apps/server",
+  "slices/configs/config",
+  "slices/contracts/events",
+  "slices/contracts/plugin-api",
+  "slices/engine/core",
+  "slices/engine/runtime",
+  "slices/plugins/recon-probe",
 ]
 resolver = "2"
 

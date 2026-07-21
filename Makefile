@@ -487,7 +487,7 @@ ai-search: build-ai-engine ## Search code index (usage: make ai-search QUERY="fi
 	fi
 
 .PHONY: ai-generate-mk
-ai-generate-mk: build-ai-engine ## Generate Makefile templates from projects/
+ai-generate-mk: build-ai-engine ## Generate Makefile templates from slices/
 	@$(call print_header,🔧 Generate Makefile Templates)
 	@$(AI_BIN) generate-mk
 
@@ -539,7 +539,7 @@ new-project: ## Create a new project from template
 	@read -p "  Language (rust/node/python/go): " lang; \
 	read -p "  Project name: " name; \
 	template=".workspace/automation/templates/project.mk.template"; \
-	path="projects/$$name"; \
+	path="slices/$$name"; \
 	mkdir -p "$$path"; \
 	printf "  $(GREEN)✅$(RESET) Created $$path\n"; \
 	printf "  $(GREEN)💡$(RESET) Add '$$name = { path = \"$$path\", language = \"$$lang\", type = \"service\" }' to workspace.toml\n"
@@ -548,7 +548,7 @@ new-project: ## Create a new project from template
 # WPM — Workspace Project Manager
 # ============================================================================
 
-WPM_DIR := projects/polyglid-desktop
+WPM_DIR := slices/apps/desktop
 WPM_INFRA := infrastructure/wpm
 WPM_CONFIG := configs/wpm
 

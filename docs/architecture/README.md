@@ -74,12 +74,12 @@ world security-tool {
 
 ---
 
-### Step B: Writing a Plugin (`projects/recon-tool/src/lib.rs`)
+### Step B: Writing a Plugin (`slices/plugins/recon-probe/src/lib.rs`)
 
 This is the code for an independent plugin module. It uses `wit-bindgen` to automatically read the contract file and generate matching types.
 
 ```rust
-// projects/recon-tool/Cargo.toml needs: wit-bindgen = "0.58.0"
+// slices/plugins/recon-probe/Cargo.toml needs: wit-bindgen = "0.58.0"
 
 // Generate the Rust structures automatically from our WIT file definitions
 wit_bindgen::generate!({

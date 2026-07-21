@@ -12,7 +12,7 @@ changed_files=$(git diff --name-only $BASE..$HEAD 2>/dev/null || echo "")
 # Find affected projects by walking up to the nearest dir with a build file
 affected_projects=()
 for file in $changed_files; do
-    if [[ $file != projects/* ]]; then continue; fi
+    if [[ $file != slices/* ]]; then continue; fi
     dir=$(dirname "$file")
     while [ "$dir" != "." ] && [ "$dir" != "/" ]; do
         if [ -f "$dir/Cargo.toml" ] || [ -f "$dir/package.json" ] || [ -f "$dir/pyproject.toml" ] || [ -f "$dir/go.mod" ]; then

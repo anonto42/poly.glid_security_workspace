@@ -5,7 +5,7 @@
 PROJECT_NAME := polyglid-cli
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := polyglid-cli
-PROJECT_PATH := projects/polyglid-cli
+PROJECT_PATH := slices/apps/cli
 
 .PHONY: polyglid-cli-build polyglid-cli-test polyglid-cli-clean
 

@@ -22,7 +22,7 @@ init:
 
 **Steps:**
 1. Installs Node deps (`pnpm install` for react-web, `npm install` for desktop-tauri)
-2. Runs `validate-workspace.sh` which checks `projects/` and `docs/` dirs exist + `Makefile` and `workspace.toml` files exist
+2. Runs `validate-workspace.sh` which checks `slices/` and `docs/` dirs exist + `Makefile` and `workspace.toml` files exist
 
 **Gap vs hypothetical:** Hypo claims it installs `poetry`, `just`, `task`, `docker`, `kubectl`, Python/Go deps — none of those actually happen. It only installs Node deps and validates structure.
 
@@ -206,7 +206,7 @@ k8s-delete:
 | `make ai-security` | ✅ Live | Makefile wrapper calling `polyglid-ai security` |
 | `make ai-suggest` | ✅ Live | Makefile wrapper calling `polyglid-ai suggest --limit 10` |
 | `make deploy` | ⚠️ Stub | Runs `build` → `docker-up` → `k8s-apply` (stub chain depends on Docker + K8s being ready) |
-| `make new-project` | ✅ Live | Interactive prompt for language + name, scaffolds dir under `projects/` |
+| `make new-project` | ✅ Live | Interactive prompt for language + name, scaffolds dir under `slices/` |
 | `make test-node` | ❌ Missing | Target defined in `languages.mk` but never called |
 
 ---
@@ -255,7 +255,7 @@ make deploy      ⚠️ Stub     make new-project ✅ Live
    - Gracefully handles install failures (never breaks the pipeline)
 2. **`ai-analyze`/`ai-suggest`/`ai-security`** — Makefile wrappers calling `polyglid-ai` binary (checks binary exists before running)
 3. **`deploy`** — Stub pipeline: build → docker-up → k8s-apply (wired as dependency chain)
-4. **`new-project`** — Interactive scaffolding script (prompts for language + name, creates dir under `projects/`)
+4. **`new-project`** — Interactive scaffolding script (prompts for language + name, creates dir under `slices/`)
 
 ### High Priority
 5. **Fix `test`** — add `test-node` to the dependency chain

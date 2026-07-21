@@ -4,7 +4,7 @@ Verified: 2026-07-15.
 
 ## Current implementation
 
-- `projects/polyglid-desktop` is a Rust package using Dioxus Desktop 0.7.9.
+- `slices/apps/desktop` is a Rust package using Dioxus Desktop 0.7.9.
 - PolyGlid Desktop is a normal root Cargo workspace member. The nested workspace
   and lockfile were removed after retiring the React and Tauri clients.
 - The Dioxus application now replaces all legacy dashboard surfaces at the UI layer:
@@ -58,7 +58,7 @@ Verified: 2026-07-15.
   passes.
 - `git diff --check`: passes.
 - The desktop launched on 2026-07-15 with isolated data and discovered 10 real
-  project folders from the repository `projects/` directory.
+  project folders from the repository `slices/` directory.
 - The VS Code-style workbench shell launched successfully on 2026-07-15 using an
   isolated database under `/tmp/polyglid-shell-final`.
 - CSS is compiled into the binary with `include_str!`; plain `cargo run` does not
@@ -78,7 +78,7 @@ sudo pacman -S --needed xdotool
 cargo run -p polyglid-desktop
 ```
 
-Use `projects/polyglid-desktop/README.md` for the visual checklist.
+Use `slices/apps/desktop/README.md` for the visual checklist.
 
 ## Phase status
 

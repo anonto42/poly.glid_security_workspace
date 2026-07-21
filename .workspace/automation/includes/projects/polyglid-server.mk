@@ -5,7 +5,7 @@
 PROJECT_NAME := polyglid-server
 PROJECT_LANGUAGE := rust
 PROJECT_DIR := polyglid-server
-PROJECT_PATH := projects/polyglid-server
+PROJECT_PATH := slices/apps/server
 
 .PHONY: polyglid-server-build polyglid-server-test polyglid-server-clean
 

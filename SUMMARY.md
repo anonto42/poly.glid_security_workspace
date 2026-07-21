@@ -5,17 +5,22 @@
 .
 ├── Makefile                          # Root — all commands
 ├── workspace.toml                    # Workspace project registry
-├── projects/
-│   ├── polyglid-desktop/             # Dioxus developer-space application
-│   ├── polyglid-cli/                 # Terminal client
-│   ├── polyglid-server/              # API service
-│   ├── polyglid-core/                # Domain and orchestration
-│   ├── polyglid-runtime/             # Wasmtime runtime
-│   ├── polyglid-config/              # Configuration
-│   ├── polyglid-events/              # Event contracts
-│   ├── polyglid-plugin-api/          # Plugin-facing types
-│   ├── polyglid-contracts/           # Canonical WIT contract
-│   └── recon-probe/                  # First-party WASM plugin
+├── slices/
+│   ├── apps/
+│   │   ├── desktop/                  # Dioxus developer-space application
+│   │   ├── cli/                      # Terminal client
+│   │   └── server/                   # API service
+│   ├── engine/
+│   │   ├── core/                     # Domain and orchestration
+│   │   └── runtime/                  # Wasmtime runtime
+│   ├── configs/
+│   │   └── config/                   # Configuration
+│   ├── contracts/
+│   │   ├── events/                   # Event contracts
+│   │   ├── plugin-api/               # Plugin-facing types
+│   │   └── wit/                      # Canonical WIT contract
+│   └── plugins/
+│       └── recon-probe/              # First-party WASM plugin
 ├── .workspace/
 │   ├── ai/                           # AI engine (Rust binary)
 │   │   ├── configs/                  # ai-config.toml + per-domain model-configs/

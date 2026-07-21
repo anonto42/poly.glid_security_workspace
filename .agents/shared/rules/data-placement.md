@@ -6,10 +6,10 @@
 What are you creating?
 │
 ├─ Source code?
-│   ├─ Product/application → projects/<product-name>/
-│   ├─ Service → projects/<service-name>/
-│   ├─ Shared library → projects/<library-name>/
-│   └─ Plugin → projects/<plugin-name>/
+│   ├─ Product/application → slices/<product-name>/
+│   ├─ Service → slices/<service-name>/
+│   ├─ Shared library → slices/<library-name>/
+│   └─ Plugin → slices/<plugin-name>/
 │
 ├─ Configuration?
 │   ├─ Global (env, linting, build) → configs/
@@ -32,7 +32,7 @@ What are you creating?
 │   ├─ Integration → tests/integration/
 │   ├─ Performance → tests/performance/
 │   ├─ Security → tests/security/
-│   └─ Unit → alongside source in projects/
+│   └─ Unit → alongside source in slices/
 │
 ├─ Infrastructure?
 │   ├─ Docker → infrastructure/docker/compose/
@@ -112,17 +112,17 @@ What are you creating?
 
 | Extension | Default Location |
 |-----------|-----------------|
-| `.rs` | Inside its owning `projects/<name>/` |
-| `.ts`, `.tsx` | Inside its owning `projects/<name>/` |
-| `.js`, `.jsx` | Inside its owning `projects/<name>/` |
-| `.py` | Inside its owning `projects/<name>/` |
-| `.go` | Inside its owning `projects/<name>/` |
+| `.rs` | Inside its owning `slices/<name>/` |
+| `.ts`, `.tsx` | Inside its owning `slices/<name>/` |
+| `.js`, `.jsx` | Inside its owning `slices/<name>/` |
+| `.py` | Inside its owning `slices/<name>/` |
+| `.go` | Inside its owning `slices/<name>/` |
 | `.toml` | Alongside the project it configures |
 | `.json` | Alongside the project or `configs/` |
 | `.yaml`, `.yml` | `infrastructure/` or `.workspace/integrations/` |
 | `.sh` | `.workspace/automation/scripts/` or `tools/scripts/` |
 | `.md` | `docs/` or alongside the project |
-| `.wit` | `projects/<contracts-name>/` or `sdk/` |
+| `.wit` | `slices/<contracts-name>/` or `sdk/` |
 | `.proto` | `shared/protocols/proto/` |
 | `.sql` | `shared/schemas/database/` |
 
@@ -132,6 +132,6 @@ What are you creating?
 1. Does it configure something? → nearest config directory
 2. Does it run/build/test something? → `.workspace/automation/`
 3. Does it document something? → `docs/`
-4. Is it source code? → its product/capability at `projects/<name>/`
+4. Is it source code? → its product/capability at `slices/<name>/`
 5. Is it shared between projects? → `shared/`
 6. Is it runtime state? → `.workspace/state/`
