@@ -93,6 +93,16 @@ failed. On a manual or formal-release run, `CI result` rejects any skipped
 validation branch. A green `Delivery result` means every branch that applied to
 that event completed successfully.
 
+Timing benchmarks are intentionally excluded from the ordinary Rust correctness
+suite because shared CI runner load is not stable enough for hard latency
+thresholds. Run the real-workload benchmark explicitly on controlled hardware:
+
+```bash
+cargo test --locked -p polyglid-core \
+  benchmarks::benches::run_real_workload_benchmarks -- \
+  --ignored --exact --nocapture
+```
+
 ## Event Outcomes
 
 | Event | Validation scope | Delivery outcome |

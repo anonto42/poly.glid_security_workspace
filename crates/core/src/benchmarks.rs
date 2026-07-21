@@ -9,6 +9,7 @@ mod benches {
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     #[test]
+    #[ignore = "performance thresholds require controlled hardware; run this benchmark explicitly"]
     fn run_real_workload_benchmarks() {
         println!("\n=== PolyGlid Real Workload Performance Benchmarks ===");
         let temp_dir = std::env::temp_dir();
