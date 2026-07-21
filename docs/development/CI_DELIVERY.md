@@ -93,6 +93,11 @@ failed. On a manual or formal-release run, `CI result` rejects any skipped
 validation branch. A green `Delivery result` means every branch that applied to
 that event completed successfully.
 
+Delivery jobs evaluate their event/path rules after `CI result` even when an
+unrelated validation branch is gray. Their explicit `CI result == success`
+guard still blocks preview packaging, Pages, metadata writes, and releases when
+an applicable validation job fails.
+
 Timing benchmarks are intentionally excluded from the ordinary Rust correctness
 suite because shared CI runner load is not stable enough for hard latency
 thresholds. Run the real-workload benchmark explicitly on controlled hardware:
@@ -108,15 +113,15 @@ cargo test --locked -p polyglid-core \
 | Event | Validation scope | Delivery outcome |
 | --- | --- | --- |
 | Pull request to `main` | Changed areas; unknown/workflow changes force all | Validation only; no artifact, metadata write, deployment, or release |
-| Push to `main` | Changed areas; unknown/workflow changes force all | Linux preview for product changes, Pages for site/root changes, metadata sync for `repinfo.json` |
+| Push to `main` | Changed areas; unknown/workflow changes force all | Linux preview for product or full-validation changes, Pages for site/root changes, metadata sync for `repinfo.json` |
 | Manual **Run workflow** | Every validation branch | Linux preview retained for 14 days; never a formal release |
 | Newly created tag such as `v0.10.0` | Every validation branch | Four native archives, Recon component, checksums, GitHub Release, and latest-link verification |
 | Deleted or force-moved version tag | No release publication | The release condition rejects it |
 
 ## Preview Versions
 
-A successful product push to `main`, or a manual run, creates an Actions
-artifact named like:
+A successful product/full-validation push to `main`, or a manual run, creates
+an Actions artifact named like:
 
 ```text
 polyglid-v0.10.0-dev.b0cc556-linux-x86_64

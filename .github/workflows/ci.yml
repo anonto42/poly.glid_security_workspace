@@ -252,7 +252,7 @@ jobs:
   pages:
     name: Website · Deploy GitHub Pages
     needs: [detect, site-build, result]
-    if: needs.result.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true')
+    if: always() && needs.result.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true')
     permissions:
       contents: read
       pages: write
@@ -262,7 +262,7 @@ jobs:
   metadata:
     name: Repository · Sync metadata
     needs: [detect, result]
-    if: needs.result.result == 'success' && needs.detect.outputs.repinfo == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && needs.result.result == 'success' && needs.detect.outputs.repinfo == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/repo-sync.yml
     secrets: inherit
 
@@ -306,10 +306,11 @@ jobs:
     name: Preview · Package Linux snapshot
     needs: [detect, result]
     if: >-
+      always() &&
       needs.result.result == 'success' &&
       !startsWith(github.ref, 'refs/tags/v') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-        (needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.configs == 'true' || needs.detect.outputs.root == 'true')) ||
+        (needs.detect.outputs.run_all == 'true' || needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.configs == 'true' || needs.detect.outputs.root == 'true')) ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     steps:
@@ -357,6 +358,7 @@ jobs:
     name: Release · Build, publish, and verify
     needs: result
     if: >-
+      always() &&
       needs.result.result == 'success' &&
       github.event_name == 'push' &&
       github.event.created == true &&
