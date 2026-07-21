@@ -106,7 +106,7 @@ flowchart TD
     Pages --> DeliveryResult
     Metadata --> DeliveryResult
     Latest --> DeliveryResult
-    DeliveryResult -->|successful default-branch run| Cache[Remove closed-PR caches]
+    DeliveryResult -->|successful default-branch run| Cache[Remove unused Actions caches]
 ```
 
 - GitHub renders top-level jobs and reusable-workflow caller nodes in the run overview; opening a reusable call shows its nested jobs and steps.
@@ -114,7 +114,7 @@ flowchart TD
 - Pull requests and ordinary `main` pushes are selective. Manual runs, new version tags, workflow changes, and unknown paths force every validation branch.
 - `deploy-site.yml` is a reusable workflow called by CI after a successful site build on `main`.
 - `repo-sync.yml` is a reusable workflow called by CI when `repinfo.json` changes on `main`.
-- The non-blocking `cache-cleanup` job in `ci.yml` runs after successful delivery, verifies pull-request state, preserves open-PR/default-branch caches, and deletes closed-PR caches.
+- The non-blocking `cache-cleanup` job in `ci.yml` runs after successful delivery, deletes closed-PR caches, and retains only the most recently accessed cache in each matching default-branch `v0-rust-…-<8 hex>-<8 hex>` family.
 - `scripts/ops/polyglid-ops.mjs` is the shared local and CI entry point.
 - `docs/development/CI_DELIVERY.md` explains the event, preview, and release lifecycle step by step.
 

@@ -60,7 +60,7 @@ flowchart TD
     PagesDeploy --> Delivery
     Metadata --> Delivery
     VerifyLatest --> Delivery
-    Delivery -->|Successful main run| Cache[Remove closed-PR caches]
+    Delivery -->|Successful default-branch run| Cache[Remove unused Actions caches]
 ```
 
 The top-level Actions overview renders jobs and their dependencies. Reusable
@@ -84,7 +84,7 @@ top-level GitHub graph.
 | `infrastructure/**` | Infrastructure | The current required WPM SQL file exists and is non-empty | Feeds `CI result` |
 | `site/**` or root Cargo version | Website build | The static site generator succeeds | May deploy Pages after `CI result` |
 | `repinfo.json` | Metadata | The requested repository metadata is applied with the configured token | Runs only on `main` after `CI result` |
-| Successful push or manual run on the default branch | Cache maintenance | Cache refs are matched to pull requests; open-PR caches are kept and closed-PR caches are deleted | Runs after `Delivery result` as a non-blocking maintenance stage |
+| Successful push or manual run on the default branch | Cache maintenance | Closed-PR caches and less-recently-accessed duplicate versions of each matching default-branch Rust cache family are deleted | Runs after `Delivery result` as a non-blocking maintenance stage |
 | Unknown or newly added path | Every validation branch | New project areas cannot receive an empty green run | `CI result` requires every branch to execute |
 | Manual run or new version tag | Every validation branch | The complete repository gate passes, not only changed areas | Preview for manual; formal release for a new tag |
 
@@ -97,8 +97,9 @@ maintenance runs afterward and is intentionally not a delivery gate.
 
 Delivery jobs evaluate their event/path rules after `CI result` even when an
 unrelated validation branch is gray. Their explicit `CI result == success`
-guard still blocks preview packaging, Pages, metadata writes, releases, and
-cache deletion when an applicable validation job fails.
+guard still blocks preview packaging, Pages, metadata writes, and releases when
+an applicable validation job fails. Cache maintenance has its own guard and
+runs only after `Delivery result` succeeds.
 
 Timing benchmarks are intentionally excluded from the ordinary Rust correctness
 suite because shared CI runner load is not stable enough for hard latency
@@ -128,26 +129,37 @@ job or target differs. Website validation and Pages deliberately share a
 `site` identity that caches the root workspace `target/` directory.
 
 After a successful delivery on the default branch, the
-`Cache · Remove closed-PR entries` job:
+`Cache · Remove unused entries` job:
 
 1. selects cache refs shaped like `refs/pull/<number>/merge`;
 2. asks GitHub for each pull request's current state;
 3. keeps every cache whose pull request is still open; and
-4. deletes each cache whose pull request is confirmed closed or merged.
+4. deletes each cache whose pull request is confirmed closed or merged;
+5. groups default-branch keys matching
+   `v0-rust-…-<8 hex>-<8 hex>` by job/shared-key family;
+6. keeps the most recently accessed version in each family; and
+7. deletes only less-recently-accessed versions superseded by that retained
+   cache.
 
 The job requests job-scoped `actions: write` permission, but its implemented
 commands only list and delete cache entries; it does not call an artifact or
 release deletion API. Removing a cache only means a later build may need to
 compile dependencies again.
 
-The default branch, open pull requests, version tags, and ordinary branch refs
-are never cleanup targets. GitHub separately applies the cache retention and
-least-recently-used eviction settings configured for the repository. The
-maintenance job is non-blocking so a cache API outage cannot turn a valid build
-or deployment red. Its Actions node and logs expose failures, while successful
-runs write the deletion count and reclaimed size to the job summary.
-Pull-request runs do not receive cache-deletion permission and show the job as
-skipped.
+The most recently accessed matching cache in every default-branch Rust family,
+open pull requests, version tags, and ordinary branch refs are never cleanup
+targets. Default-branch non-Rust caches are excluded from family
+deduplication; a cache of any kind can still be deleted when it belongs to a
+confirmed closed pull request. Superseded matching default-branch Rust entries
+are considered disposable only after a more-recently-accessed family entry
+exists and delivery has passed. GitHub separately applies the cache retention
+and least-recently-used eviction settings configured for the repository.
+
+The maintenance job is non-blocking so a cache API outage cannot turn a valid
+build or deployment red. Its Actions node and logs expose failures, while
+successful runs write separate deletion counts and reclaimed size to the job
+summary. Pull-request runs do not receive cache-deletion permission and show
+the job as skipped.
 
 ## Preview Versions
 

@@ -399,7 +399,7 @@ jobs:
           fi
 
   cache-cleanup:
-    name: Cache · Remove closed-PR entries
+    name: Cache · Remove unused entries
     needs: delivery-result
     if: >-
       always() &&
@@ -413,25 +413,26 @@ jobs:
       contents: read
       pull-requests: read
     env:
+      DEFAULT_REF: refs/heads/${{ github.event.repository.default_branch }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Delete caches belonging to closed pull requests
+      - name: Delete closed-PR and superseded Rust caches
         shell: bash
         run: |
           caches=$(gh cache list \
             --limit 10000 \
             --sort last_accessed_at \
-            --order asc \
-            --json id,key,ref,sizeInBytes)
-          pull_request_caches=$(jq -c '
-            .[]
-            | select(.ref | test("^refs/pull/[0-9]+/merge$"))
-          ' <<<"$caches")
+            --order desc \
+            --json id,key,ref,lastAccessedAt,sizeInBytes)
+          cache_entries=$(jq -c '.[]' <<<"$caches")
 
           declare -A pull_request_states=()
+          declare -A retained_rust_families=()
           deleted_count=0
           deleted_bytes=0
+          deleted_closed_pr=0
+          deleted_superseded=0
 
           while IFS= read -r cache; do
             [ -n "$cache" ] || continue
@@ -441,31 +442,63 @@ jobs:
             cache_ref=$(jq -r '.ref' <<<"$cache")
             cache_size=$(jq -r '.sizeInBytes' <<<"$cache")
 
-            [[ "$cache_ref" =~ ^refs/pull/([0-9]+)/merge$ ]]
-            pull_request_number=${BASH_REMATCH[1]}
-            if [ -z "${pull_request_states[$pull_request_number]+known}" ]; then
-              pull_request_states[$pull_request_number]=$(gh pr view \
-                "$pull_request_number" \
-                --json state \
-                --jq '.state')
-            fi
+            category=
+            if [[ "$cache_ref" =~ ^refs/pull/([0-9]+)/merge$ ]]; then
+              pull_request_number=${BASH_REMATCH[1]}
+              if [ -z "${pull_request_states[$pull_request_number]+known}" ]; then
+                pull_request_states[$pull_request_number]=$(gh pr view \
+                  "$pull_request_number" \
+                  --json state \
+                  --jq '.state')
+              fi
 
-            if [ "${pull_request_states[$pull_request_number]}" = "OPEN" ]; then
-              echo "Keeping cache $cache_id for open pull request #$pull_request_number"
+              case "${pull_request_states[$pull_request_number]}" in
+                OPEN)
+                  echo "Keeping cache $cache_id for open pull request #$pull_request_number"
+                  continue
+                  ;;
+                CLOSED|MERGED)
+                  category=closed-pr
+                  reason="closed pull request #$pull_request_number"
+                  ;;
+                *)
+                  echo "::warning::Keeping cache $cache_id because pull request #$pull_request_number returned an unexpected state"
+                  continue
+                  ;;
+              esac
+            elif [ "$cache_ref" = "$DEFAULT_REF" ] &&
+              [[ "$cache_key" =~ ^v0-rust-(.+)-[0-9a-f]{8}-[0-9a-f]{8}$ ]]; then
+              rust_family=${BASH_REMATCH[1]}
+              if [ -z "${retained_rust_families[$rust_family]+known}" ]; then
+                retained_rust_families[$rust_family]=$cache_id
+                echo "Keeping most recently accessed default-branch Rust cache $cache_id ($rust_family)"
+                continue
+              fi
+
+              category=superseded
+              reason="superseded default-branch Rust family $rust_family"
+            else
               continue
             fi
 
-            echo "Deleting cache $cache_id for closed pull request #$pull_request_number ($cache_key)"
+            echo "Deleting cache $cache_id ($reason, $cache_key)"
             gh cache delete "$cache_id"
             deleted_count=$((deleted_count + 1))
             deleted_bytes=$((deleted_bytes + cache_size))
-          done <<<"$pull_request_caches"
+            if [ "$category" = "closed-pr" ]; then
+              deleted_closed_pr=$((deleted_closed_pr + 1))
+            else
+              deleted_superseded=$((deleted_superseded + 1))
+            fi
+          done <<<"$cache_entries"
 
           deleted_mib=$((deleted_bytes / 1024 / 1024))
           {
             echo "### Cache maintenance"
             echo
-            echo "Policy: delete caches only for confirmed closed pull requests"
+            echo "Policy: delete confirmed closed-PR caches and superseded default-branch Rust cache versions"
+            echo "Closed-PR entries deleted: $deleted_closed_pr"
+            echo "Superseded Rust entries deleted: $deleted_superseded"
             echo "Deleted entries: $deleted_count"
             echo "Reclaimed size: approximately ${deleted_mib} MiB"
           } >> "$GITHUB_STEP_SUMMARY"
