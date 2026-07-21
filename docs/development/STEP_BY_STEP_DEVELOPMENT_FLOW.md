@@ -43,7 +43,7 @@ report.
 Steps:
 
 1. Create the Rust workspace and crates from `docs/architecture/CODEBASE.md`.
-2. Add `wit/polyglid.wit` with the first `plugin-report` contract.
+2. Add `contracts/polyglid.wit` with the first `plugin-report` contract.
 3. Generate or mirror host/plugin API types in `polyglid-plugin-api`.
 4. Implement `polyglid-runtime` as the Wasmtime adapter.
 5. Implement `polyglid-cli` commands: `doctor`, `plugin inspect`, `plugin run`.

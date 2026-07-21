@@ -3,13 +3,14 @@ name = "PolyGlid"
 version = "0.1.0"
 
 [projects]
-polyglid_desktop = { path = "slices/apps/desktop", language = "rust", type = "application", description = "PolyGlid Dioxus developer space" }
-polyglid_cli = { path = "slices/apps/cli", language = "rust", type = "application", description = "Terminal client and development dashboard" }
-polyglid_server = { path = "slices/apps/server", language = "rust", type = "service", description = "HTTP and collaboration API" }
-polyglid_core = { path = "slices/engine/core", language = "rust", type = "library", description = "Domain, orchestration, security, and stores" }
-polyglid_runtime = { path = "slices/engine/runtime", language = "rust", type = "library", description = "Wasmtime component runtime" }
-polyglid_config = { path = "slices/configs/config", language = "rust", type = "library", description = "Configuration and plugin registry" }
-polyglid_events = { path = "slices/contracts/events", language = "rust", type = "library", description = "Typed host and UI events" }
-polyglid_plugin_api = { path = "slices/contracts/plugin-api", language = "rust", type = "library", description = "Plugin-facing types and capabilities" }
-polyglid_contracts = { path = "slices/contracts/wit", language = "wit", type = "contract", description = "Canonical host/plugin WIT contract" }
-recon_probe = { path = "slices/plugins/recon-probe", language = "rust", type = "plugin", description = "First-party diagnostic WASM plugin" }
+polyglid_desktop = { path = "apps/desktop", language = "rust", type = "application", description = "PolyGlid Dioxus developer space" }
+polyglid_cli = { path = "apps/cli", language = "rust", type = "application", description = "Terminal client and development dashboard" }
+polyglid_server = { path = "apps/server", language = "rust", type = "service", description = "HTTP and collaboration API" }
+polyglid_core = { path = "crates/core", language = "rust", type = "library", description = "Domain, orchestration, security, and stores" }
+polyglid_runtime = { path = "crates/runtime", language = "rust", type = "library", description = "Wasmtime component runtime" }
+polyglid_config = { path = "crates/config", language = "rust", type = "library", description = "Configuration and plugin registry" }
+polyglid_events = { path = "crates/events", language = "rust", type = "library", description = "Typed host and UI events" }
+polyglid_plugin_api = { path = "crates/plugin-api", language = "rust", type = "library", description = "Plugin-facing types and capabilities" }
+polyglid_contracts = { path = "contracts", language = "wit", type = "contract", description = "Canonical host/plugin WIT contract" }
+recon_probe = { path = "plugins/recon-probe", language = "rust", type = "plugin", description = "First-party diagnostic WASM plugin" }
+polyglid_site = { path = "site", language = "rust", type = "application", description = "Static public website generator" }

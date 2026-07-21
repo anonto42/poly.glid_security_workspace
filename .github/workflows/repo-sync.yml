@@ -19,4 +19,4 @@ jobs:
             echo "::error::GH_PAT secret not set. Create a classic PAT (repo scope) at https://github.com/settings/tokens and add it as GH_PAT in repo settings → Secrets and variables → Actions"
             exit 1
           fi
-          node scripts/ops/sync-repo.mjs
+          node scripts/ops/polyglid-ops.mjs repo-sync

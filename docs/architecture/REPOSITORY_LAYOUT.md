@@ -15,18 +15,25 @@ PolyGlid uses a monorepo layout because the project contains multiple related pi
 ```text
 poly.glid_security_workspace/
 ├── apps/
-│   └── desktop/
+│   ├── desktop/
+│   ├── cli/
+│   └── server/
 ├── crates/
-│   ├── polyglid-cli/
-│   ├── polyglid-core/
-│   ├── polyglid-runtime/
-│   ├── polyglid-plugin-api/
-│   ├── polyglid-config/
-│   └── polyglid-events/
-├── plugins/
-│   └── recon_probe/
-├── wit/
+│   ├── core/
+│   ├── runtime/
+│   ├── plugin-api/
+│   ├── config/
+│   └── events/
+├── contracts/
 │   └── polyglid.wit
+├── plugins/
+│   └── recon-probe/
+├── site/
+├── sdk/
+├── tools/
+├── scripts/
+├── infrastructure/
+├── tests/
 └── docs/
 ```
 
@@ -40,13 +47,13 @@ For now:
 apps/desktop
 ```
 
-This will become the Tauri app. It should contain frontend code, Tauri commands, and app shell wiring. It should not contain core plugin execution logic.
+The Dioxus desktop app contains workbench presentation and backend adapters. It does not own core plugin execution policy.
 
 ## `crates`
 
 Contains Rust crates that form the engine.
 
-### `polyglid-cli`
+### `apps/cli`
 
 The first client interface.
 
@@ -63,7 +70,7 @@ It does not own:
 - business policy
 - plugin permission rules
 
-### `polyglid-core`
+### `crates/core`
 
 The application brain.
 
@@ -81,7 +88,7 @@ It does not own:
 - Tauri UI
 - Wasmtime implementation details
 
-### `polyglid-runtime`
+### `crates/runtime`
 
 The WASM execution adapter.
 
@@ -93,7 +100,7 @@ It owns:
 - plugin execution
 - runtime error mapping
 
-### `polyglid-plugin-api`
+### `crates/plugin-api`
 
 Shared contract types.
 
@@ -103,7 +110,7 @@ It owns:
 - shared report/event structs
 - plugin-facing types where needed
 
-### `polyglid-config`
+### `crates/config`
 
 Configuration and settings.
 
@@ -114,7 +121,7 @@ It owns:
 - config validation
 - config migrations later
 
-### `polyglid-events`
+### `crates/events`
 
 Typed events.
 
@@ -132,10 +139,10 @@ Contains first-party plugins. Each plugin must remain independently buildable as
 First plugin:
 
 ```text
-plugins/recon_probe
+plugins/recon-probe
 ```
 
-## `wit`
+## `contracts`
 
 Contains the WebAssembly Component Model contract.
 

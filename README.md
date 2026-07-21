@@ -1,19 +1,18 @@
 # PolyGlid Security Workspace
 
-PolyGlid is planned as a cross-platform security workspace built around a Rust host engine, a web-based multi-window UI, and sandboxed WebAssembly plugins.
+PolyGlid is a cross-platform security workspace built around a Rust host engine, a Dioxus desktop workbench, CLI and server clients, and sandboxed WebAssembly plugins.
 
 The goal is not to create one large tangled application. The goal is to create a small trusted host that manages windows, state, permissions, and execution, while feature plugins run behind explicit contracts and capability boundaries.
 
 ## Product Shape
 
 ```text
-Frontend Workspace
-React or SolidJS, TypeScript, Tailwind
+Desktop / CLI / HTTP API
         |
-        | Tauri IPC and event streams
+        | typed core services and events
         v
 Rust Host Engine
-Tauri v2, Tokio, config, permissions, scheduling
+Tokio, SQLite, config, permissions, scheduling
         |
         | Wasmtime Component Model
         v
@@ -35,6 +34,7 @@ Recon, audit, reporting, diagnostics
 - [Codebase Architecture](docs/architecture/CODEBASE.md)
 - [CLI Technology Decision](docs/architecture/CLI_TECH_DECISION.md)
 - [Repository Layout](docs/architecture/REPOSITORY_LAYOUT.md)
+- [Project And Automation Flow](docs/architecture/PROJECT_FLOW.md)
 - [System Architecture](docs/architecture/SYSTEM.md)
 - [Development Targets](docs/planning/DEVELOPMENT_TARGETS.md)
 - [Roadmap](docs/planning/ROADMAP.md)
@@ -46,24 +46,31 @@ Recon, audit, reporting, diagnostics
 - [Packaging And Distribution](docs/development/PACKAGING.md)
 - [Brand Guide](docs/branding/README.md)
 
-## Planned Repository Layout
+## Repository Layout
 
 ```text
 poly.glid_security_workspace/
 ├── apps/
-│   └── desktop/              # Tauri desktop/mobile app shell
+│   ├── desktop/              # Dioxus desktop workbench
+│   ├── cli/                  # terminal client
+│   └── server/               # HTTP/WebSocket API
 ├── crates/
-│   ├── polyglid-core/        # application use cases and orchestration
-│   ├── polyglid-runtime/     # Wasmtime runtime and plugin execution
-│   ├── polyglid-plugin-api/  # shared Rust types generated from WIT
-│   ├── polyglid-config/      # config loading, validation, persistence
-│   ├── polyglid-events/      # event model between host/UI/plugins
-│   └── polyglid-cli/         # development harness and maintenance CLI
+│   ├── core/                 # application use cases and persistence
+│   ├── runtime/              # Wasmtime execution adapter
+│   ├── plugin-api/           # plugin-facing Rust types
+│   ├── config/               # configuration and registry
+│   └── events/               # typed host events
+├── contracts/
+│   └── polyglid.wit          # canonical host/plugin contract
 ├── plugins/
-│   └── recon_probe/          # first safe example plugin
-├── wit/
-│   └── polyglid.wit          # host/plugin contract
-└── docs/
+│   └── recon-probe/          # first-party WASM plugin
+├── site/                     # public website generator
+├── sdk/                      # plugin SDK and examples
+├── tools/                    # AI and workspace automation
+├── scripts/ops/              # stable operations CLI
+├── infrastructure/          # deployment and service definitions
+├── tests/                    # workspace-level tests
+└── docs/                     # architecture and operating guides
 ```
 
 ## Build Order

@@ -1,0 +1,24 @@
+[package]
+name = "polyglid-cli"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+polyglid-config = { path = "../../crates/config" }
+polyglid-core = { path = "../../crates/core" }
+polyglid-events = { path = "../../crates/events" }
+polyglid-plugin-api = { path = "../../crates/plugin-api" }
+polyglid-runtime = { path = "../../crates/runtime" }
+ratatui = "0.29"
+tokio = { version = "1", features = ["sync"] }
+uuid = { version = "1.0", features = ["v4"] }
+wasi-preview1-component-adapter-provider = "46.0.1"
+wit-component = "0.252.0"
+serde_json = "1"
+ed25519-dalek = "2.0"
+hex = "0.4"
+
+[[bin]]
+name = "polyglid"
+path = "src/main.rs"

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "slices/site/**"
+      - "site/**"
       - "Cargo.lock"
       - "Cargo.toml"
   workflow_dispatch:
@@ -32,15 +32,15 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: slices/site
+          workspaces: site
 
       - name: Generate site
-        run: cargo run -p polyglid-site
+        run: node scripts/ops/polyglid-ops.mjs site-build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: slices/site/public
+          path: site/public
 
   deploy:
     needs: build

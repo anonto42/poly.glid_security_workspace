@@ -7,6 +7,11 @@
     "build": "make build",
     "test": "make test",
     "clean": "make clean",
-    "init": "make init"
+    "init": "make init",
+    "ops": "node scripts/ops/polyglid-ops.mjs",
+    "ops:detect": "node scripts/ops/polyglid-ops.mjs detect",
+    "ops:validate": "node scripts/ops/polyglid-ops.mjs validate",
+    "ops:site": "node scripts/ops/polyglid-ops.mjs site-build",
+    "ops:repo-sync": "node scripts/ops/polyglid-ops.mjs repo-sync"
   }
 }

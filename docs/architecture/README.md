@@ -1,3 +1,6 @@
+The current repository ownership, runtime sequence, development order, and
+GitHub automation routing are documented in [Project Flow](PROJECT_FLOW.md).
+
 To make **PolyGlid** a true plug-and-play workspace, we will use the **WebAssembly Component Model**. Instead of writing standard traits that risk crashing your host application, we define a formal language-agnostic interface called a **WIT file (WebAssembly Interface Type)**.
 
 Think of the WIT file as the contract rulebook. The Core Engine reads it to know what functions it can call inside the plugin, and the plugin reads it to know what data to return.
@@ -46,7 +49,7 @@ The host engine manages permissions and passes instructions to the sandboxed run
 
 Here is the complete code blueprint for your workspace files.
 
-### Step A: Defining the Contract (`wit/polyglid.wit`)
+### Step A: Defining the Contract (`contracts/polyglid.wit`)
 
 Create this file at the root. This is the shared API rule definition used by both your core engine and your dynamic plugins.
 
@@ -74,12 +77,12 @@ world security-tool {
 
 ---
 
-### Step B: Writing a Plugin (`slices/plugins/recon-probe/src/lib.rs`)
+### Step B: Writing a Plugin (`plugins/recon-probe/src/lib.rs`)
 
 This is the code for an independent plugin module. It uses `wit-bindgen` to automatically read the contract file and generate matching types.
 
 ```rust
-// slices/plugins/recon-probe/Cargo.toml needs: wit-bindgen = "0.58.0"
+// plugins/recon-probe/Cargo.toml needs: wit-bindgen = "0.58.0"
 
 // Generate the Rust structures automatically from our WIT file definitions
 wit_bindgen::generate!({

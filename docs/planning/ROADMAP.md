@@ -17,7 +17,7 @@ Exit condition: the repo explains what to build and where each piece belongs.
 Build the smallest end-to-end runtime.
 
 - create Rust workspace
-- create `wit/polyglid.wit`
+- create `contracts/polyglid.wit`
 - create `polyglid-plugin-api`
 - create `polyglid-runtime`
 - create `polyglid-cli`

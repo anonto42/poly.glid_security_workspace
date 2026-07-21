@@ -17,22 +17,22 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 # Include OS detection (first — other includes depend on these vars)
-include .workspace/automation/includes/os.mk
+include tools/automation/includes/os.mk
 
 # Include automation system
-include .workspace/automation/includes/colors.mk
-include .workspace/automation/includes/config.mk
-include .workspace/automation/includes/utils.mk
-include .workspace/automation/includes/help.mk
+include tools/automation/includes/colors.mk
+include tools/automation/includes/config.mk
+include tools/automation/includes/utils.mk
+include tools/automation/includes/help.mk
 
 # Include language modules
-include .workspace/automation/includes/languages.mk
+include tools/automation/includes/languages.mk
 
 # Include infrastructure modules
-include .workspace/automation/includes/docker.mk
-include .workspace/automation/includes/k8s.mk
-include .workspace/automation/includes/ci.mk
--include .workspace/automation/includes/projects/*.mk
+include tools/automation/includes/docker.mk
+include tools/automation/includes/k8s.mk
+include tools/automation/includes/ci.mk
+-include tools/automation/includes/projects/*.mk
 
 # ============================================================================
 # Default Target
@@ -266,7 +266,7 @@ _setup-ollama-model:
 .PHONY: _setup-ai-config
 _setup-ai-config:
 	@$(call print_header,🔧 Auto-Setup — Generating AI Configuration)
-	@config_dir=".workspace/ai/configs"; \
+	@config_dir="tools/ai/configs"; \
 	config_file="$$config_dir/ai-config.toml"; \
 	mkdir -p "$$config_dir"; \
 	\
@@ -332,7 +332,7 @@ _init-build: build-rust build-ai-engine ## [Phase 3] Build workspace
 .PHONY: _init-validate
 _init-validate: ## [Phase 4] Validate workspace structure
 	@$(call print_header,📦 Phase 4/4 — Validating Workspace)
-	@.workspace/automation/scripts/validate-workspace.sh
+	@tools/automation/scripts/validate-workspace.sh
 
 .PHONY: status
 status: ## Show workspace status
@@ -340,12 +340,12 @@ status: ## Show workspace status
 	@echo "  $(GREEN)✓$(RESET) Workspace root: $(WORKSPACE_ROOT)"
 	@echo "  $(GREEN)✓$(RESET) Languages enabled: $(LANGUAGES)"
 	@$(call print_step,Project Health:)
-	@.workspace/automation/scripts/validate-workspace.sh --quiet
+	@tools/automation/scripts/validate-workspace.sh --quiet
 
 .PHONY: graph
 graph: ## Generate and display dependency graph
 	@$(call print_header,📊 Dependency Graph)
-	@.workspace/automation/scripts/generate-graph.sh
+	@tools/automation/scripts/generate-graph.sh
 
 .PHONY: info
 info: ## Show workspace information
@@ -422,14 +422,14 @@ clean-rust:
 # AI Commands
 # ============================================================================
 
-AI_BIN := .workspace/ai/rust/target/release/polyglid-ai
+AI_BIN := tools/ai/rust/target/release/polyglid-ai
 ARGS ?=
 QUERY ?=
 
 .PHONY: build-ai-engine
 build-ai-engine: ## Build AI engine binary (release)
 	@$(call print_substep,Building AI engine (release)...)
-	@cargo build --release --manifest-path .workspace/ai/rust/Cargo.toml 2>&1 | tail -3 || \
+	@cargo build --release --manifest-path tools/ai/rust/Cargo.toml 2>&1 | tail -3 || \
 		printf "  $(YELLOW)⚠️$(RESET) AI engine build failed\n"
 
 .PHONY: ai-analyze
@@ -487,7 +487,7 @@ ai-search: build-ai-engine ## Search code index (usage: make ai-search QUERY="fi
 	fi
 
 .PHONY: ai-generate-mk
-ai-generate-mk: build-ai-engine ## Generate Makefile templates from slices/
+ai-generate-mk: build-ai-engine ## Generate per-project Makefile templates
 	@$(call print_header,🔧 Generate Makefile Templates)
 	@$(AI_BIN) generate-mk
 
@@ -538,8 +538,8 @@ new-project: ## Create a new project from template
 	@$(call print_header,📁 New Project)
 	@read -p "  Language (rust/node/python/go): " lang; \
 	read -p "  Project name: " name; \
-	template=".workspace/automation/templates/project.mk.template"; \
-	path="slices/$$name"; \
+	template="tools/automation/templates/project.mk.template"; \
+	path="apps/$$name"; \
 	mkdir -p "$$path"; \
 	printf "  $(GREEN)✅$(RESET) Created $$path\n"; \
 	printf "  $(GREEN)💡$(RESET) Add '$$name = { path = \"$$path\", language = \"$$lang\", type = \"service\" }' to workspace.toml\n"
@@ -557,8 +557,8 @@ site: ## Generate the PolyGlid download landing page
 # WPM — Workspace Project Manager
 # ============================================================================
 
-SITE_DIR := slices/site
-WPM_DIR := slices/apps/desktop
+SITE_DIR := site
+WPM_DIR := apps/desktop
 WPM_INFRA := infrastructure/wpm
 WPM_CONFIG := configs/wpm
 
@@ -604,4 +604,4 @@ wpm-docker-down: ## Stop WPM Docker stack
 
 .PHONY: wpm-plan
 wpm-plan: ## Show WPM design plan
-	@cat .workspace/ai/planning/wpm-design.md
+	@cat tools/ai/planning/wpm-design.md

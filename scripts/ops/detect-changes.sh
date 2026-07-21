@@ -6,7 +6,10 @@ set -euo pipefail
 BASE="${1:-main}"
 HEAD="${2:-HEAD}"
 
-changed=$(git diff --name-only "$BASE..$HEAD" 2>/dev/null || echo "")
+if ! git rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1; then
+  BASE=$(git rev-list --max-parents=0 "$HEAD" | head -n 1)
+fi
+changed=$(git diff --name-only "$BASE" "$HEAD")
 
 # Initialize all flags
 site=false
@@ -24,17 +27,17 @@ root=false
 
 for f in $changed; do
   case "$f" in
-    slices/site/*)          site=true ;;
+    site/*)                 site=true ;;
     Cargo.lock | Cargo.toml) site=true; root=true ;;
-    slices/apps/* | slices/engine/* | slices/configs/config/* | slices/contracts/* | slices/plugins/*)
+    apps/* | crates/*)
       rust_core=true ;;
-    slices/plugins/recon-probe/* | *.wit | wit/*)
+    plugins/* | contracts/* | *.wit | wit/*)
       wasm=true ;;
     docs/*)                 docs=true ;;
     configs/*)              configs=true ;;
     infrastructure/*)       infra=true ;;
     .github/*)              workflows=true ;;
-    .workspace/ai/*)        ai_engine=true ;;
+    tools/ai/*)             ai_engine=true ;;
     sdk/*)                  sdk=true ;;
     scripts/*)              scripts=true ;;
     repinfo.json)           repinfo=true ;;

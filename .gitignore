@@ -2,7 +2,7 @@
 .workspace/state/cache/
 .workspace/state/temp/
 .workspace/state/logs/
-.workspace/ai/rust/target/
+tools/ai/rust/target/
 .workspace/data/backups/
 
 # Dependencies
@@ -12,6 +12,10 @@ node_modules/
 target/
 dist/
 build/
+/reports/
+/polyglid.db
+/polyglid.db-*
+/.workspace/data/
 
 # IDE
 .vscode/

@@ -5,23 +5,12 @@
 .
 ├── Makefile                          # Root — all commands
 ├── workspace.toml                    # Workspace project registry
-├── slices/
-│   ├── apps/
-│   │   ├── desktop/                  # Dioxus developer-space application
-│   │   ├── cli/                      # Terminal client
-│   │   └── server/                   # API service
-│   ├── engine/
-│   │   ├── core/                     # Domain and orchestration
-│   │   └── runtime/                  # Wasmtime runtime
-│   ├── configs/
-│   │   └── config/                   # Configuration
-│   ├── contracts/
-│   │   ├── events/                   # Event contracts
-│   │   ├── plugin-api/               # Plugin-facing types
-│   │   └── wit/                      # Canonical WIT contract
-│   └── plugins/
-│       └── recon-probe/              # First-party WASM plugin
-├── .workspace/
+├── apps/                             # Desktop, CLI, and server applications
+├── crates/                           # Core, runtime, config, events, plugin API
+├── contracts/                        # Canonical WIT contract
+├── plugins/                          # First-party WASM plugins
+├── site/                             # Static public website generator
+├── tools/
 │   ├── ai/                           # AI engine (Rust binary)
 │   │   ├── configs/                  # ai-config.toml + per-domain model-configs/
 │   │   ├── rust/src/                 # Engine source
@@ -77,7 +66,7 @@ All AI commands auto-build the engine binary before running.
 | `make ai-suggest` | Get improvement suggestions | stdout |
 | `make ai-security` | Security audit scan | `.workspace/security/audits/` |
 | `make ai-status` | Engine health check | stdout |
-| `make ai-ingest` | Build code vector index | `.workspace/ai/models/embeddings/` |
+| `make ai-ingest` | Build code vector index | `tools/ai/models/embeddings/` |
 | `make ai-search QUERY="..."` | Semantic code search | stdout |
 | `make ai-diagram` | Generate architecture diagrams | `docs/diagrams/` |
 | `make ai-release` | Generate K8s deploy manifests | `releases/manifests/` |
@@ -123,9 +112,9 @@ All AI commands auto-build the engine binary before running.
 - CI: `automation/includes/ci.mk`
 
 ### AI engine
-- Source: `.workspace/ai/rust/src/`
-- Config: `.workspace/ai/configs/ai-config.toml`
-- Per-domain model overrides: `.workspace/ai/configs/model-configs/*.toml`
+- Source: `tools/ai/rust/src/`
+- Config: `tools/ai/configs/ai-config.toml`
+- Per-domain model overrides: `tools/ai/configs/model-configs/*.toml`
 - Rebuild: `make build-ai-engine` (auto-runs before any `ai-*` command)
 
 ### Requirements

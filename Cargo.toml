@@ -1,15 +1,15 @@
 [workspace]
 members = [
-  "slices/apps/cli",
-  "slices/apps/desktop",
-  "slices/apps/server",
-  "slices/configs/config",
-  "slices/contracts/events",
-  "slices/contracts/plugin-api",
-  "slices/engine/core",
-  "slices/engine/runtime",
-  "slices/plugins/recon-probe",
-  "slices/site",
+  "apps/cli",
+  "apps/desktop",
+  "apps/server",
+  "crates/config",
+  "crates/events",
+  "crates/plugin-api",
+  "crates/core",
+  "crates/runtime",
+  "plugins/recon-probe",
+  "site",
 ]
 resolver = "2"
 

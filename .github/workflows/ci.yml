@@ -41,7 +41,7 @@ jobs:
             base="${{ github.event.before || github.sha }}"
             head="${{ github.sha }}"
           fi
-          result=$(bash scripts/ops/detect-changes.sh "$base" "$head" 2>/dev/null || echo '{}')
+          result=$(node scripts/ops/polyglid-ops.mjs detect "$base" "$head" 2>/dev/null || echo '{}')
           echo "$result"
           for key in $(echo "$result" | jq -r 'keys[]'); do
             val=$(echo "$result" | jq -r --arg k "$key" '.[$k]')
@@ -90,30 +90,18 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --exclude polyglid-site -- -D warnings
 
-  # ── Site: build + deploy ──────────────────────────────────────
+  # Build only. Production deployment remains isolated in deploy-site.yml.
   site:
     needs: detect
     if: needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: slices/site
-      - run: cargo run -p polyglid-site
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: slices/site/public
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          workspaces: site
+      - run: node scripts/ops/polyglid-ops.mjs site-build
 
   # ── Repo metadata: sync from repinfo.json ─────────────────────
   repoinfo:
@@ -130,7 +118,7 @@ jobs:
             echo "::error::GH_PAT secret not set. Create a classic PAT (repo scope) at https://github.com/settings/tokens and add it as GH_PAT in repo settings → Secrets and variables → Actions"
             exit 1
           fi
-          node scripts/ops/sync-repo.mjs
+          node scripts/ops/polyglid-ops.mjs repo-sync
 
   # ── Documentation check ───────────────────────────────────────
   docs:
@@ -139,7 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Docs changed — add validation steps here"
+      - run: test -f docs/architecture/README.md && test -f README.md
 
   # ── Configuration validation ──────────────────────────────────
   configs:
@@ -148,7 +136,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Configs changed — add validation steps here"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p polyglid-config
 
   # ── Workflow validation ───────────────────────────────────────
   workflows:
@@ -157,19 +146,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - shell: python3 {0}
-        run: |
-          import os, yaml, sys
-          ok = True
-          for f in os.listdir('.github/workflows'):
-              if f.endswith(('.yml', '.yaml')):
-                  try:
-                      with open(f'.github/workflows/{f}') as h:
-                          yaml.safe_load(h)
-                  except Exception as e:
-                      print(f'::error file=.github/workflows/{f}::Invalid YAML: {e}')
-                      ok = False
-          sys.exit(0 if ok else 1)
+      - run: node --check scripts/ops/polyglid-ops.mjs
+      - run: node --check scripts/ops/sync-repo.mjs
+      - run: bash -n scripts/ops/detect-changes.sh
 
   # ── AI engine build ───────────────────────────────────────────
   ai:
@@ -191,4 +170,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "SDK changed — add validation steps here"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - run: cargo check --manifest-path sdk/plugin-template/Cargo.toml --target wasm32-wasip1
