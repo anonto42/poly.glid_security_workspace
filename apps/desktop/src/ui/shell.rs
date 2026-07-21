@@ -1,26 +1,24 @@
 use dioxus::prelude::*;
-
-use crate::backend::DesktopBackend;
+use polyglid_desktop::client::LocalClient;
 
 use super::commands::{execute, ShellCommand};
 use super::components::RailButton;
-use super::models::{WorkspaceLoadState, WorkspaceView};
+use super::models::{execution_state_class, LoadState, Overlay, WorkspaceView};
 use super::state::{activate_view, AppState};
 
 #[component]
 pub(crate) fn ActivityRail() -> Element {
     let mut state = use_context::<AppState>();
-    let current = *state.active_view.read();
+    let current = *state.shell.active_view.read();
     rsx! {
-        nav { class: "activity-rail", aria_label: "Developer space sections",
-            RailButton { icon: "▦", label: "My Projects", active: current == WorkspaceView::Projects, onclick: move |_| activate_view(state, WorkspaceView::Projects) }
-            RailButton { icon: "⌕", label: "Scanner", active: current == WorkspaceView::Explorer, onclick: move |_| activate_view(state, WorkspaceView::Explorer) }
+        nav { class: "activity-rail", aria_label: "PolyGlid product areas",
+            RailButton { icon: "▦", label: "Projects", active: current == WorkspaceView::Projects, onclick: move |_| activate_view(state, WorkspaceView::Projects) }
+            RailButton { icon: "⌕", label: "New scan", active: current == WorkspaceView::Scanner, onclick: move |_| activate_view(state, WorkspaceView::Scanner) }
+            RailButton { icon: "▷", label: "Executions", active: current == WorkspaceView::Executions, onclick: move |_| activate_view(state, WorkspaceView::Executions) }
+            RailButton { icon: "▥", label: "Reports", active: current == WorkspaceView::Reports, onclick: move |_| activate_view(state, WorkspaceView::Reports) }
             RailButton { icon: "◇", label: "Plugins", active: current == WorkspaceView::Plugins, onclick: move |_| activate_view(state, WorkspaceView::Plugins) }
-            RailButton { icon: "☷", label: "Work tracks", active: current == WorkspaceView::Tracks, onclick: move |_| activate_view(state, WorkspaceView::Tracks) }
-            RailButton { icon: "⚙", label: "Automation", active: current == WorkspaceView::Automation, onclick: move |_| activate_view(state, WorkspaceView::Automation) }
-            RailButton { icon: "✦", label: "AI agents", active: current == WorkspaceView::Agents, onclick: move |_| activate_view(state, WorkspaceView::Agents) }
             div { class: "rail-spacer" }
-            RailButton { icon: "⚒", label: "Settings", active: false, onclick: move |_| state.settings_open.set(true) }
+            RailButton { icon: "⚒", label: "Settings", active: matches!(&*state.shell.overlay.read(), Some(Overlay::Settings)), onclick: move |_| state.shell.overlay.set(Some(Overlay::Settings)) }
         }
     }
 }
@@ -28,21 +26,32 @@ pub(crate) fn ActivityRail() -> Element {
 #[component]
 pub(crate) fn StatusBar() -> Element {
     let state = use_context::<AppState>();
-    let backend = use_context::<DesktopBackend>();
-    let catalog_status = match &*state.workspace_load.read() {
-        WorkspaceLoadState::Loading => "Catalog indexing",
-        WorkspaceLoadState::Error(_) => "Catalog error",
-        WorkspaceLoadState::Empty => "Catalog empty",
-        WorkspaceLoadState::Ready => "Catalog ready",
+    let client = use_context::<LocalClient>();
+    let catalog_status = match &*state.catalog.load.read() {
+        LoadState::Loading => "Catalog indexing",
+        LoadState::Error(_) => "Catalog error",
+        LoadState::Empty => "Catalog empty",
+        LoadState::Ready => "Catalog ready",
     };
+    let active_state = state.runs.active_job_id.read().and_then(|id| {
+        state
+            .runs
+            .executions
+            .read()
+            .iter()
+            .find(|run| run.id == id)
+            .map(|run| run.state)
+    });
+    let active_status = active_state.map_or("idle", |phase| phase.as_str());
+    let active_class = active_state.map_or("idle", execution_state_class);
     rsx! {
         footer { class: "statusbar",
             div { span { "◈" } " {catalog_status}" }
-            div { span { "◉" } " SQLite local" }
+            div { span { class: "status-dot {active_class}" } " Execution {active_status}" }
             div { class: "status-spacer" }
-            div { "Projects: {state.projects.read().len()}" }
-            div { "Rust · Dioxus" }
-            button { class: "status-control", title: "Toggle panel (Ctrl+J)", onclick: move |_| execute(state, ShellCommand::TogglePanel, backend.clone()), "▱" }
+            div { "{state.catalog.projects.read().len()} projects" }
+            div { "{state.runs.reports.read().len()} reports" }
+            button { class: "status-control", title: "Toggle activity panel (Ctrl+J)", onclick: move |_| execute(state, ShellCommand::TogglePanel, client.clone()), "▱" }
         }
     }
 }

@@ -1,61 +1,205 @@
 # PolyGlid Desktop
 
-Local-first Dioxus desktop control plane for PolyGlid workspace projects,
-automation, and AI capabilities.
+PolyGlid Desktop is the primary PolyGlid product client. It is a local-first
+native Rust application built with Dioxus Desktop and connected to PolyGlid core
+services, SQLite, the plugin registry, the execution manager, and Wasmtime.
 
-## Current developer-space shell
+Read the canonical [Client Architecture](../../docs/architecture/CLIENT_ARCHITECTURE.md)
+before changing client boundaries. The detailed component map and implementation
+status are in [Desktop UI](../../docs/architecture/DESKTOP_UI.md).
 
-- Rust/Dioxus developer-space shell and the single active desktop UI.
-- Explorer and targets, scanner configuration, result dashboard, source viewer,
-  plugin registry, settings, command palette, and problems/output/terminal panels.
-- Unified WPM work tracks, automation control, and AI-agent workspace views.
-- Tested work-track model, state-transition policy, filters, progress, and metrics.
+## Current Product Journey
 
-The current non-track dashboard data is an interactive UI preview. SQLite, real
-plugin execution, Git synchronization, automation handlers, and AI execution are
-later integration phases; the existing Rust engine remains canonical.
+```text
+Projects -> New scan -> Permission review -> Executions -> Reports
+                           |
+                           +-> deny without starting
+```
 
-## UI module ownership
+The activity rail exposes only real product areas: Projects, New scan,
+Executions, Reports, Plugins, and Settings. Earlier Work Tracks, Automation, AI
+Agents, source preview, and terminal implementations were removed from the
+desktop source instead of being presented as unfinished product functions.
 
-- `src/main.rs` launches the Dioxus desktop window only.
-- `src/ui/app.rs` composes the full developer-space shell.
-- `src/ui/state.rs` owns shared interactive UI state.
-- `src/ui/models.rs` owns view, tab, filter, plugin, and report models.
-- `src/ui/shell.rs`, `sidebar.rs`, `editor.rs`, `bottom_panel.rs`, and
-  `overlays.rs` own the persistent workspace regions.
-- `src/ui/top_bar.rs` owns the extensible brand, workspace selector, command
-  center, trusted plugin-action slot, runtime status, notifications, and profile.
-- `src/ui/features/` contains independently controlled scanner, plugin, track,
-  automation, and agent screens.
-- `src/ui/components.rs` contains reusable visual controls.
-- `src/ui/preview.rs` isolates temporary seeded data from UI components.
-- `assets/theme.css` defines the shared Obsidian Emerald design tokens; component
-  styling consumes those tokens from `assets/main.css`.
+## What Works Today
+
+- Native Dioxus workbench with product navigation, contextual sidebars, open
+  views, resizable panes, command palette, settings, activity, and shortcuts.
+- UI-safe DTOs, typed `ClientError`, a cloneable `ClientGateway`, concrete
+  `LocalClient`, bootstrap snapshot, and typed execution subscription.
+- SQLite workspace/project catalog with project discovery, create, rename,
+  remove-only, and confirmed filesystem deletion.
+- Persistent, validated local scan targets.
+- Real WASM component validation, manifest inspection, installation,
+  enable/disable, and uninstall operations.
+- Separate allow-once review for plugin execution. Nothing is preselected; the
+  local client re-inspects the executable and rejects missing or unexpected
+  capability kinds before starting it.
+- Asynchronous execution submission returning a `JobId`, local state/history,
+  event-driven refresh, and cancellation requests.
+- Persisted report history with real findings and JSON, Markdown, and SARIF
+  file export.
+- Persisted sidebar visibility, panel visibility, and pane sizes.
+- Clear loading, empty, error, disabled, busy, execution-status, and
+  permission-review presentation styles.
+
+## Remaining Product Work
+
+- Permission review currently grants capability kinds for one run. Stable
+  approval IDs, exact resource-scope enforcement, expiration, revocation, and
+  session/workspace decisions remain.
+- Several feature wiring components call `LocalClient` directly. Feature
+  controllers should become the only gateway callers and store writers.
+- Current state is split into four useful stores, but Scanner, Executions,
+  Reports, and Settings should separate further as their behavior grows.
+- Project selection is not yet a required scan/report context.
+- Execution progress is state-oriented; richer typed stages and reconnect
+  behavior remain.
+- The execution fuel draft is session-only, and host-health settings need a
+  complete persisted model.
+- Plugin publisher/signature trust and normal platform installers remain
+  release-hardening work.
+- The v0.10.0 release contains `recon-probe.component.wasm` without the adjacent
+  `.component.sig` required by default Balanced policy. The safe fix is a new
+  release signed by a long-lived offline Ed25519 identity with its seed kept in
+  CI secrets and its public fingerprint pinned for trust bootstrap. Do not
+  commit a signing key or silently fall back to Development policy.
+
+## Current Module Map
+
+```text
+src/
+├── main.rs                    Dioxus window and application launch
+├── client/
+│   ├── models.rs              UI-safe client DTOs and stable IDs
+│   ├── error.rs               typed client failures
+│   ├── gateway.rs             ClientGateway and execution subscription
+│   └── local.rs               local core/storage/runtime adapter
+└── ui/
+    ├── app.rs                 contexts, bootstrap, event watch, shell composition
+    ├── state.rs               Shell, Catalog, Plugin, and Run stores
+    ├── models.rs              navigation, overlays, permission review
+    ├── commands.rs            shortcuts and shell actions
+    ├── top_bar.rs             brand, workspace picker, command center, status
+    ├── shell.rs               product rail and status bar
+    ├── sidebar.rs             context navigation and target/plugin entry
+    ├── editor.rs              product-view routing and current gateway wiring
+    ├── bottom_panel.rs        persisted findings and local activity
+    ├── overlays.rs            settings, commands, install/permission review
+    ├── components.rs          reusable visual primitives
+    └── features/
+        ├── projects.rs        workspace project management
+        ├── scanner.rs         scan draft and permission summary
+        ├── executions.rs      job history, state, cancellation, report routing
+        ├── reports.rs         persisted detail and export
+        └── plugins.rs         plugin registry management
+
+assets/
+├── theme.css                  design and semantic status tokens
+├── main.css                   forms, dialogs, permissions, runs, reports
+├── shell.css                  persistent workbench and responsive layout
+└── projects.css               project feature styles
+```
+
+The current client boundary is deliberately local and in-process:
+
+```text
+Dioxus view wiring -> LocalClient / ClientGateway -> core services
+                  <- UI-safe result and execution event
+```
+
+The next separation is:
+
+```text
+view -> feature controller -> ClientGateway -> application/core service
+view <- feature store      <- typed result/event
+```
+
+## Run from Source
+
+```bash
+cargo run -p polyglid-desktop
+```
+
+Optional local paths:
+
+```bash
+POLYGLID_DATA_DIR=/path/to/data \
+POLYGLID_WORKSPACE_ROOT=/path/to/projects \
+cargo run -p polyglid-desktop
+```
+
+Without overrides, application data is stored under `~/.polyglid`, and the
+default workspace root is `~/polyglid-projects`.
+
+## Run a Release Archive
+
+From the extracted Linux archive:
+
+```bash
+chmod +x polyglid-desktop
+./polyglid-desktop
+```
+
+Dioxus Desktop uses native Linux WebView/GTK libraries. If the loader reports
+`libxdo.so.3` on Debian or Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install libxdo3
+./polyglid-desktop
+```
+
+On Arch Linux or CachyOS, `xdotool` provides `libxdo`:
+
+```bash
+sudo pacman -S --needed xdotool
+./polyglid-desktop
+```
+
+To identify another unresolved native library:
+
+```bash
+ldd ./polyglid-desktop | grep "not found"
+```
+
+Native installers that declare platform dependencies remain a distribution
+milestone; see [Packaging](../../docs/development/PACKAGING.md).
+
+## Keyboard Controls
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+P` or `F1` | Open command palette |
+| `Ctrl+1` | Open Projects |
+| `Ctrl+2` | Open New scan |
+| `Ctrl+3` | Open Executions |
+| `Ctrl+4` | Open Reports |
+| `Ctrl+5` | Open Plugins |
+| `Ctrl+B` | Toggle sidebar |
+| `Ctrl+J` | Toggle Findings/Activity panel |
+| `Ctrl+W` | Close the active product view |
+| `Escape` | Close the active overlay |
 
 ## Verify
 
 ```bash
 cargo fmt --all -- --check
-cargo test -p polyglid-desktop
 cargo check -p polyglid-desktop
+cargo test -p polyglid-desktop
 ```
 
-## Run on CachyOS/Arch Linux
+Manual product checks:
 
-Dioxus Desktop requires Linux WebView/GTK libraries. This machine already has the
-WebKit/GTK dependencies but still needs `libxdo` for linking. On CachyOS/Arch,
-the `xdotool` package provides that library:
-
-```bash
-sudo pacman -S --needed xdotool
-cargo run -p polyglid-desktop
-```
-
-## Manual UI checklist
-
-- Window opens with no terminal error.
-- Rail navigation opens Explorer, Plugins, Work tracks, Automation, and AI agents.
-- Scanner execution opens the interactive preview result and findings.
-- Work-track filters and expandable track cards update correctly.
-- Plugin enable/disable, settings tabs, command palette, and bottom tabs respond.
-- The developer-space layout remains readable at the minimum window size.
+- bootstrap renders loading, empty, ready, and failure states clearly;
+- project create, rename, remove-only, and delete-files actions have accurate
+  outcomes;
+- saved targets survive restart and invalid targets show actionable errors;
+- component validation happens before install review;
+- installation and enablement never bypass per-run permission review;
+- permission review starts empty, denial starts nothing, and approval returns a
+  visible execution record;
+- running work remains cancellable and terminal states are not shown as active;
+- a completed execution creates a persisted report that survives restart;
+- JSON, Markdown, and SARIF exports contain real report values;
+- keyboard focus and shell layout remain usable at the 900 x 620 minimum size.

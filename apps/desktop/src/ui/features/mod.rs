@@ -1,13 +1,11 @@
-mod agents;
-mod automation;
+mod executions;
 mod plugins;
 mod projects;
+mod reports;
 mod scanner;
-mod tracks;
 
-pub(crate) use agents::AgentsDashboard;
-pub(crate) use automation::AutomationDashboard;
+pub(crate) use executions::ExecutionsDashboard;
 pub(crate) use plugins::PluginDashboard;
 pub(crate) use projects::ProjectsDashboard;
-pub(crate) use scanner::{ResultDashboard, ScannerDashboard, SourceDashboard};
-pub(crate) use tracks::TracksDashboard;
+pub(crate) use reports::ReportsDashboard;
+pub(crate) use scanner::ScannerDashboard;

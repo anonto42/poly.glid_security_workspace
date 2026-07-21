@@ -1,5 +1,11 @@
 # Step-By-Step Development Flow
 
+> **Historical sequence — superseded.** This CLI-first/Tauri plan records how
+> the runtime proof was approached; its completion labels are not the current
+> desktop MVP status. Continue from the UI-first
+> [Roadmap](../planning/ROADMAP.md) and
+> [Client Architecture](../architecture/CLIENT_ARCHITECTURE.md).
+
 This is the build path for PolyGlid. It turns the framework docs into an
 ordered implementation loop so the project grows by tested vertical slices
 instead of disconnected layers.

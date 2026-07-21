@@ -1,44 +1,38 @@
-use polyglid_desktop::TaskStatus;
+use polyglid_desktop::client::{
+    CapabilityKind, CapabilityRequest, ExecutionState, PluginInspection,
+};
 
+/// Product areas exposed by the desktop client.
+///
+/// Every entry maps to a working local-client capability. Preview-only areas stay
+/// out of this enum so they cannot accidentally appear in navigation or commands.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum WorkspaceView {
     Projects,
-    Explorer,
+    Scanner,
+    Executions,
+    Reports,
     Plugins,
-    Tracks,
-    Automation,
-    Agents,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct TopBarAction {
-    pub(crate) id: &'static str,
-    pub(crate) icon: &'static str,
-    pub(crate) label: &'static str,
-    pub(crate) source: &'static str,
-    pub(crate) destination: WorkspaceView,
 }
 
 impl WorkspaceView {
     pub(crate) fn title(self) -> &'static str {
         match self {
-            Self::Projects => "My Projects",
-            Self::Explorer => "Explorer",
+            Self::Projects => "Projects",
+            Self::Scanner => "New scan",
+            Self::Executions => "Executions",
+            Self::Reports => "Reports",
             Self::Plugins => "Plugins",
-            Self::Tracks => "Work tracks",
-            Self::Automation => "Automation",
-            Self::Agents => "AI agents",
         }
     }
 
     pub(crate) fn icon(self) -> &'static str {
         match self {
             Self::Projects => "▦",
-            Self::Explorer => "⌕",
+            Self::Scanner => "⌕",
+            Self::Executions => "▷",
+            Self::Reports => "▥",
             Self::Plugins => "◇",
-            Self::Tracks => "☷",
-            Self::Automation => "⚙",
-            Self::Agents => "✦",
         }
     }
 }
@@ -50,7 +44,7 @@ pub(crate) enum ResizeAxis {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum WorkspaceLoadState {
+pub(crate) enum LoadState {
     Loading,
     Empty,
     Ready,
@@ -58,88 +52,84 @@ pub(crate) enum WorkspaceLoadState {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum EditorTab {
-    Scanner,
-    Result,
-    Source,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BottomTab {
-    Problems,
-    Output,
-    Terminal,
+    Findings,
+    Activity,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SettingsTab {
     Overview,
-    Engine,
+    Execution,
     Plugins,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum TrackFilter {
-    All,
-    Active,
-    Planned,
-    Complete,
-}
-
-impl TrackFilter {
-    pub(crate) const ALL: [Self; 4] = [Self::All, Self::Active, Self::Planned, Self::Complete];
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Self::All => "all",
-            Self::Active => "active",
-            Self::Planned => "planned",
-            Self::Complete => "complete",
-        }
-    }
-
-    pub(crate) fn matches(self, status: TaskStatus) -> bool {
-        match self {
-            Self::All => true,
-            Self::Active => matches!(status, TaskStatus::InProgress | TaskStatus::Review),
-            Self::Planned => matches!(status, TaskStatus::Draft | TaskStatus::Ready),
-            Self::Complete => matches!(status, TaskStatus::Verified | TaskStatus::Done),
-        }
-    }
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Overlay {
+    Settings,
+    Commands,
+    PluginInstall(PendingPluginInstall),
+    PermissionReview(PermissionReview),
+    Error(DialogError),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct PluginCard {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) version: String,
-    pub(crate) description: String,
-    pub(crate) capabilities: Vec<String>,
-    pub(crate) enabled: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct PendingPluginInfo {
+pub(crate) struct PendingPluginInstall {
     pub(crate) path: String,
-    pub(crate) name: String,
-    pub(crate) id: String,
-    pub(crate) version: String,
-    pub(crate) author: String,
-    pub(crate) description: String,
-    pub(crate) capabilities: Vec<String>,
+    pub(crate) plugin: PluginInspection,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Finding {
-    pub(crate) severity: String,
-    pub(crate) title: String,
-    pub(crate) description: String,
-    pub(crate) recommendation: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ScanReport {
+pub(crate) struct PermissionReview {
+    pub(crate) plugin_id: String,
+    pub(crate) plugin_name: String,
     pub(crate) target: String,
-    pub(crate) summary: String,
-    pub(crate) findings: Vec<Finding>,
+    pub(crate) requested: Vec<CapabilityRequest>,
+    pub(crate) approved: Vec<CapabilityKind>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DialogError {
+    pub(crate) title: String,
+    pub(crate) message: String,
+}
+
+pub(crate) fn capability_explanation(capability: CapabilityKind) -> &'static str {
+    match capability {
+        CapabilityKind::NetworkConnect => "Open outbound network connections.",
+        CapabilityKind::NetworkListen => "Listen for inbound network connections.",
+        CapabilityKind::FilesystemRead => "Read files available to the sandbox.",
+        CapabilityKind::FilesystemWrite => "Write files available to the sandbox.",
+        CapabilityKind::ConfigRead => "Read approved PolyGlid configuration.",
+        CapabilityKind::ReportWrite => "Create a persisted analysis report.",
+        CapabilityKind::Crypto => "Use cryptographic operations.",
+        CapabilityKind::DnsResolve => "Resolve domain names for the selected target.",
+        CapabilityKind::ProcessSpawn => "Start an operating-system process.",
+        CapabilityKind::EnvironmentRead => "Read approved environment variables.",
+    }
+}
+
+pub(crate) fn capability_risk(capability: CapabilityKind) -> &'static str {
+    match capability {
+        CapabilityKind::ProcessSpawn
+        | CapabilityKind::FilesystemWrite
+        | CapabilityKind::NetworkListen => "Elevated",
+        CapabilityKind::NetworkConnect
+        | CapabilityKind::FilesystemRead
+        | CapabilityKind::EnvironmentRead => "Sensitive",
+        CapabilityKind::ConfigRead
+        | CapabilityKind::ReportWrite
+        | CapabilityKind::Crypto
+        | CapabilityKind::DnsResolve => "Scoped",
+    }
+}
+
+pub(crate) fn execution_state_class(state: ExecutionState) -> &'static str {
+    match state {
+        ExecutionState::Queued | ExecutionState::Starting => "info",
+        ExecutionState::Running => "running",
+        ExecutionState::Completed => "completed",
+        ExecutionState::Failed | ExecutionState::TimedOut => "failed",
+        ExecutionState::Cancelled => "cancelled",
+    }
 }

@@ -1,5 +1,11 @@
 # Development Targets
 
+> **Historical plan — superseded.** The runtime proof described here was built,
+> and the product direction is now Dioxus desktop-first. Follow the current
+> [Roadmap](ROADMAP.md), [UI-First MVP](MVP.md), and
+> [Client Architecture](../architecture/CLIENT_ARCHITECTURE.md). Keep the CLI
+> commands below only as developer-harness background.
+
 This document defines how PolyGlid should be developed step by step. The first version is intentionally CLI-first so the core engine and plugin system can be tested before the desktop UI exists.
 
 ## Main Development Idea
@@ -185,4 +191,3 @@ Version 0.1 is complete when:
 - plugin output is structured
 - denied permissions are handled cleanly
 - the CLI and docs explain the architecture clearly
-

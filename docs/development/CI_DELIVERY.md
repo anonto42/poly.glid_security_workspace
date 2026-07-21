@@ -10,10 +10,9 @@ cannot create a GitHub Release.
 ```mermaid
 flowchart TD
     Change[Developer changes code] --> Event{GitHub event}
-    Event -->|Pull request or main push| Detect[Detect changed paths]
-    Event -->|Manual run| Full[Force full validation]
-    Event -->|New vX.Y.Z tag| Full
+    Event --> Detect[Detect changed paths]
     Detect --> Scope{Selective or full run}
+    Event -->|Manual run or new vX.Y.Z tag| Full[Force full validation]
     Full --> Scope
 
     Scope --> Format[Rust format]
@@ -61,6 +60,7 @@ flowchart TD
     PagesDeploy --> Delivery
     Metadata --> Delivery
     VerifyLatest --> Delivery
+    Delivery -->|Successful main run| Cache[Remove closed-PR caches]
 ```
 
 The top-level Actions overview renders jobs and their dependencies. Reusable
@@ -84,19 +84,21 @@ top-level GitHub graph.
 | `infrastructure/**` | Infrastructure | The current required WPM SQL file exists and is non-empty | Feeds `CI result` |
 | `site/**` or root Cargo version | Website build | The static site generator succeeds | May deploy Pages after `CI result` |
 | `repinfo.json` | Metadata | The requested repository metadata is applied with the configured token | Runs only on `main` after `CI result` |
+| Successful push or manual run on the default branch | Cache maintenance | Cache refs are matched to pull requests; open-PR caches are kept and closed-PR caches are deleted | Runs after `Delivery result` as a non-blocking maintenance stage |
 | Unknown or newly added path | Every validation branch | New project areas cannot receive an empty green run | `CI result` requires every branch to execute |
 | Manual run or new version tag | Every validation branch | The complete repository gate passes, not only changed areas | Preview for manual; formal release for a new tag |
 
 Selective pull-request and `main` runs intentionally show unrelated jobs in
 gray. Gray means the job's path condition was false, or an upstream dependency
 failed. On a manual or formal-release run, `CI result` rejects any skipped
-validation branch. A green `Delivery result` means every branch that applied to
-that event completed successfully.
+validation branch. A green `Delivery result` means every validation and
+delivery branch that applied to that event completed successfully. Cache
+maintenance runs afterward and is intentionally not a delivery gate.
 
 Delivery jobs evaluate their event/path rules after `CI result` even when an
 unrelated validation branch is gray. Their explicit `CI result == success`
-guard still blocks preview packaging, Pages, metadata writes, and releases when
-an applicable validation job fails.
+guard still blocks preview packaging, Pages, metadata writes, releases, and
+cache deletion when an applicable validation job fails.
 
 Timing benchmarks are intentionally excluded from the ordinary Rust correctness
 suite because shared CI runner load is not stable enough for hard latency
@@ -113,10 +115,39 @@ cargo test --locked -p polyglid-core \
 | Event | Validation scope | Delivery outcome |
 | --- | --- | --- |
 | Pull request to `main` | Changed areas; unknown/workflow changes force all | Validation only; no artifact, metadata write, deployment, or release |
-| Push to `main` | Changed areas; unknown/workflow changes force all | Linux preview for product or full-validation changes, Pages for site/root/workflow changes, metadata sync for `repinfo.json` |
-| Manual **Run workflow** on `main` | Every validation branch | Linux preview and Pages deployment; never a formal release |
+| Push to `main` | Changed areas; unknown/workflow changes force all | Applicable Linux preview, Pages, or metadata work, followed by cache maintenance |
+| Manual **Run workflow** on `main` | Every validation branch | Linux preview, Pages deployment, and cache maintenance; never a formal release |
+| Manual **Run workflow** on another branch | Every validation branch | Linux preview only; no Pages deployment, cache deletion, or formal release |
 | Newly created tag such as `v0.10.0` | Every validation branch | Four native archives, Recon component, checksums, GitHub Release, and latest-link verification |
 | Deleted or force-moved version tag | No release publication | The release condition rejects it |
+
+## Cache Maintenance
+
+Rust jobs use `Swatinem/rust-cache`, with separate cache identities where the
+job or target differs. Website validation and Pages deliberately share a
+`site` identity that caches the root workspace `target/` directory.
+
+After a successful delivery on the default branch, the
+`Cache · Remove closed-PR entries` job:
+
+1. selects cache refs shaped like `refs/pull/<number>/merge`;
+2. asks GitHub for each pull request's current state;
+3. keeps every cache whose pull request is still open; and
+4. deletes each cache whose pull request is confirmed closed or merged.
+
+The job requests job-scoped `actions: write` permission, but its implemented
+commands only list and delete cache entries; it does not call an artifact or
+release deletion API. Removing a cache only means a later build may need to
+compile dependencies again.
+
+The default branch, open pull requests, version tags, and ordinary branch refs
+are never cleanup targets. GitHub separately applies the cache retention and
+least-recently-used eviction settings configured for the repository. The
+maintenance job is non-blocking so a cache API outage cannot turn a valid build
+or deployment red. Its Actions node and logs expose failures, while successful
+runs write the deletion count and reclaimed size to the job summary.
+Pull-request runs do not receive cache-deletion permission and show the job as
+skipped.
 
 ## Preview Versions
 

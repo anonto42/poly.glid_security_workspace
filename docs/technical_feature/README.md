@@ -1,5 +1,10 @@
 # PolyGlid Technical Feature Documentation
 
+> **Historical Tauri concept.** This document is retained as product ideation;
+> it does not describe the current Dioxus implementation. Use
+> [Client Architecture](../architecture/CLIENT_ARCHITECTURE.md) and
+> [Desktop UI](../architecture/DESKTOP_UI.md) for active decisions.
+
 ## 1. Multi-Window Workspace Engine
 
 PolyGlid provides an IDE-like interface where multiple tabs can be broken out into independent, concurrent windows across both desktop (Windows, Linux, macOS) and mobile (Android tablets/foldables).
@@ -119,5 +124,4 @@ The Rust Core Engine catches the file write update, reflects changes on native b
 
 4. **Dynamic DOM / CSS Re-Rendering:** Render.
 Each independent webview context catches the sync event and dynamically updates CSS custom properties inline (e.g., `--text-size`, `--bg-color`) without needing to reload or restart the application shell.
-
 

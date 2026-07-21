@@ -65,7 +65,7 @@ The required dependency direction is `contract → core → adapter → client`.
 
 ```mermaid
 flowchart TD
-    Push[Push or pull request] --> Detect[Detect changed folders]
+    Event[Push, pull request, manual run, or version tag] --> Detect[Detect changed folders]
 
     Detect -->|apps, crates, or workspace| Format[Rust format check]
     Format --> Clippy[Rust Clippy]
@@ -97,7 +97,7 @@ flowchart TD
     SiteBuild --> Result
 
     Result --> DeliveryResult[Delivery result]
-    Result -->|product push to main| Preview[Package Linux preview]
+    Result -->|product push to main or manual run| Preview[Package Linux preview]
     Result -->|site, root, or workflow push to main; manual main run| Pages[Deploy GitHub Pages]
     Result -->|repinfo.json on main| Metadata[Sync repository metadata]
     Result -->|new version tag| Release[Build and publish cross-platform release]
@@ -106,6 +106,7 @@ flowchart TD
     Pages --> DeliveryResult
     Metadata --> DeliveryResult
     Latest --> DeliveryResult
+    DeliveryResult -->|successful default-branch run| Cache[Remove closed-PR caches]
 ```
 
 - GitHub renders top-level jobs and reusable-workflow caller nodes in the run overview; opening a reusable call shows its nested jobs and steps.
@@ -113,6 +114,7 @@ flowchart TD
 - Pull requests and ordinary `main` pushes are selective. Manual runs, new version tags, workflow changes, and unknown paths force every validation branch.
 - `deploy-site.yml` is a reusable workflow called by CI after a successful site build on `main`.
 - `repo-sync.yml` is a reusable workflow called by CI when `repinfo.json` changes on `main`.
+- The non-blocking `cache-cleanup` job in `ci.yml` runs after successful delivery, verifies pull-request state, preserves open-PR/default-branch caches, and deletes closed-PR caches.
 - `scripts/ops/polyglid-ops.mjs` is the shared local and CI entry point.
 - `docs/development/CI_DELIVERY.md` explains the event, preview, and release lifecycle step by step.
 
@@ -138,4 +140,8 @@ flowchart LR
 
 ## Generated State
 
-Runtime databases, reports, build output, caches, and local analytics are not source code. The root `.gitignore` excludes `polyglid.db`, `reports/`, `target/`, and local workspace data.
+Runtime databases, reports, build output, local application caches, and local
+analytics are not source code. The root `.gitignore` excludes `polyglid.db`,
+`reports/`, `target/`, and local workspace data. Remote GitHub Actions caches
+are immutable acceleration data managed by CI: deleting one never deletes a
+source file, artifact, deployment, or release.

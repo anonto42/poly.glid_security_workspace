@@ -1,5 +1,9 @@
 # MVP Runbook
 
+> **Developer harness only.** This runbook still verifies the host/plugin
+> boundary, but it no longer defines the product MVP. The desktop acceptance
+> boundary is [UI-First MVP](../planning/MVP.md).
+
 This is the current local MVP path. It runs the Rust CLI host, componentizes the
 demo WASM plugin, grants only the required capabilities, and writes a report
 under `reports/`.
@@ -38,8 +42,9 @@ cargo run -p polyglid-cli -- plugin run \
 - The plugin returns a structured report.
 - A summary file appears under `reports/`.
 
-## Current MVP Boundary
+## Harness Boundary
 
-This is not the desktop UI yet. The current MVP proves the trusted host,
-Wasmtime runtime, WIT contract, plugin manifest, denied-by-default permission
-model, DNS host adapter, report-writing host adapter, and CLI harness.
+This path proves the trusted host, Wasmtime runtime, WIT contract, plugin
+manifest, denied-by-default permission model, DNS host adapter, report-writing
+host adapter, and CLI harness. It does not prove the desktop permission,
+asynchronous execution, report history, or packaging journey.

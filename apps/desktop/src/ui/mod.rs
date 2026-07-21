@@ -6,7 +6,6 @@ mod editor;
 mod features;
 mod models;
 mod overlays;
-mod preview;
 mod shell;
 mod sidebar;
 mod state;

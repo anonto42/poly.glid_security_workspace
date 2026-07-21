@@ -22,7 +22,8 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: site
+          shared-key: site
+          add-job-id-key: "false"
 
       - id: release
         name: Resolve the release displayed by download links

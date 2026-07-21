@@ -1,3 +1,10 @@
+# Historical Plugin Foundation Proposal
+
+> **Superseded host-shell diagram.** Tauri references below predate the active
+> Dioxus desktop. The host/plugin security boundary remains relevant, while the
+> current client boundary is defined in
+> [Client Architecture](../architecture/CLIENT_ARCHITECTURE.md).
+
 To transform your offensive testing framework into a reality for **PolyGlid**, we must plan the implementation of each plugin as an independent, sandboxed **WebAssembly Component (`wasm32-wasip1`)**.
 
 Because WASM is inherently sandboxed, your plugins cannot natively execute low-level socket manipulations or read files without explicit host permission. Therefore, our design introduces **Host Extensions (Capabilities)** that the PolyGlid Core Engine exposes to the WASM modules safely.

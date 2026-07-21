@@ -1,110 +1,333 @@
-# Desktop User Interface Architecture
+# Desktop UI
 
-The PolyGlid desktop interface is built inside `apps/desktop` using **Tauri v2** and **React + TypeScript + TailwindCSS**. To support security operators, the UI is organized as a high-fidelity workspace mirroring a modern IDE layout (like VS Code).
+PolyGlid Desktop is a native Rust application built with Dioxus Desktop. Rust
+components render the interface, Dioxus signals hold current UI state, and the
+styles in `apps/desktop/assets/` define the workbench theme. There is no active
+Tauri, React, TypeScript, or Tailwind frontend in this repository.
 
-## Layout Structure
+This document describes the implemented UI and calls out remaining migration
+work explicitly. The target product boundary, permission model, state ownership,
+and migration phases live in the canonical
+[Client Architecture](CLIENT_ARCHITECTURE.md).
 
-```text
-+--------------------------------------------------------------+
-| A | Side Bar        | Editor Tab bar                         |
-| c | (Explorer,      | [Scanner Dashboard] [recon_probe.rs]   |
-| t |  Plugins, etc.) |----------------------------------------|
-| i |                 |                                        |
-| v |                 | Main Panel (scanner form, config inputs|
-| i |                 | or read-only plugin code view)         |
-| t |                 |                                        |
-| y |                 |----------------------------------------|
-|   |                 | Bottom Split Panel                     |
-| B |                 | [PROBLEMS (0)] [OUTPUT] [TERMINAL]     |
-| a |                 |                                        |
-| r |                 | Results list, logs, or emulated shell  |
-+---+-----------------+----------------------------------------+
-| Status Bar (Core status, Wasmtime engine metrics, limits)   |
-+--------------------------------------------------------------+
+## Status Language
+
+| Status | Meaning |
+| --- | --- |
+| Real | Reads or changes real local application data through a core service |
+| Partial | Has real behavior but still lacks a required policy, state, or presentation detail |
+| Removed | The unfinished surface and its seeded implementation are absent from production source |
+
+## Current Surface Inventory
+
+| Surface | Status | Current behavior | Remaining work |
+| --- | --- | --- | --- |
+| Window and workbench shell | Real | Dioxus window, product rail, contextual sidebar, open views, resizable panes, command palette | Complete feature-controller separation |
+| Client boundary | Real foundation | UI-safe DTOs/errors, `ClientGateway`, `LocalClient`, bootstrap, and execution subscription | Extract stable contracts before a second client; remove gateway calls from views |
+| Shell preferences | Real | Pane visibility and sizes persist through local settings | Persist any new shell preferences through the same boundary |
+| Workspace selector | Real | Loads registered workspaces and changes the active workspace | Workspace registration UI |
+| Projects | Real | Discovers, creates, renames, removes, and optionally deletes real folders | Project selection as explicit scan/report context |
+| Plugin registry | Partial | Loads, validates, installs, enables, disables, and uninstalls valid WASM components under the configured signature policy | Official signed-component packaging and trust bootstrap |
+| New scan | Partial | Uses a real target and installed plugin, shows live manifest capability requests/scopes, starts asynchronously, and returns a `JobId` | Resource-scope enforcement and persisted session/workspace decisions |
+| Saved targets | Real | Validates, persists, selects, and removes local targets | Project grouping and richer target metadata |
+| Executions | Real foundation | Shows local job history and states, opens reports, and requests cancellation | Rich progress stages, cancellation confirmation, and event reconnect polish |
+| Reports | Real | Loads persisted reports, shows real severity/findings, and exports JSON, Markdown, or SARIF | Report filters and optional HTML action in the UI |
+| Findings panel | Real | Shows findings from the selected persisted report | Selection context polish |
+| Activity panel | Partial | Shows safe local lifecycle messages and errors | Complete typed execution-log/event history |
+| Settings | Partial | Shows real local counts and applies the fuel limit to new jobs | Persist execution settings and expose validated host health |
+| Work Tracks, Automation, and AI Agents | Removed | Seeded preview modules and routing were deleted | Design real services before adding new implementations |
+| Source preview and terminal | Removed | Placeholder source and terminal implementations were deleted | Add only with a real, justified service and security design |
+
+The capability review is an allow-once gate. It starts with nothing selected,
+requires every capability kind requested by the executable, rejects extra or
+missing approvals, and writes audit events. Installation and enablement are not
+execution approval. Durable approval IDs, enforcement of the displayed
+manifest resource scopes, expiration, and session/workspace decisions remain
+part of the MVP security work.
+
+### Current release trust blocker
+
+Balanced policy requires a valid adjacent component signature. The v0.10.0
+release includes `recon-probe.component.wasm` but not its
+`recon-probe.component.sig`, so that bundled component cannot be installed
+safely under the default policy. Do not weaken the client policy to hide this
+packaging failure. Release hardening must establish an offline long-lived
+Ed25519 signing identity, protect its seed in CI secrets, pin the official
+public key/fingerprint for trust bootstrap, sign and verify the release
+component, package both files, and publish a new signed release.
+
+## Current Composition
+
+```mermaid
+flowchart TD
+    MAIN[main.rs] --> APP[ui/app.rs · App]
+    APP --> TITLE[ui/top_bar.rs · TitleBar]
+    APP --> RAIL[ui/shell.rs · ActivityRail]
+    APP --> SIDE[ui/sidebar.rs · WorkspaceSidebar]
+    APP --> EDITOR[ui/editor.rs · EditorWorkspace]
+    APP --> BOTTOM[ui/bottom_panel.rs · BottomPanel]
+    APP --> STATUS[ui/shell.rs · StatusBar]
+    APP --> OVERLAYS[ui/overlays.rs · WorkspaceOverlays]
+
+    EDITOR --> PROJECTS[features/projects.rs]
+    EDITOR --> SCANNER[features/scanner.rs]
+    EDITOR --> EXECUTIONS[features/executions.rs]
+    EDITOR --> REPORTS[features/reports.rs]
+    EDITOR --> PLUGINS[features/plugins.rs]
+
+    APP --> STORES[Shell, Catalog, Plugin, and Run stores]
+    APP --> LOCAL[client/local.rs · LocalClient]
+    LOCAL --> PORT[client/gateway.rs · ClientGateway]
+    LOCAL --> CORE[Core services and policy]
+    CORE --> SQLITE[(SQLite)]
+    CORE --> WASM[Wasmtime]
+    CORE --> EVENTS[Typed execution events]
+    EVENTS --> STORES
 ```
 
----
+## Module Ownership
 
-## UI Layout Components
+Paths below are relative to `apps/desktop/src/`.
 
-All layouts live in `apps/desktop/src/components/layout/`.
+| Module | Current responsibility |
+| --- | --- |
+| `main.rs` | Configures and launches the Dioxus window |
+| `client/models.rs` | UI-safe workspaces, projects, plugins, targets, jobs, reports, and capability DTOs |
+| `client/error.rs` | Typed, presentation-safe client failures |
+| `client/gateway.rs` | `ClientGateway` operations and execution subscription |
+| `client/local.rs` | Local adapter over core services, SQLite, plugin manager, and execution manager |
+| `ui/app.rs` | Creates contexts, loads the bootstrap snapshot, watches operational changes, and composes the shell |
+| `ui/state.rs` | Composes `ShellStore`, `CatalogStore`, `PluginStore`, and `RunStore` |
+| `ui/models.rs` | Navigation, overlay, permission-review, and presentation models |
+| `ui/commands.rs` | Product navigation shortcuts and shell-preference persistence |
+| `ui/top_bar.rs` | Brand, workspace picker, command entry, live local status, and notifications |
+| `ui/shell.rs` | Product activity rail and status bar |
+| `ui/sidebar.rs` | Project, target, execution, report, and plugin sidebars |
+| `ui/editor.rs` | Open-view routing and current local-client action wiring |
+| `ui/bottom_panel.rs` | Persisted findings and local activity |
+| `ui/overlays.rs` | Settings, commands, plugin inspection/install, permission review, and safe errors |
+| `ui/features/projects.rs` | Real workspace project management |
+| `ui/features/scanner.rs` | Scan draft and requested-capability summary |
+| `ui/features/executions.rs` | Real execution history, state, cancellation, and report routing |
+| `ui/features/reports.rs` | Persisted report detail and file export |
+| `ui/features/plugins.rs` | Real plugin registry management |
+| `ui/components.rs` | Small reusable presentational controls |
 
-### 1. `ActivityBar.tsx`
-* **File Path:** [ActivityBar.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/ActivityBar.tsx)
-* **Responsibility:** Leftmost vertical tab menu. Clicking icons changes the active sidebar panel or triggers modals.
-* **Key Props:**
-  * `activeView: string`: Tracks what view is selected in the sidebar.
-  * `setActiveView: (view: string) => void`: Updates the sidebar selection.
-  * `onSettingsClick: () => void`: Opens the global settings modal.
+Theme and component CSS live under `apps/desktop/assets/`. Components consume
+shared colors, spacing, focus, disabled, busy, and status tokens from
+`theme.css`. Feature rules must not redefine global semantics.
 
-### 2. `SideBar.tsx`
-* **File Path:** [SideBar.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/SideBar.tsx)
-* **Responsibility:** Multi-view expandable side explorer.
-  * **Explorer View:** Lists domains to scan (Targets) and lists active WebAssembly plugins. Includes forms to dynamically add/remove target hosts.
-  * **Plugins View:** Shows loaded plugins and includes a form to load local plugins by typing their path.
-  * **Settings View:** Displays inline configurators (like Wasmtime fuel limits).
-* **Key Props:**
-  * `targets: string[]`: Targets domains list.
-  * `selectedTarget: string`: Current focused target domain.
-  * `plugins: PluginInfo[]`: Array of registered WebAssembly plugins.
-  * `onAddPlugin: (name: string, path: string) => void`: Callback to register a new WASM plugin path.
+## Current State Ownership
 
-### 3. `EditorArea.tsx`
-* **File Path:** [EditorArea.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/EditorArea.tsx)
-* **Responsibility:** The main central display.
-  * **Scanner Dashboard Tab:** Contains target inputs, plugin selection dropdowns, execution buttons, and errors.
-  * **Source Viewer Tab (`recon_probe.rs`):** Displays read-only Rust code for active security plugins.
-* **Key Props:**
-  * `activeTab: string`: Which editor tab is currently visible (`dashboard` or `source`).
-  * `setActiveTab: (tab: string) => void`: Switches tabs.
-  * `plugins: PluginInfo[]`: Dynamically populates the plugin selection drop-down.
-  * `onRunPlugin: (target: string) => Promise<void>`: Launches Wasmtime execution in the Tauri backend.
+The first state split replaces the former flat signal collection:
 
-### 4. `BottomPanel.tsx`
-* **File Path:** [BottomPanel.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/BottomPanel.tsx)
-* **Responsibility:** Results display panel.
-  * **Problems Tab:** Displays structured safety observation reports parsed from the plugin (using severity icons, titles, summaries, and recommendations).
-  * **Output Tab:** Displays running engine logs and capability mappings.
-  * **Terminal Tab:** Displays an emulated interactive host shell.
-* **Key Props:**
-  * `activeTab: string`: Active panel view (`problems`, `output`, `terminal`).
-  * `report: Report | null`: The parsed observations object returned from the Rust sandbox.
+| Store | Current ownership |
+| --- | --- |
+| `ShellStore` | active/open views, pane state, resizing, bottom tab, settings tab, and one overlay enum |
+| `CatalogStore` | workspace/project snapshot, active workspace, refresh, load state, and catalog error |
+| `PluginStore` | installed components, selection, and install path draft |
+| `RunStore` | saved targets, execution/report history, active job, activity, error, and fuel draft |
 
-### 5. `StatusBar.tsx`
-* **File Path:** [StatusBar.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/StatusBar.tsx)
-* **Responsibility:** Single horizontal strip at the bottom of the screen. Shows host connection statuses, Wasmtime status, and active fuel limits.
+This is clearer than a monolithic `AppState`, but it is still an intermediate
+shape. Scanner, Executions, Reports, and Settings gain their own controllers
+and stores as their behavior grows; see
+[Desktop State Ownership](CLIENT_ARCHITECTURE.md#desktop-state-ownership).
 
-### 6. `SettingsModal.tsx`
-* **File Path:** [SettingsModal.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/SettingsModal.tsx)
-* **Responsibility:** Settings modal dialog. Opens as a backdrop overlay on top of the IDE. Contains tab segments for:
-  * **System Overview:** Overview of Wasmtime integration, OS, and active permissions.
-  * **Engine:** Editable inputs for fuel parameters.
-  * **Plugins:** Details on loaded plugins.
+## Current Runtime Paths
 
----
+### Startup
 
-## State Coordination
+```text
+App starts
+  -> LocalClient opens the configured desktop data directory
+  -> one bootstrap query loads workspace, projects, plugins, saved targets,
+     execution history, reports, and shell preferences
+  -> feature stores receive UI-safe DTOs
+  -> Dioxus renders the product navigation
+  -> execution events refresh affected operational state
+```
 
-All workspace state lives in [App.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/App.tsx) and is passed down to components via standard React props:
+`POLYGLID_DATA_DIR` overrides the default `~/.polyglid` data directory.
+`POLYGLID_WORKSPACE_ROOT` overrides the default project root.
 
-1. **Target Selection Synchronization:** Clicking a target in the sidebar (`SideBar`) triggers `handleTargetSelect`, which updates the selected target state, changes the input field in the dashboard, and focuses the main editor back to the "Scanner Dashboard" tab.
-2. **Auto-Focusing Observations:** When a user clicks "Run Analysis", the backend runs the sandbox. Upon receiving a successful `Report`, the state `activeBottomTab` is automatically updated to `"problems"` to focus the operator's attention on the results.
-3. **Dynamic Plugin Orchestration:** Adding a plugin path in the Sidebar's plugin view registers it in the `plugins` state array. This dynamically adds it to the target selector inside the main scanner dropdown, making it instantly runnable.
+### Plugin installation
 
----
+```text
+choose .wasm file
+  -> LocalClient validates the executable and manifest
+  -> UI shows identity plus every requested capability and scope
+  -> operator confirms installation
+  -> plugin manager registers the component
+  -> plugin store updates
+```
 
-## How to Extend the UI
+The install action changes the registry only. It does not approve a future run.
 
-### Adding a new Sidebar Panel
-1. Add an icon to [ActivityBar.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/ActivityBar.tsx) with a specific state key (e.g. `setActiveView('history')`).
-2. Update the condition check inside [SideBar.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/SideBar.tsx) to match your view and render custom explorer views:
-   ```tsx
-   if (activeView === 'history') {
-     return <div>Historical scans...</div>;
-   }
-   ```
+### Scan execution
 
-### Adding a new Settings Parameter
-1. Register a new state in `App.tsx` (e.g., `const [reportsPath, setReportsPath] = useState("reports");`).
-2. Pass the state and setter into [SettingsModal.tsx](file:///home/sohidul/developer_workspace/projects/aloevol/poly.glid_security_workspace/apps/desktop/src/components/layout/SettingsModal.tsx).
-3. Create an input field in the "Engine" tab to edit the value.
+```text
+choose target and enabled plugin
+  -> open allow-once permission review with nothing selected
+  -> approve every requested capability kind or deny/cancel
+  -> LocalClient re-inspects the installed executable
+  -> core rejects missing or unexpected approvals
+  -> start_execution returns JobId immediately
+  -> UI opens Executions
+  -> typed events and refreshes update job/report state
+  -> completed report is persisted and available under Reports
+```
+
+### Report export
+
+```text
+select persisted report
+  -> choose JSON, Markdown, or SARIF
+  -> choose destination with native save dialog
+  -> LocalClient creates the typed export payload
+  -> UI writes the selected file and records a safe activity message
+```
+
+## Workbench Regions
+
+```text
++--------------------------------------------------------------------+
+| Brand / workspace | Command center | local status and user actions  |
++----+----------------+-----------------------------------------------+
+|    | Context sidebar| Open product views                            |
+| R  |                +-----------------------------------------------+
+| a  |                | Active Projects / Scan / Executions /         |
+| i  |                | Reports / Plugins view                        |
+| l  |                +-----------------------------------------------+
+|    |                | Findings / Activity                           |
++----+----------------+-----------------------------------------------+
+| Catalog, active execution, project, and report status               |
++--------------------------------------------------------------------+
+```
+
+- The rail contains only real product areas.
+- The sidebar contains controls or navigation for the active area.
+- The editor holds the primary task and closable product-view tabs.
+- The bottom panel contains secondary findings and activity, never the only
+  copy of a permission decision or failure.
+- Overlays are reserved for short, focused decisions.
+
+## Product Navigation
+
+1. **Projects** — create and manage the local project context.
+2. **New scan** — select a target and plugin and begin permission review.
+3. **Executions** — watch job states, cancel active work, and open its report.
+4. **Reports** — reopen real findings and export persisted evidence.
+5. **Plugins** — inspect, install, select, enable, disable, and remove components.
+6. **Settings** — inspect local state and set current execution limits.
+
+Work Tracks, Automation, AI Agents, source preview, and Terminal are absent from
+the production source and active product navigation. Add them again only after
+their visible data and actions are backed by real application services.
+
+## Component Contract
+
+A production page must be understandable from its public inputs without reading
+database or runtime code.
+
+### Page component
+
+A page receives one view model and explicit actions:
+
+```text
+ScannerPage
+  state: ScannerViewModel
+  on_target_changed(TargetDraft)
+  on_plugin_selected(PluginId)
+  on_review_permissions()
+
+PermissionReview
+  state: PermissionReviewViewModel
+  on_capability_changed(CapabilityKind, approved)
+  on_deny()
+  on_start_once(ApprovedRunDraft)
+```
+
+The page does not construct core `ExecutionConfig`, infer grants from plugin
+enablement, or wait directly on a runtime receiver.
+
+### Presentational component
+
+A reusable component:
+
+- has one visual responsibility;
+- receives display-ready values and typed callbacks;
+- has no database, runtime, gateway, or feature-store dependency;
+- has an accessible name and visible focus state when interactive;
+- deliberately renders disabled, loading, empty, and error states;
+- never embeds fabricated production data.
+
+Examples include tab buttons, status badges, permission rows, execution rows,
+finding rows, export buttons, and empty-state panels.
+
+### Controller
+
+A feature controller:
+
+- validates presentation input into a typed command;
+- is the only layer that calls `ClientGateway` for that feature;
+- writes only its feature store;
+- correlates events by stable workspace, job, and report IDs;
+- maps safe client errors into actionable view state;
+- changes navigation only after an operation is accepted.
+
+The current UI-safe gateway is real, but several Dioxus wiring components still
+call `LocalClient` directly. Moving those calls into controllers is the next
+separation step; do not add new direct calls in leaf components.
+
+## Required State Presentation
+
+Every data-backed page distinguishes:
+
+- initial loading;
+- empty data with a useful next action;
+- ready data;
+- a recoverable error with retry guidance;
+- stale data while refresh is in progress;
+- a mutation waiting for acceptance.
+
+Execution additionally distinguishes queued, starting, running, cancelling,
+cancelled, timed out, failed, and completed. Cancellation remains pending until
+the host confirms a terminal state.
+
+## Dialog and Permission Rules
+
+- A dialog title names the user decision, not the implementation type.
+- Destructive actions state what happens to records and files separately.
+- The default focused action is safe; destructive confirmation is never tied to
+  an ambiguous Enter key.
+- Capability review lists the capability, risk, target, and manifest scope in
+  plain language.
+- Closing permission review is denial, never implicit approval.
+- Installation confirmation and execution approval are separate operations.
+- Future allow-session/workspace choices must show expiration and revocation.
+
+## Accessibility and Clarity
+
+- Icon-only buttons have accessible names and tooltips.
+- Keyboard focus is visible and follows opened/closed overlays.
+- Color supplements text or icons; it is never the only status signal.
+- Busy and disabled actions remain readable and explain their prerequisite.
+- Errors stay visible until dismissal or a successful retry supersedes them.
+- Real metrics identify their source; no seeded score is presented as live.
+- The 900 x 620 minimum window remains usable, while CSS degrades safely on
+  narrower layouts.
+
+## Adding a Production Feature
+
+1. Add or reuse typed operations and DTOs at the client boundary.
+2. Implement the local operation through an application/core service.
+3. Define the feature store and every asynchronous state.
+4. Implement a controller as the gateway caller and store writer.
+5. Build presentational components from view models and typed actions.
+6. Add controller transition and component-state tests.
+7. Add one integration path using `LocalClient`.
+8. Update the surface inventory above.
+
+A surface becomes Real only when its visible values and actions are backed by
+the application host and security policy. CSS completeness or seeded data does
+not change its status.

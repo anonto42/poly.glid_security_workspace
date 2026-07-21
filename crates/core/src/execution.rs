@@ -84,6 +84,7 @@ pub struct ExecutionManager<R> {
     jobs: Arc<Mutex<Vec<Job>>>,
     event_tx: broadcast::Sender<ExecutionEvent>,
     store: Option<WorkspaceStore>,
+    app_config: AppConfig,
 }
 
 impl<R> ExecutionManager<R>
@@ -95,6 +96,17 @@ where
     }
 
     pub fn new(runtime: R, store: Option<WorkspaceStore>) -> Self {
+        Self::new_with_config(runtime, store, AppConfig::development())
+    }
+
+    /// Construct an execution manager with explicit host paths and policy
+    /// defaults. Desktop and server clients should use this constructor so a
+    /// job never falls back to process-working-directory data.
+    pub fn new_with_config(
+        runtime: R,
+        store: Option<WorkspaceStore>,
+        app_config: AppConfig,
+    ) -> Self {
         let (tx, _) = broadcast::channel(100);
         let mut jobs_list = Vec::new();
         if let Some(ref s) = store {
@@ -156,6 +168,7 @@ where
             jobs: Arc::new(Mutex::new(jobs_list)),
             event_tx: tx,
             store,
+            app_config,
         }
     }
 
@@ -215,6 +228,7 @@ where
         let store_clone = self.store.clone();
         let plugin_path_clone = plugin_path.clone();
         let target_clone = target.clone();
+        let app_config = self.app_config.clone();
 
         std::thread::spawn(move || {
             // Update to Starting
@@ -269,7 +283,7 @@ where
                 permissions.grant_for_all(*cap);
             }
 
-            let mut app_config = AppConfig::development();
+            let mut app_config = app_config;
             app_config.max_wasm_fuel = config.fuel_limit;
 
             let mut engine = match CoreEngine::new(
@@ -560,6 +574,46 @@ mod tests {
         }
     }
 
+    struct ConfigCapturingRuntime {
+        observed: Arc<Mutex<Option<AppConfig>>>,
+    }
+
+    impl PluginRuntime for ConfigCapturingRuntime {
+        fn inspect(&self, _plugin: &PluginRef) -> Result<PluginManifest, CoreError> {
+            Ok(PluginManifest {
+                id: PluginId::new("config-capture").unwrap(),
+                name: "Config Capture".to_string(),
+                version: "1.0.0".to_string(),
+                requested_capabilities: vec![],
+            })
+        }
+
+        fn inspect_metadata(
+            &self,
+            _plugin: &PluginRef,
+        ) -> Result<polyglid_plugin_api::ApiPluginMetadata, CoreError> {
+            Ok(polyglid_plugin_api::ApiPluginMetadata {
+                name: "config-capture".to_string(),
+                display_name: "Config Capture".to_string(),
+                version: "1.0.0".to_string(),
+                description: "captures runtime configuration".to_string(),
+                author: "test".to_string(),
+            })
+        }
+
+        fn execute(
+            &self,
+            request: &PluginRunRequest,
+            config: &AppConfig,
+        ) -> Result<PluginReport, CoreError> {
+            *self.observed.lock().unwrap() = Some(config.clone());
+            Ok(PluginReport::clean(
+                "Config Capture",
+                request.target.as_str(),
+            ))
+        }
+    }
+
     #[test]
     fn test_successful_job_execution() {
         let manager = ExecutionManager::new(
@@ -689,5 +743,42 @@ mod tests {
         let jobs = manager.get_jobs();
         let job = jobs.iter().find(|j| j.id == job_id).unwrap();
         assert_eq!(job.state, JobState::Cancelled);
+    }
+
+    #[test]
+    fn explicit_app_config_reaches_runtime_jobs() {
+        let observed = Arc::new(Mutex::new(None));
+        let expected_reports = PathBuf::from("/tmp/polyglid-explicit-reports");
+        let manager = ExecutionManager::new_with_config(
+            ConfigCapturingRuntime {
+                observed: Arc::clone(&observed),
+            },
+            None,
+            AppConfig {
+                plugin_dir: PathBuf::from("/tmp/polyglid-explicit-plugins"),
+                reports_dir: expected_reports.clone(),
+                ..AppConfig::development()
+            },
+        );
+        let mut events = manager.subscribe();
+        manager.submit_job(
+            "plugin.wasm".to_string(),
+            "example.com".to_string(),
+            ExecutionConfig {
+                fuel_limit: 123_456,
+                timeout: Duration::from_secs(1),
+                memory_limit: None,
+                allowed_capabilities: vec![],
+            },
+        );
+
+        while !matches!(
+            events.blocking_recv().expect("execution event"),
+            ExecutionEvent::JobFinished { .. }
+        ) {}
+
+        let config = observed.lock().unwrap().clone().expect("observed config");
+        assert_eq!(config.reports_dir, expected_reports);
+        assert_eq!(config.max_wasm_fuel, 123_456);
     }
 }

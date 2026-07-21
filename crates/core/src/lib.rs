@@ -301,13 +301,30 @@ where
             }
 
             for request_cap in &manifest.requested_capabilities {
-                let mut approved = false;
-                if profile
-                    .allowed_capabilities
-                    .contains(&request_cap.capability)
+                // Per-run grants (for example an explicit desktop approval)
+                // are evaluated first. Workspace profile and durable database
+                // grants remain valid fallbacks, but the presence of a
+                // workspace database must not discard the caller's one-run
+                // permission decision.
+                let mut approved = match self.permissions.decide(&manifest.id, request_cap) {
+                    Ok(PermissionDecision::Allow) => true,
+                    Ok(PermissionDecision::Deny { .. }) => false,
+                    Err(err) => {
+                        self.events.emit(PolyGlidEvent::CapabilityCheckFailed {
+                            plugin_id: manifest.id.clone(),
+                            capability: request_cap.to_string(),
+                            message: err.to_string(),
+                        });
+                        return Err(err);
+                    }
+                };
+                if !approved
+                    && profile
+                        .allowed_capabilities
+                        .contains(&request_cap.capability)
                 {
                     approved = true;
-                } else {
+                } else if !approved {
                     if let Ok(conn) = rusqlite::Connection::open(&db_path) {
                         let now = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
@@ -647,6 +664,44 @@ mod tests {
             PolyGlidEvent::CapabilityAllowed { capability, .. }
                 if capability == "network-connect (host=example.com,port=443)"
         )));
+    }
+
+    #[test]
+    fn per_run_grant_is_honored_when_workspace_database_exists() {
+        let root = std::env::temp_dir().join(format!(
+            "polyglid-per-run-permission-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let plugin_dir = root.join("plugins");
+        std::fs::create_dir_all(&plugin_dir).expect("create plugin directory");
+        let database_path = root.join("polyglid.db");
+        let _store = crate::store::WorkspaceStore::new(&database_path).expect("create database");
+
+        let mut permissions = InMemoryPermissionStore::default();
+        permissions.grant_for_all(Capability::EnvironmentRead);
+        let mut engine = CoreEngine::new(
+            FakeRuntime {
+                capabilities: vec![CapabilityRequest::unscoped(Capability::EnvironmentRead)],
+            },
+            permissions,
+            VecEventSink::default(),
+            AppConfig {
+                plugin_dir,
+                reports_dir: root.join("reports"),
+                ..AppConfig::development()
+            },
+        )
+        .expect("valid engine");
+
+        engine
+            .run_plugin(PluginRunRequest {
+                plugin: PluginRef::from_path("demo.wasm"),
+                target: Target::parse("example.com").expect("valid target"),
+            })
+            .expect("per-run approval is honored");
+
+        drop(_store);
+        std::fs::remove_dir_all(root).expect("clean test data");
     }
 
     struct FailingPermissionStore;

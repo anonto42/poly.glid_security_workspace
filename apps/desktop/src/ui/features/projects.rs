@@ -1,19 +1,17 @@
 use dioxus::prelude::*;
-use polyglid_core::store::DbProject;
+use polyglid_desktop::client::{ClientGateway, LocalClient, Project};
 
-use crate::backend::DesktopBackend;
-
-use super::super::models::WorkspaceLoadState;
+use super::super::models::LoadState;
 use super::super::state::AppState;
 
 #[component]
 pub(crate) fn ProjectsDashboard() -> Element {
     let state = use_context::<AppState>();
-    let backend = use_context::<DesktopBackend>();
-    let create_backend = backend.clone();
+    let client = use_context::<LocalClient>();
+    let create_client = client.clone();
     let mut new_name = use_signal(String::new);
-    let load_state = state.workspace_load.read().clone();
-    let projects = state.projects.read().clone();
+    let load_state = state.catalog.load.read().clone();
+    let projects = state.catalog.projects.read().clone();
 
     rsx! {
         div { class: "dashboard-scroll projects-page",
@@ -21,7 +19,7 @@ pub(crate) fn ProjectsDashboard() -> Element {
                 div { class: "page-heading",
                     span { class: "eyebrow", "Local workspace catalog" }
                     h1 { "My Projects" }
-                    p { "Discover and manage real project folders from {state.active_workspace}." }
+                    p { "Discover and manage real project folders from {state.catalog.active_workspace_name}." }
                 }
                 div { class: "project-create",
                     input {
@@ -34,32 +32,32 @@ pub(crate) fn ProjectsDashboard() -> Element {
                         class: "primary small",
                         disabled: new_name.read().trim().is_empty(),
                         onclick: move |_| {
-                            let Some(workspace_id) = state.active_workspace_id.read().clone() else { return; };
+                            let Some(workspace_id) = state.catalog.active_workspace_id.read().clone() else { return; };
                             let name = new_name.read().trim().to_string();
                             new_name.set(String::new());
-                            let backend = create_backend.clone();
-                            run_mutation(state, move || backend.create_project(&workspace_id, &name));
+                            let client = create_client.clone();
+                            run_mutation(state, move || client.create_project(&workspace_id, &name).map(|_| ()).map_err(|error| error.to_string()));
                         },
                         "+ Create project"
                     }
                 }
             }
-            if let Some(error) = state.workspace_mutation_error.read().as_ref() {
+            if let Some(error) = state.catalog.error.read().as_ref() {
                 div { class: "project-alert", strong { "Action failed" } span { "{error}" } }
             }
             match load_state {
-                WorkspaceLoadState::Loading => rsx! { ProjectSkeleton {} },
-                WorkspaceLoadState::Error(error) => rsx! {
+                LoadState::Loading => rsx! { ProjectSkeleton {} },
+                LoadState::Error(error) => rsx! {
                     div { class: "project-state error-state", h2 { "Workspace unavailable" } p { "{error}" }
                         button { class: "secondary", onclick: move |_| refresh(state), "Try again" }
                     }
                 },
-                WorkspaceLoadState::Empty => rsx! {
+                LoadState::Empty => rsx! {
                     div { class: "project-state", h2 { "No projects yet" }
                         p { "Create a project here or add a folder inside the active workspace, then refresh discovery." }
                     }
                 },
-                WorkspaceLoadState::Ready => rsx! {
+                LoadState::Ready => rsx! {
                     div { class: "project-grid",
                         for project in projects {
                             ProjectCard {
@@ -75,8 +73,8 @@ pub(crate) fn ProjectsDashboard() -> Element {
 }
 
 #[component]
-fn ProjectCard(project: DbProject) -> Element {
-    let backend = use_context::<DesktopBackend>();
+fn ProjectCard(project: Project) -> Element {
+    let client = use_context::<LocalClient>();
     let state = use_context::<AppState>();
     let mut editing = use_signal(|| false);
     let mut confirming = use_signal(|| false);
@@ -95,12 +93,12 @@ fn ProjectCard(project: DbProject) -> Element {
                 if *editing.read() {
                     button { class: "secondary", onclick: {
                         let project_id = project_id.clone();
-                        let backend = backend.clone();
+                        let client = client.clone();
                         move |_| {
                             let id = project_id.clone();
                             let name = name.read().trim().to_string();
-                            let backend = backend.clone();
-                            run_mutation(state, move || backend.rename_project(&id, &name));
+                            let client = client.clone();
+                            run_mutation(state, move || client.rename_project(&id, &name).map(|_| ()).map_err(|error| error.to_string()));
                             editing.set(false);
                         }
                     }, "Save" }
@@ -108,20 +106,20 @@ fn ProjectCard(project: DbProject) -> Element {
                 } else if *confirming.read() {
                     button { class: "secondary", onclick: {
                         let project_id = project_id.clone();
-                        let backend = backend.clone();
+                        let client = client.clone();
                         move |_| {
                             let id = project_id.clone();
-                            let backend = backend.clone();
-                            run_mutation(state, move || backend.remove_project(&id, false));
+                            let client = client.clone();
+                            run_mutation(state, move || client.remove_project(&id, false).map_err(|error| error.to_string()));
                         }
                     }, "Remove only" }
                     button { class: "danger-button", onclick: {
                         let project_id = project_id.clone();
-                        let backend = backend.clone();
+                        let client = client.clone();
                         move |_| {
                             let id = project_id.clone();
-                            let backend = backend.clone();
-                            run_mutation(state, move || backend.remove_project(&id, true));
+                            let client = client.clone();
+                            run_mutation(state, move || client.remove_project(&id, true).map_err(|error| error.to_string()));
                         }
                     }, "Delete files" }
                     button { class: "ghost-button", onclick: move |_| confirming.set(false), "Cancel" }
@@ -143,7 +141,7 @@ fn run_mutation(
     mut state: AppState,
     operation: impl FnOnce() -> Result<(), String> + Send + 'static,
 ) {
-    state.workspace_mutation_error.set(None);
+    state.catalog.error.set(None);
     spawn(async move {
         let result = tokio::task::spawn_blocking(operation)
             .await
@@ -151,12 +149,12 @@ fn run_mutation(
             .and_then(|result| result);
         match result {
             Ok(()) => refresh(state),
-            Err(error) => state.workspace_mutation_error.set(Some(error)),
+            Err(error) => state.catalog.error.set(Some(error)),
         }
     });
 }
 
 fn refresh(mut state: AppState) {
-    let next = *state.workspace_refresh.read() + 1;
-    state.workspace_refresh.set(next);
+    let next = *state.catalog.refresh.read() + 1;
+    state.catalog.refresh.set(next);
 }

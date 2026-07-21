@@ -1,3 +1,10 @@
+# Historical Production Stack Proposal
+
+> **Superseded client stack.** The Tauri/React/mobile plan below is not the
+> active client stack. PolyGlid Desktop now uses Rust/Dioxus; see
+> [Client Architecture](../architecture/CLIENT_ARCHITECTURE.md) and
+> [Desktop UI](../architecture/DESKTOP_UI.md).
+
 To make a highly ambitious project like **PolyGlid** work flawlessly across Linux, Windows, macOS, and Android, your technology stack must be selected with an obsessive focus on **cross-platform binary compatibility** and **memory performance**.
 
 If you compile standard Rust plugins directly to machine-native code (like `.dll` or `.so`), your software will break on Android because a desktop processor (x86_64) cannot run mobile phone binary instructions (ARM64).

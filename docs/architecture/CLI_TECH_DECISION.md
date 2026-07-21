@@ -1,5 +1,11 @@
 # CLI Technology Decision
 
+> **Historical decision — superseded for product direction.** The CLI now
+> remains a frozen development and regression harness. Dioxus Desktop is the
+> primary product client; see [Client Architecture](CLIENT_ARCHITECTURE.md).
+> The `clap` implementation notes below remain useful when maintaining the
+> harness.
+
 PolyGlid starts with a CLI-first development flow. The CLI is the first real client for the engine, so the command parser and terminal UX should be stable enough to grow with the project.
 
 ## Decision
@@ -140,4 +146,3 @@ Next:
 ```
 
 This gives the project a visible face early while the engine and plugin runtime are still being built.
-

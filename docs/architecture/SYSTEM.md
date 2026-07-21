@@ -1,5 +1,10 @@
 # System Architecture
 
+> **Historical client diagram.** This page records the earlier Tauri/web-stack
+> plan. The active client is native Rust/Dioxus, and the canonical local and
+> remote boundaries are in [Client Architecture](CLIENT_ARCHITECTURE.md).
+> Host/runtime separation described below remains background context.
+
 PolyGlid is planned as a multi-layer workspace:
 
 ```text
@@ -124,4 +129,3 @@ Event bus broadcasts config-changed
         v
 All windows update without restart
 ```
-

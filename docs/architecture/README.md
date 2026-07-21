@@ -1,6 +1,12 @@
 The current repository ownership, runtime sequence, development order, and
 GitHub automation routing are documented in [Project Flow](PROJECT_FLOW.md).
 
+> **Historical implementation blueprint.** The Tauri host and illustrative
+> file paths/code below predate the current Rust/Dioxus desktop. Use
+> [Client Architecture](CLIENT_ARCHITECTURE.md) for client boundaries and
+> [Desktop UI](DESKTOP_UI.md) for the implemented component map. The WIT
+> isolation principles remain background context, not a copy-ready plan.
+
 To make **PolyGlid** a true plug-and-play workspace, we will use the **WebAssembly Component Model**. Instead of writing standard traits that risk crashing your host application, we define a formal language-agnostic interface called a **WIT file (WebAssembly Interface Type)**.
 
 Think of the WIT file as the contract rulebook. The Core Engine reads it to know what functions it can call inside the plugin, and the plugin reads it to know what data to return.

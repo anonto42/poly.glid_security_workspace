@@ -2,6 +2,7 @@
 .activity-rail { width: 48px; flex-basis: 48px; padding-right: 4px; padding-left: 4px; }
 .rail-button { height: 46px; border-radius: 4px; }
 .rail-button small { left: 43px; }
+.rail-button:focus-visible small { display: block; }
 .sidebar { width: 280px; flex-basis: 280px; }
 .resize-handle { position: relative; z-index: 15; flex: 0 0 4px; background: transparent; }
 .resize-handle::after { position: absolute; content: ""; background: transparent; transition: background var(--ease); }
@@ -19,6 +20,7 @@
 .tab-close { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; color: transparent; font-size: 15px; }
 .workbench-tab:hover .tab-close, .workbench-tab.active .tab-close { color: var(--text-dim); }
 .tab-close:hover { color: var(--text-strong) !important; background: var(--surface-hover); }
+.tab-close:focus-visible { color: var(--text-strong); background: var(--surface-hover); }
 .editor-surface { min-height: 0; flex: 1; overflow: hidden; }
 .editor-surface > .dashboard-scroll { height: 100%; }
 .bottom-panel { height: 210px; flex-basis: 210px; }
@@ -26,13 +28,8 @@
 .panel-actions button, .status-control { border: 0; color: inherit; background: transparent; cursor: pointer; }
 .panel-actions button { width: 28px; height: 28px; border-radius: 4px; }
 .panel-actions button:hover { color: var(--text); background: var(--surface-hover); }
-.status-control { height: 20px; padding: 0 7px; border-radius: 3px; }
+.status-control { min-width: 28px; height: 22px; padding: 0 7px; border-radius: 3px; }
 .status-control:hover { color: #fff; background: rgba(255,255,255,.12); }
-.terminal-reserved { height: 100%; padding: 20px 24px; display: flex; align-items: flex-start; gap: 14px; color: var(--text-muted); background: var(--canvas-deep); }
-.terminal-icon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--accent); background: var(--surface-2); font: 11px ui-monospace, monospace; }
-.terminal-reserved h3 { margin: 2px 0 7px; color: var(--text); font-size: 12px; }
-.terminal-reserved p { max-width: 660px; margin: 0 0 8px; font-size: 10px; line-height: 1.6; }
-.terminal-reserved small { color: var(--text-dim); font: 8px ui-monospace, monospace; }
 .command-palette { padding: 0; }
 .command-palette > input { margin: 8px; width: calc(100% - 16px); }
 .command-results { max-height: 390px; padding: 0 8px 8px; overflow-y: auto; }
@@ -40,6 +37,16 @@
 .command-results button.selected { color: var(--text-strong); background: var(--surface-hover); }
 .command-results button div { display: grid; gap: 3px; }
 .command-results button strong { font-size: 10px; font-weight: 500; }
-.command-results button small { color: var(--text-dim); font-size: 8px; }
-.command-empty { padding: 28px; color: var(--text-dim); font-size: 10px; text-align: center; }
+.command-results button small { color: var(--text-dim); font-size: 9px; }
+.command-empty { padding: 28px; color: var(--text-muted); font-size: 11px; text-align: center; }
+@media (max-width: 1080px) {
+  .sidebar { width: 215px; flex-basis: 215px; }
+  .bottom-panel { height: 180px; flex-basis: 180px; }
+}
+@media (max-width: 760px) {
+  .sidebar { width: 190px; flex-basis: 190px; }
+  .workbench-tab { min-width: 105px; }
+  .statusbar { gap: 10px; overflow: hidden; white-space: nowrap; }
+  .statusbar > div:nth-child(2), .statusbar > div:nth-child(5) { display: none; }
+}
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

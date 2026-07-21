@@ -1,5 +1,10 @@
 # Development Workflow
 
+This remains a useful plugin/runtime verification loop. It is not the product
+delivery order: the Dioxus desktop MVP and client boundary are defined in
+[Client Architecture](../architecture/CLIENT_ARCHITECTURE.md), while the CLI is
+a frozen development harness.
+
 Build PolyGlid in thin vertical slices. Each slice should cross the real boundary from host to plugin and back.
 
 For the full phased build plan, see
@@ -13,7 +18,7 @@ For the full phased build plan, see
 4. Build the plugin as a WASM component.
 5. Run it through `polyglid-cli`.
 6. Add core/runtime tests.
-7. Only then connect it to Tauri UI.
+7. Connect the use case to the Dioxus UI through `ClientGateway`.
 
 ## Early Commands
 
@@ -64,7 +69,7 @@ Integration tests:
 Manual tests:
 
 - CLI plugin run
-- Tauri command invocation
+- local client-gateway invocation
 - UI event rendering
 
 ## Development Rule

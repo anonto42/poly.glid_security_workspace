@@ -1,5 +1,9 @@
 # Repository Layout
 
+The layout below remains the monorepo map. Client priority and boundaries are
+defined in [Client Architecture](CLIENT_ARCHITECTURE.md); earlier CLI-first and
+Tauri references are superseded by the Dioxus desktop-first direction.
+
 PolyGlid uses a monorepo layout because the project contains multiple related pieces that must evolve together:
 
 - desktop app
@@ -55,7 +59,7 @@ Contains Rust crates that form the engine.
 
 ### `apps/cli`
 
-The first client interface.
+The frozen development and regression harness.
 
 It owns:
 
@@ -85,7 +89,7 @@ It owns:
 It does not own:
 
 - terminal UI
-- Tauri UI
+- Dioxus UI
 - Wasmtime implementation details
 
 ### `crates/runtime`
@@ -161,12 +165,13 @@ Important development docs:
 
 ## Why This Layout Works
 
-The CLI, desktop app, and future clients can all reuse the same core:
+The desktop app is the primary client. The CLI harness and future clients reuse
+the same core boundaries:
 
 ```text
-polyglid-cli   ----\
+apps/desktop   ----\
                    +--> polyglid-core --> polyglid-runtime --> plugins
-apps/desktop   ----/
+apps/cli       ----/
 ```
 
 This prevents duplicated logic and keeps the project testable while it grows.

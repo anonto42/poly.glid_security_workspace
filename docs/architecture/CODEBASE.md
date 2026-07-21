@@ -1,5 +1,10 @@
 # Codebase Architecture
 
+> **Historical client layout.** The Tauri/React paths below are not present in
+> the current application. Use [Client Architecture](CLIENT_ARCHITECTURE.md)
+> for the target boundary and [Desktop UI](DESKTOP_UI.md) for the actual Dioxus
+> module map. The inward dependency rule remains applicable.
+
 PolyGlid should be organized as a Rust workspace with a separate frontend app. The architecture follows a hexagonal style inside the Rust backend: the core owns decisions, while adapters handle external systems such as Wasmtime, Tauri, storage, networking, and the filesystem.
 
 ## High-Level Layout
@@ -134,4 +139,3 @@ When adding a feature, ask:
 3. Is this Wasmtime-specific? Put it in `polyglid-runtime`.
 4. Is this UI-only? Put it in `apps/desktop`.
 5. Is this only for development/testing? Put it in `polyglid-cli`.
-
