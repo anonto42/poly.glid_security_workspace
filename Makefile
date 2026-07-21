@@ -545,9 +545,19 @@ new-project: ## Create a new project from template
 	printf "  $(GREEN)💡$(RESET) Add '$$name = { path = \"$$path\", language = \"$$lang\", type = \"service\" }' to workspace.toml\n"
 
 # ============================================================================
+# Site — Download landing page generator
+# ============================================================================
+
+.PHONY: site
+site: ## Generate the PolyGlid download landing page
+	@$(call print_header,🌐 Generate Site)
+	cargo run -p polyglid-site
+
+# ============================================================================
 # WPM — Workspace Project Manager
 # ============================================================================
 
+SITE_DIR := slices/site
 WPM_DIR := slices/apps/desktop
 WPM_INFRA := infrastructure/wpm
 WPM_CONFIG := configs/wpm

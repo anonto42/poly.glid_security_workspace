@@ -1,0 +1,15 @@
+[package]
+name = "polyglid-site"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Static site generator for the PolyGlid download landing page"
+
+[dependencies]
+tera = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bin]]
+name = "polyglid-site"
+path = "src/main.rs"

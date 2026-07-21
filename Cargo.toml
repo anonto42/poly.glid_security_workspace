@@ -9,6 +9,7 @@ members = [
   "slices/engine/core",
   "slices/engine/runtime",
   "slices/plugins/recon-probe",
+  "slices/site",
 ]
 resolver = "2"
 
