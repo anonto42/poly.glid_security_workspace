@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.check.outputs.site }}
+      rust_core: ${{ steps.check.outputs.rust_core }}
+      wasm: ${{ steps.check.outputs.wasm }}
+      docs: ${{ steps.check.outputs.docs }}
+      configs: ${{ steps.check.outputs.configs }}
+      infra: ${{ steps.check.outputs.infra }}
+      workflows: ${{ steps.check.outputs.workflows }}
+      ai_engine: ${{ steps.check.outputs.ai_engine }}
+      sdk: ${{ steps.check.outputs.sdk }}
+      scripts: ${{ steps.check.outputs.scripts }}
+      repinfo: ${{ steps.check.outputs.repinfo }}
+      root: ${{ steps.check.outputs.root }}
+      any: ${{ steps.check.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before || github.sha }}"
+            head="${{ github.sha }}"
+          fi
+          result=$(bash scripts/ops/detect-changes.sh "$base" "$head" 2>/dev/null || echo '{}')
+          echo "$result"
+          for key in $(echo "$result" | jq -r 'keys[]'); do
+            val=$(echo "$result" | jq -r ".[$key]")
+            echo "$key=$val" >> "$GITHUB_OUTPUT"
+          done
+          any=$(echo "$result" | jq '[.[]] | any')
+          echo "any=$any" >> "$GITHUB_OUTPUT"
+          echo "changed=$(echo "$result" | jq -c '[.[] | select(. == true)]')" >> "$GITHUB_OUTPUT"
+
+  # ── Rust workspace: build + test ──────────────────────────────
+  rust:
+    needs: detect
+    if: needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --workspace --exclude polyglid-site
+      - run: cargo test --release --workspace --exclude polyglid-site
+
+  # ── WASM plugin: build recon-probe ────────────────────────────
+  wasm:
+    needs: detect
+    if: needs.detect.outputs.wasm == 'true' || needs.detect.outputs.rust_core == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p recon-probe --target wasm32-wasip1 --release
+
+  # ── Rust lint: clippy + format ────────────────────────────────
+  lint:
+    needs: detect
+    if: needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --exclude polyglid-site -- -D warnings
+
+  # ── Site: build + deploy ──────────────────────────────────────
+  site:
+    needs: detect
+    if: needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: slices/site
+      - run: cargo run -p polyglid-site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: slices/site/public
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ── Repo metadata: sync from repinfo.json ─────────────────────
+  repoinfo:
+    needs: detect
+    if: needs.detect.outputs.repinfo == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync repo metadata
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::GH_PAT secret not set. Create a classic PAT (repo scope) at https://github.com/settings/tokens and add it as GH_PAT in repo settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          node scripts/ops/sync-repo.mjs
+
+  # ── Documentation check ───────────────────────────────────────
+  docs:
+    needs: detect
+    if: needs.detect.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Docs changed — add validation steps here"
+
+  # ── Configuration validation ──────────────────────────────────
+  configs:
+    needs: detect
+    if: needs.detect.outputs.configs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Configs changed — add validation steps here"
+
+  # ── Workflow validation ───────────────────────────────────────
+  workflows:
+    needs: detect
+    if: needs.detect.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: python3 {0}
+        run: |
+          import os, yaml, sys
+          ok = True
+          for f in os.listdir('.github/workflows'):
+              if f.endswith(('.yml', '.yaml')):
+                  try:
+                      with open(f'.github/workflows/{f}') as h:
+                          yaml.safe_load(h)
+                  except Exception as e:
+                      print(f'::error file=.github/workflows/{f}::Invalid YAML: {e}')
+                      ok = False
+          sys.exit(0 if ok else 1)
+
+  # ── AI engine build ───────────────────────────────────────────
+  ai:
+    needs: detect
+    if: needs.detect.outputs.ai_engine == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .workspace/ai/rust
+      - run: cargo build --release --manifest-path .workspace/ai/rust/Cargo.toml
+
+  # ── SDK check ─────────────────────────────────────────────────
+  sdk:
+    needs: detect
+    if: needs.detect.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "SDK changed — add validation steps here"
