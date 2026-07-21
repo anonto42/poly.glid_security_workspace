@@ -1,0 +1,20 @@
+name: Repo Sync
+
+on:
+  push:
+    branches: [main]
+    paths: [repinfo.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync repo metadata
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: node scripts/ops/sync-repo.mjs
