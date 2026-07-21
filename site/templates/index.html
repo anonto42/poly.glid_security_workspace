@@ -44,8 +44,8 @@
     <nav>
       <div class="logo">◈ <span>{{ name }}</span></div>
       <div>
-        <a href="https://github.com/anomalyco/poly.glid_security_workspace">GitHub</a>
-        <a href="https://opencode.ai">Docs</a>
+        <a href="https://github.com/anonto42/poly.glid_security_workspace">GitHub</a>
+        <a href="https://github.com/anonto42/poly.glid_security_workspace/tree/main/docs">Docs</a>
       </div>
     </nav>
 
@@ -54,9 +54,11 @@
       <p>{{ tagline }}</p>
       <div class="version">v{{ version }}</div>
       <div class="downloads">
-        <a href="/downloads/{{ name | lower }}-{{ version }}-x86_64-linux.tar.gz">🐧 Linux</a>
-        <a href="/downloads/{{ name | lower }}-{{ version }}-x86_64-macos.tar.gz">🍎 macOS</a>
-        <a href="/downloads/{{ name | lower }}-{{ version }}-x86_64-windows.zip">⊞ Windows</a>
+        <a href="{{ download_base }}/polyglid-linux-x86_64.tar.gz">🐧 Linux x86_64</a>
+        <a href="{{ download_base }}/polyglid-macos-aarch64.tar.gz">🍎 macOS Apple</a>
+        <a href="{{ download_base }}/polyglid-macos-x86_64.tar.gz">🍎 macOS Intel</a>
+        <a href="{{ download_base }}/polyglid-windows-x86_64.zip">⊞ Windows</a>
+        <a href="{{ release_url }}">All files + checksums</a>
       </div>
     </section>
 
@@ -131,7 +133,7 @@ $ polyglid plugin run recon-probe --target example.com
 
   <footer>
     <div class="container">
-      {{ name }} v{{ version }} — built with Rust &middot; <a href="https://github.com/anomalyco/poly.glid_security_workspace">GitHub</a>
+      {{ name }} v{{ version }} — built with Rust &middot; <a href="https://github.com/anonto42/poly.glid_security_workspace">GitHub</a>
     </div>
   </footer>
 </body>

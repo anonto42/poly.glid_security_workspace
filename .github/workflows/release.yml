@@ -1,0 +1,160 @@
+name: Release PolyGlid
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            asset: linux-x86_64
+            archive: polyglid-linux-x86_64.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: windows-x86_64
+            archive: polyglid-windows-x86_64.zip
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: macos-x86_64
+            archive: polyglid-macos-x86_64.tar.gz
+          - os: macos-15
+            target: aarch64-apple-darwin
+            asset: macos-aarch64
+            archive: polyglid-macos-aarch64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Build native applications
+        run: cargo build --locked --release --target ${{ matrix.target }} -p polyglid-cli -p polyglid-desktop
+
+      - name: Package Unix applications
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p package
+          cp "target/${{ matrix.target }}/release/polyglid" package/
+          cp "target/${{ matrix.target }}/release/polyglid-desktop" package/
+          cp README.md LICENSE* package/ 2>/dev/null || true
+          tar -C package -czf "${{ matrix.archive }}" .
+
+      - name: Package Windows applications
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/polyglid.exe" package/
+          Copy-Item "target/${{ matrix.target }}/release/polyglid-desktop.exe" package/
+          Copy-Item README.md package/
+          Compress-Archive -Path package/* -DestinationPath "${{ matrix.archive }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+  plugin:
+    name: Build Recon Probe component
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-plugin
+      - run: cargo build --locked --release -p polyglid-cli
+      - run: cargo build --locked --release -p recon-probe --target wasm32-wasip1
+      - name: Componentize plugin
+        run: target/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recon-probe
+          path: recon-probe.component.wasm
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [build, plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - id: version
+        name: Resolve and validate version
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${REQUESTED_TAG:-${GITHUB_REF_NAME}}"
+          case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::Release tag must look like v0.1.0"; exit 1 ;; esac
+          cargo_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
+          test "v$cargo_version" = "$tag" || { echo "::error::Tag $tag does not match workspace version v$cargo_version"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Collect assets and checksums
+        run: |
+          mkdir release-assets
+          find artifacts -maxdepth 2 -type f -exec cp {} release-assets/ \;
+          cd release-assets
+          sha256sum polyglid-* recon-probe.component.wasm > SHA256SUMS
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" release-assets/* --verify-tag --generate-notes --title "PolyGlid $TAG"
+
+  deploy-site:
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy-site.yml
+    with:
+      release_tag: ${{ needs.publish.outputs.tag }}

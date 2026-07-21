@@ -16,7 +16,7 @@ polyglid-macos-x86_64
 polyglid-windows-x86_64.exe
 ```
 
-The desktop app will be packaged differently because Tauri creates native app bundles/installers.
+The Dioxus desktop app is currently distributed beside the CLI in a native archive. Platform installers and code signing are a later release-hardening stage.
 
 ## What Goes Into One CLI Binary
 
@@ -60,11 +60,11 @@ The binary is portable, while config and plugins are external data.
 
 ## Desktop Packaging Model
 
-The Tauri app packages:
+The Dioxus app packages:
 
 - frontend assets
 - Rust host engine
-- Tauri command handlers
+- desktop backend adapters
 - plugin runtime
 - default config
 
@@ -168,11 +168,39 @@ polyglid doctor
 polyglid plugin run ./plugins/recon_probe/recon_probe.wasm --target example.com
 ```
 
-### Stage 4: Tauri App Bundles
+### Stage 4: Native App Bundles
 
-Build native installers through Tauri.
+Build native installers around the Dioxus executable.
 
 Goal: desktop users install a normal app while the same Rust core still powers the CLI.
+
+## Automated GitHub Release
+
+`.github/workflows/release.yml` runs for version tags matching `v*.*.*`.
+
+```text
+version tag
+  → native Linux, Windows, Intel macOS, and Apple macOS builds
+  → Recon Probe WebAssembly component
+  → compressed archives and SHA256SUMS
+  → GitHub Release
+  → GitHub Pages refresh
+```
+
+Archive names stay stable so the website can always use GitHub's
+`releases/latest/download` URLs:
+
+```text
+polyglid-linux-x86_64.tar.gz
+polyglid-windows-x86_64.zip
+polyglid-macos-x86_64.tar.gz
+polyglid-macos-aarch64.tar.gz
+recon-probe.component.wasm
+SHA256SUMS
+```
+
+Before tagging, the value under `[workspace.package]` in `Cargo.toml` must match
+the tag without its `v` prefix. The workflow rejects mismatched versions.
 
 ## Design Rule
 
@@ -185,4 +213,3 @@ Use:
 - Rust APIs before shell commands
 - adapters for OS-specific behavior
 - feature flags only when a dependency is truly platform-specific
-

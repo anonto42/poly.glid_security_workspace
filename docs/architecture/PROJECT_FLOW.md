@@ -81,6 +81,24 @@ flowchart TD
 - `repo-sync.yml` alone updates GitHub repository metadata.
 - `scripts/ops/polyglid-ops.mjs` is the shared local and CI entry point.
 
+## Release Flow
+
+```mermaid
+flowchart LR
+    Tag[Push version tag] --> Matrix[Native build matrix]
+    Matrix --> Linux[Linux x86_64]
+    Matrix --> Windows[Windows x86_64]
+    Matrix --> MacIntel[macOS Intel]
+    Matrix --> MacArm[macOS Apple Silicon]
+    Tag --> Plugin[Recon Probe WASM component]
+    Linux --> Release[GitHub Release + SHA256SUMS]
+    Windows --> Release
+    MacIntel --> Release
+    MacArm --> Release
+    Plugin --> Release
+    Release --> Website[Refresh GitHub Pages downloads]
+```
+
 ## Generated State
 
 Runtime databases, reports, build output, caches, and local analytics are not source code. The root `.gitignore` excludes `polyglid.db`, `reports/`, `target/`, and local workspace data.

@@ -92,3 +92,18 @@ scripts/run-mvp.sh
 
 The MVP runs the CLI host, componentizes `recon_probe`, grants `dns-resolve` and
 `report-write` for the run, and writes output under `reports/`.
+
+## Download Releases
+
+Published builds are available from the [latest GitHub release](https://github.com/anonto42/poly.glid_security_workspace/releases/latest). Each release contains Linux, Windows, Intel macOS, and Apple Silicon macOS archives, the Recon Probe WASM component, and `SHA256SUMS`.
+
+Maintainers publish a release by updating the workspace version, committing it,
+and pushing the matching tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions builds on each operating system, publishes the release, and then
+redeploys the website with links to the latest artifacts.

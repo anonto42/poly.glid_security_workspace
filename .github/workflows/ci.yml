@@ -160,8 +160,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: .workspace/ai/rust
-      - run: cargo build --release --manifest-path .workspace/ai/rust/Cargo.toml
+          workspaces: tools/ai/rust
+      - run: cargo build --release --manifest-path tools/ai/rust/Cargo.toml
 
   # ── SDK check ─────────────────────────────────────────────────
   sdk:

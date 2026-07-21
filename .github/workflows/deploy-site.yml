@@ -8,6 +8,16 @@ on:
       - "Cargo.lock"
       - "Cargo.toml"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release version displayed on the site
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      release_tag:
+        required: false
+        type: string
   schedule:
     - cron: "0 6 * * 1"
 
@@ -35,6 +45,8 @@ jobs:
           workspaces: site
 
       - name: Generate site
+        env:
+          POLYGLID_RELEASE_TAG: ${{ inputs.release_tag }}
         run: node scripts/ops/polyglid-ops.mjs site-build
 
       - name: Upload Pages artifact
