@@ -6,10 +6,6 @@ on:
     paths: [repinfo.json]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  administration: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -17,5 +13,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Sync repo metadata
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/ops/sync-repo.mjs
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::GH_PAT secret not set. Create a classic PAT (repo scope) at https://github.com/settings/tokens and add it as GH_PAT in repo settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          node scripts/ops/sync-repo.mjs
