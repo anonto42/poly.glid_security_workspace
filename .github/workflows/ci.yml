@@ -44,7 +44,7 @@ jobs:
           result=$(bash scripts/ops/detect-changes.sh "$base" "$head" 2>/dev/null || echo '{}')
           echo "$result"
           for key in $(echo "$result" | jq -r 'keys[]'); do
-            val=$(echo "$result" | jq -r ".[$key]")
+            val=$(echo "$result" | jq -r --arg k "$key" '.[$k]')
             echo "$key=$val" >> "$GITHUB_OUTPUT"
           done
           any=$(echo "$result" | jq '[.[]] | any')
