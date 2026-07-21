@@ -8,11 +8,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref_name }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   detect:
+    name: Detect changed folders
     runs-on: ubuntu-latest
     outputs:
       site: ${{ steps.check.outputs.site }}
@@ -27,12 +28,12 @@ jobs:
       scripts: ${{ steps.check.outputs.scripts }}
       repinfo: ${{ steps.check.outputs.repinfo }}
       root: ${{ steps.check.outputs.root }}
-      any: ${{ steps.check.outputs.any }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - id: check
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -41,43 +42,14 @@ jobs:
             base="${{ github.event.before || github.sha }}"
             head="${{ github.sha }}"
           fi
-          result=$(node scripts/ops/polyglid-ops.mjs detect "$base" "$head" 2>/dev/null || echo '{}')
+          result=$(node scripts/ops/polyglid-ops.mjs detect "$base" "$head")
           echo "$result"
           for key in $(echo "$result" | jq -r 'keys[]'); do
-            val=$(echo "$result" | jq -r --arg k "$key" '.[$k]')
-            echo "$key=$val" >> "$GITHUB_OUTPUT"
+            echo "$key=$(echo "$result" | jq -r --arg key "$key" '.[$key]')" >> "$GITHUB_OUTPUT"
           done
-          any=$(echo "$result" | jq '[.[]] | any')
-          echo "any=$any" >> "$GITHUB_OUTPUT"
-          echo "changed=$(echo "$result" | jq -c '[.[] | select(. == true)]')" >> "$GITHUB_OUTPUT"
 
-  # ── Rust workspace: build + test ──────────────────────────────
-  rust:
-    needs: detect
-    if: needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.root == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --workspace --exclude polyglid-site
-      - run: cargo test --release --workspace --exclude polyglid-site
-
-  # ── WASM plugin: build recon-probe ────────────────────────────
-  wasm:
-    needs: detect
-    if: needs.detect.outputs.wasm == 'true' || needs.detect.outputs.rust_core == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p recon-probe --target wasm32-wasip1 --release
-
-  # ── Rust lint: clippy + format ────────────────────────────────
-  lint:
+  rust-format:
+    name: Rust · Format check
     needs: detect
     if: needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.wasm == 'true' || needs.detect.outputs.root == 'true'
     runs-on: ubuntu-latest
@@ -85,73 +57,93 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+          components: rustfmt
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --exclude polyglid-site -- -D warnings
 
-  # Build only. Production deployment remains isolated in deploy-site.yml.
-  site:
+  rust-clippy:
+    name: Rust · Clippy
+    needs: [detect, rust-format]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --exclude polyglid-site
+
+  rust-build:
+    name: Rust · Build workspace
+    needs: rust-clippy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --workspace --exclude polyglid-site
+
+  rust-test:
+    name: Rust · Run tests
+    needs: rust-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --workspace --exclude polyglid-site
+
+  wasm-build:
+    name: WASM · Build Recon Probe
     needs: detect
-    if: needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true'
+    if: needs.detect.outputs.wasm == 'true' || needs.detect.outputs.rust_core == 'true' || needs.detect.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p recon-probe --target wasm32-wasip1 --release
+
+  wasm-test:
+    name: WASM · Test Recon Probe
+    needs: wasm-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: site
-      - run: node scripts/ops/polyglid-ops.mjs site-build
+      - run: cargo test --locked -p recon-probe
 
-  # ── Repo metadata: sync from repinfo.json ─────────────────────
-  repoinfo:
-    needs: detect
-    if: needs.detect.outputs.repinfo == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Sync repo metadata
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::GH_PAT secret not set. Create a classic PAT (repo scope) at https://github.com/settings/tokens and add it as GH_PAT in repo settings → Secrets and variables → Actions"
-            exit 1
-          fi
-          node scripts/ops/polyglid-ops.mjs repo-sync
-
-  # ── Documentation check ───────────────────────────────────────
-  docs:
-    needs: detect
-    if: needs.detect.outputs.docs == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: test -f docs/architecture/README.md && test -f README.md
-
-  # ── Configuration validation ──────────────────────────────────
-  configs:
+  config-test:
+    name: Config · Test polyglid-config
     needs: detect
     if: needs.detect.outputs.configs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p polyglid-config
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p polyglid-config
 
-  # ── Workflow validation ───────────────────────────────────────
-  workflows:
+  sdk:
+    name: SDK · Validate plugin template
     needs: detect
-    if: needs.detect.outputs.workflows == 'true'
+    if: needs.detect.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: node --check scripts/ops/polyglid-ops.mjs
-      - run: node --check scripts/ops/sync-repo.mjs
-      - run: bash -n scripts/ops/detect-changes.sh
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - run: cargo check --manifest-path sdk/plugin-template/Cargo.toml --target wasm32-wasip1
 
-  # ── AI engine build ───────────────────────────────────────────
   ai:
+    name: AI · Build engine
     needs: detect
     if: needs.detect.outputs.ai_engine == 'true'
     runs-on: ubuntu-latest
@@ -163,14 +155,86 @@ jobs:
           workspaces: tools/ai/rust
       - run: cargo build --release --manifest-path tools/ai/rust/Cargo.toml
 
-  # ── SDK check ─────────────────────────────────────────────────
-  sdk:
+  docs:
+    name: Docs · Validate files
     needs: detect
-    if: needs.detect.outputs.sdk == 'true'
+    if: needs.detect.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: test -f README.md && test -f docs/architecture/README.md && test -f docs/architecture/PROJECT_FLOW.md
+
+  workflows:
+    name: Operations · Validate scripts
+    needs: detect
+    if: needs.detect.outputs.workflows == 'true' || needs.detect.outputs.scripts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --check scripts/ops/polyglid-ops.mjs
+      - run: node --check scripts/ops/sync-repo.mjs
+      - run: bash -n scripts/ops/detect-changes.sh
+
+  infrastructure:
+    name: Infrastructure · Validate layout
+    needs: detect
+    if: needs.detect.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: test -d infrastructure
+
+  site-build:
+    name: Website · Generate static site
+    needs: detect
+    if: needs.detect.outputs.site == 'true' || needs.detect.outputs.root == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          targets: wasm32-wasip1
-      - run: cargo check --manifest-path sdk/plugin-template/Cargo.toml --target wasm32-wasip1
+          workspaces: site
+      - run: node scripts/ops/polyglid-ops.mjs site-build
+
+  pages:
+    name: Website · Deploy GitHub Pages
+    needs: [detect, site-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy-site.yml
+
+  metadata:
+    name: Repository · Sync metadata
+    needs: detect
+    if: needs.detect.outputs.repinfo == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/repo-sync.yml
+    secrets: inherit
+
+  result:
+    name: CI result
+    if: always()
+    needs:
+      - rust-test
+      - wasm-test
+      - config-test
+      - sdk
+      - ai
+      - docs
+      - workflows
+      - infrastructure
+      - site-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all executed validation branches to pass
+        env:
+          RESULTS: ${{ toJson(needs) }}
+        run: |
+          echo "$RESULTS" | jq .
+          if echo "$RESULTS" | jq -e '[.[] | .result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
+            echo "::error::One or more CI branches failed or were cancelled"
+            exit 1
+          fi

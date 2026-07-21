@@ -65,20 +65,43 @@ The required dependency direction is `contract → core → adapter → client`.
 
 ```mermaid
 flowchart TD
-    Push[Push or pull request] --> Detect[polyglid-ops detect]
-    Detect -->|apps or crates| Rust[Rust format, Clippy, build, test]
-    Detect -->|contracts or plugins| Wasm[Build WASM plugin]
+    Push[Push or pull request] --> Detect[Detect changed folders]
+
+    Detect -->|apps, crates, or workspace| Format[Rust format check]
+    Format --> Clippy[Rust Clippy]
+    Clippy --> Build[Rust workspace build]
+    Build --> Tests[Rust workspace tests]
+
+    Detect -->|contracts or plugins| WasmBuild[Build Recon Probe WASM]
+    WasmBuild --> WasmTest[Test Recon Probe]
+
+    Detect -->|configuration| Config[Test polyglid-config]
     Detect -->|sdk| SDK[Validate plugin SDK]
-    Detect -->|site| SiteBuild[Build static site]
+    Detect -->|tools/ai| AI[Build AI engine]
     Detect -->|docs| Docs[Validate documentation]
-    Detect -->|tools/ai| AI[Build AI tool]
-    Detect -->|repinfo.json| Metadata[Repository metadata workflow]
-    SiteBuild -->|main branch| Pages[GitHub Pages deployment]
+    Detect -->|workflows or scripts| Ops[Validate operations scripts]
+    Detect -->|infrastructure| Infra[Validate infrastructure layout]
+
+    Detect -->|site| SiteBuild[Generate static website]
+    SiteBuild -->|push to main| Pages[Deploy GitHub Pages]
+
+    Detect -->|repinfo.json on main| Metadata[Sync repository metadata]
+
+    Tests --> Result[CI result]
+    WasmTest --> Result
+    Config --> Result
+    SDK --> Result
+    AI --> Result
+    Docs --> Result
+    Ops --> Result
+    Infra --> Result
+    SiteBuild --> Result
 ```
 
-- `ci.yml` detects changes and runs validation/build jobs.
-- `deploy-site.yml` alone deploys the public website.
-- `repo-sync.yml` alone updates GitHub repository metadata.
+- Each box above is a separate Actions job, so GitHub renders the same dependency graph in the workflow run overview.
+- `ci.yml` detects changes and connects the validation, build, test, deployment, and final-result jobs.
+- `deploy-site.yml` is a reusable workflow called by CI after a successful site build on `main`.
+- `repo-sync.yml` is a reusable workflow called by CI when `repinfo.json` changes on `main`.
 - `scripts/ops/polyglid-ops.mjs` is the shared local and CI entry point.
 
 ## Release Flow

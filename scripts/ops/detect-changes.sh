@@ -29,6 +29,7 @@ for f in $changed; do
   case "$f" in
     site/*)                 site=true ;;
     Cargo.lock | Cargo.toml) site=true; root=true ;;
+    crates/config/*)        rust_core=true; configs=true ;;
     apps/* | crates/*)
       rust_core=true ;;
     plugins/* | contracts/* | *.wit | wit/*)

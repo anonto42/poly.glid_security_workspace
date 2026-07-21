@@ -1,12 +1,6 @@
 name: Deploy site to GitHub Pages
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "site/**"
-      - "Cargo.lock"
-      - "Cargo.toml"
   workflow_dispatch:
     inputs:
       release_tag:
