@@ -1,123 +1,135 @@
 # PolyGlid Workspace Summary
 
-## Directory Layout
+This file describes the implementation that is tracked today. It does not
+treat empty directories, design documents, or experimental tools as delivered
+product features.
+
+## Product Direction and Status
+
+PolyGlid is a local-first security workspace with a small trusted Rust host and
+sandboxed WebAssembly components. The native Dioxus desktop application is the
+primary product client. The CLI is a development and regression harness, and
+the server is a supporting API surface rather than the desktop MVP.
+
+The principal desktop slices are connected: projects, plugin inspection and
+lifecycle, per-run permission review, asynchronous executions, persisted
+reports, and report export. Connected foundations do not mean the product is
+ready to ship. Scoped durable permissions, signed first-party components,
+normal platform packages, accessibility acceptance, and packaged end-to-end
+tests remain open.
+
+- [Current roadmap](docs/planning/ROADMAP.md)
+- [Desktop MVP definition and checklist](docs/planning/MVP.md)
+- [Desktop implementation status](apps/desktop/README.md)
+- [Client architecture](docs/architecture/CLIENT_ARCHITECTURE.md)
+
+## Runtime Shape
+
+```text
+Dioxus Desktop (primary client)
+CLI harness / HTTP server (supporting clients)
+                 |
+                 v
+Rust core services, persistence, policy, and typed events
+                 |
+                 v
+Wasmtime component runtime -> WIT contract -> sandboxed WASM plugin
 ```
-.
-├── Makefile                          # Root — all commands
-├── workspace.toml                    # Workspace project registry
-├── apps/                             # Desktop, CLI, and server applications
-├── crates/                           # Core, runtime, config, events, plugin API
-├── contracts/                        # Canonical WIT contract
-├── plugins/                          # First-party WASM plugins
-├── site/                             # Static public website generator
-├── tools/
-│   ├── ai/                           # AI engine (Rust binary)
-│   │   ├── configs/                  # ai-config.toml + per-domain model-configs/
-│   │   ├── rust/src/                 # Engine source
-│   │   │   ├── main.rs               # CLI entrypoint (16 commands)
-│   │   │   ├── cli/commands.rs       # Command handlers
-│   │   │   ├── core/engine.rs        # AIEngine, config, RAG
-│   │   │   ├── features/             # Analysis, security, ingest, diagrams, etc.
-│   │   │   ├── providers/            # Ollama/OpenAI/Local
-│   │   │   ├── tools/                # 5 built-in tools
-│   │   │   ├── feedback/             # Prediction tracking
-│   │   │   └── pipelines/            # Daemon, watcher, scheduler
-│   │   └── models/embeddings/        # Vector index (JSON)
-│   ├── automation/
-│   │   ├── includes/                 # Included .mk modules
-│   │   │   ├── projects/*.mk         # Per-project targets (auto-generated)
-│   │   │   ├── languages.mk          # Language-level build/test/clean
-│   │   │   ├── docker.mk / k8s.mk / ci.mk
-│   │   │   └── colors.mk, config.mk, utils.mk, help.mk
-│   │   ├── scripts/                  # validate-workspace, generate-graph, detect-changes
-│   │   └── templates/                # project.mk.template, language.mk.template
-│   ├── data/analytics/               # Usage logs (JSONL)
-│   └── quality/reports/              # AI analysis outputs
-│   └── security/audits/              # AI security audit outputs
+
+## Tracked Implementation Surfaces
+
+| Path | Current responsibility |
+| --- | --- |
+| `apps/desktop/` | Primary Dioxus workbench and its local `ClientGateway` adapter |
+| `apps/cli/` | Runtime/component developer harness; not the desktop MVP |
+| `apps/server/` | HTTP and collaboration API foundation |
+| `crates/core/` | Application services, execution control, security policy, and SQLite-backed stores |
+| `crates/runtime/` | Wasmtime Component Model adapter and host capability linking |
+| `crates/config/` | Configuration and plugin registry |
+| `crates/events/` | Typed host and client events |
+| `crates/plugin-api/` | Plugin-facing Rust types and capability declarations |
+| `contracts/polyglid.wit` | Canonical host/plugin interface |
+| `plugins/recon-probe/` | First-party diagnostic WASM component source and manifest |
+| `site/` | Rust static-site generator and generated public download page |
+| `sdk/` | Independent Rust plugin-template/examples workspace; top-level Go, Node, Python, and Rust directories are placeholders |
+| `scripts/ops/` | Canonical local/CI task dispatcher, change detection, smoke test, and repository sync |
+| `.github/workflows/` | Selective CI, Pages deployment, release publication, metadata sync, and cache maintenance |
+| `docs/` | Architecture, security, planning, packaging, and development guidance |
+
+`tools/ai/rust/` is an independent experimental workspace that CI can build. It
+is not connected to the current desktop product navigation or MVP journey, and
+the root automation does not advertise its design documents as delivered AI
+features.
+
+There are no tracked browser or IDE extension implementations. The top-level
+Go, Node, Python, and Rust SDK directories and `tests/security/` are `.gitkeep`
+placeholders; active Rust packages live under `sdk/plugin-template/` and
+`sdk/examples/`.
+The only tracked infrastructure implementation is the legacy
+`infrastructure/wpm/init.sql`; there is no tracked Docker Compose, Kubernetes,
+or Terraform deployment stack to operate today.
+
+## Cargo Workspaces
+
+There are three intentionally separate Cargo build roots:
+
+| Build root | Scope |
+| --- | --- |
+| `Cargo.toml` | Product applications, shared crates, Recon Probe, and site |
+| `sdk/Cargo.toml` | Plugin template and Rust SDK examples |
+| `tools/ai/rust/Cargo.toml` | Isolated experimental tooling |
+
+The operations CLI coordinates these roots where a repository-wide command
+needs them. It does not pretend that `cargo --workspace` at the repository root
+includes every Cargo project.
+
+## Canonical Commands
+
+Repository task behavior lives in `scripts/ops/polyglid-ops.mjs`. Use it
+directly, through `npm run`, or through the small root Make compatibility layer.
+The wrappers add names, not a second implementation of the tasks.
+
+| Make command | npm command | Purpose |
+| --- | --- | --- |
+| `make help` | `npm run help` | Show canonical operations commands |
+| `make init` | `npm run init` | Compatibility alias for the read-only prerequisite doctor |
+| `make doctor` | `npm run doctor` | Verify workspace files and required development/delivery tools |
+| `make dev` | `npm run dev` | Compatibility alias that starts the desktop client |
+| `make desktop` | `npm run desktop` | Run the Dioxus desktop client from source |
+| `make server` | `npm run server` | Run the supporting HTTP server from source |
+| `make format` | `npm run format` | Format the maintained root and SDK workspaces |
+| `make check` | `npm run check` | Type-check coordinated Rust workspaces |
+| `make validate` | `npm run validate` | Run repository metadata, script, formatting, and workspace validation |
+| `make build` | `npm run build` | Build coordinated workspaces |
+| `make test` | `npm run test` | Test coordinated workspaces |
+| `make clean` | `npm run clean` | Remove Cargo artifacts from the coordinated workspaces |
+| `make detect BASE=main HEAD=HEAD` | `npm run detect -- main HEAD` | Classify changes between two Git revisions |
+| `make graph` | `npm run graph` | Print one Cargo-metadata DOT graph for all three workspaces |
+| `make site` | `npm run site` | Generate the static website |
+| `make mvp` | `npm run mvp` | Run the real CLI-to-WASM runtime smoke test |
+| `make repo-sync` | `npm run repo-sync` | Apply `repinfo.json` with an authenticated GitHub CLI |
+
+Extra arguments can be forwarded through Make with `ARGS`, for example:
+
+```bash
+make build ARGS="--release"
 ```
 
-## Make Commands
+For the raw dispatcher or npm, append arguments normally:
 
-### Workspace
-| Command | Description |
-|---------|-------------|
-| `make init` | 6-phase setup: check tools, install deps, build, validate |
-| `make status` | Show workspace health |
-| `make info` | Show metadata (name, version, languages) |
-| `make graph` | Generate dependency graph |
-| `make new-project` | Scaffold a new project interactively |
+```bash
+node scripts/ops/polyglid-ops.mjs detect main HEAD
+npm run ops -- validate
+```
 
-### Build / Test / Dev
-| Command | Description |
-|---------|-------------|
-| `make build` | Build all Rust + Node projects |
-| `make test` | Run all tests |
-| `make dev` | Start dev servers (parallel) |
-| `make clean` | Remove build artifacts |
-| `make build-rust` | Build Rust workspace (`cargo build --release`) |
-| `make test-rust` | Run Rust tests (`cargo test --all`) |
+The compatibility Makefile under `tools/automation/` is deprecated and only
+delegates these commands back to the repository root. The old included Make
+modules are not the source of truth for current automation.
 
-### AI Engine
-All AI commands auto-build the engine binary before running.
+## Delivery Reality
 
-| Command | Description | Output |
-|---------|-------------|--------|
-| `make ai-analyze` | Full workspace AI analysis | `.workspace/quality/reports/` |
-| `make ai-suggest` | Get improvement suggestions | stdout |
-| `make ai-security` | Security audit scan | `.workspace/security/audits/` |
-| `make ai-status` | Engine health check | stdout |
-| `make ai-ingest` | Build code vector index | `tools/ai/models/embeddings/` |
-| `make ai-search QUERY="..."` | Semantic code search | stdout |
-| `make ai-diagram` | Generate architecture diagrams | `docs/diagrams/` |
-| `make ai-release` | Generate K8s deploy manifests | `releases/manifests/` |
-| `make ai-init-configs` | Generate .gitignore, .editorconfig, .vscode | root + `configs/` |
-| `make ai-generate-mk` | Regenerate per-project .mk files | `automation/includes/projects/` |
-| `make ai-detect-changes` | List projects changed since main | stdout |
-
-### WPM (Workspace Project Manager)
-| Command | Description |
-|---------|-------------|
-| `make init-wpm` | Scaffold WPM project from design plan |
-| `make wpm-build` | Build WPM binary |
-| `make wpm-run` | Start WPM server |
-| `make wpm-db-setup` | Create + migrate database |
-| `make wpm-test` | Run WPM tests |
-| `make wpm-docker-up` | Start Docker Compose stack |
-| `make wpm-docker-down` | Stop Docker Compose stack |
-| `make wpm-plan` | Show WPM design document |
-
-### Deploy
-| Command | Description |
-|---------|-------------|
-| `make deploy` | Build → Docker → K8s (stub) |
-
-## How to Manage
-
-### Adding a new Make command
-1. Open `Makefile` (root)
-2. Add a `.PHONY:` line + recipe following the existing pattern
-3. Run `make help` to verify it appears
-
-### Per-project overrides
-- Run `make ai-generate-mk` to regenerate project `.mk` files
-- Edit `automation/includes/projects/<project>.mk` to override build/test/clean per project
-- These are auto-included at the bottom of `Makefile` via `-include`
-
-### Language-level targets
-- Edit `automation/includes/languages.mk` to change how all projects of a language build/test/clean
-
-### Infrastructure targets
-- Docker: `automation/includes/docker.mk`
-- Kubernetes: `automation/includes/k8s.mk`
-- CI: `automation/includes/ci.mk`
-
-### AI engine
-- Source: `tools/ai/rust/src/`
-- Config: `tools/ai/configs/ai-config.toml`
-- Per-domain model overrides: `tools/ai/configs/model-configs/*.toml`
-- Rebuild: `make build-ai-engine` (auto-runs before any `ai-*` command)
-
-### Requirements
-- **Ollama** must be running (`ollama serve`) for AI commands to work
-- **nomic-embed-text** model needed for `ai-ingest` (`ollama pull nomic-embed-text`)
-- Rust toolchain, Node.js, pnpm for builds
+GitHub Actions owns the workflow graph and platform concerns that do not belong
+in a local task runner: job permissions, selective routing, artifacts, native
+release matrices, GitHub Pages, repository metadata, delivery result gates, and
+cache cleanup. See [CI and Delivery](docs/development/CI_DELIVERY.md) for the
+exact push, pull-request, preview, and tag-release paths.

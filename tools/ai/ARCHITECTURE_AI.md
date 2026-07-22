@@ -1,14 +1,20 @@
 # PolyGlid AI Architecture
 
+> **Historical experimental design:** the Make-managed setup flow shown below
+> is not part of current repository automation. `make init` is now a read-only
+> prerequisite doctor and does not install Ollama, pull models, or configure the
+> AI engine. Invoke this isolated experiment explicitly with
+> `cargo run --release --manifest-path tools/ai/rust/Cargo.toml -- <command>`.
+
 ```mermaid
 flowchart TD
     subgraph User["User"]
-        CLI["make init / make ai-analyze / etc."]
+        CLI["Historical Make-managed invocation"]
     end
 
-    subgraph Makefile["Makefile Layer"]
-        INIT["make init"]
-        AI_CMDS["make ai-analyze<br/>make ai-suggest<br/>make ai-security"]
+    subgraph Makefile["Retired Makefile Layer"]
+        INIT["retired automatic setup"]
+        AI_CMDS["retired AI command aliases"]
         CHECK["_check-ollama<br/>_check-gpu<br/>_check-system"]
         SETUP["_setup-missing-tools<br/>_setup-ollama-model"]
         CONFIG["_setup-ai-config"]
@@ -68,7 +74,7 @@ flowchart TD
 
 ---
 
-## 1. What Happens on `make init`
+## 1. Retired Make-managed setup design
 
 ```
 make init
@@ -282,7 +288,7 @@ tools/ai/
 ## 8. Future Extensions
 
 ### What's ready now:
-- ✅ Ollama auto-install + model pull in `make init`
+- ❌ Automatic Ollama installation and model pulls were retired; setup is manual
 - ✅ Configurable `api_base` for any OpenAI-compatible API
 - ✅ Per-domain model overrides via `[models]` in config
 - ✅ Provider switching via `provider_type` + `api_base`

@@ -53,29 +53,6 @@ define get_dev_command
 	esac)
 endef
 
-# Get dependencies for project
-define get_dependencies
-	$(shell grep -A 10 "\[dependencies\]" workspace.toml | grep "$(1)" | awk '{print $$3}' | tr -d '"')
-endef
-
-# Get service port
-define get_service_port
-	$(shell grep -A 5 "\[projects.$(1)\]" workspace.toml | grep "port" | awk '{print $$3}')
-endef
-
-# Check if service is running
-define is_service_running
-	@curl -s http://localhost:$(call get_service_port,$(1))/health >/dev/null 2>&1
-endef
-
-# Wait for service
-define wait_for_service
-	@echo "Waiting for service $(1)..."
-	@for i in {1..30}; do \
-		curl -s http://localhost:$(call get_service_port,$(1))/health >/dev/null 2>&1 && break || sleep 1; \
-	done
-endef
-
 # Get current timestamp
 define timestamp
 	$(shell date +%Y%m%d_%H%M%S)

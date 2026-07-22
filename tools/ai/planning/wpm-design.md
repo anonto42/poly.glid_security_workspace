@@ -1,5 +1,10 @@
 # WPM — Workspace Project Manager
 
+> **Historical proposal:** this document is not an executable quick start. The
+> `init-wpm` and `wpm-*` Make targets described below were retired; use the
+> current desktop plans and commands in `docs/planning/MVP.md` and
+> `docs/development/WORKFLOW.md`.
+
 ## Overview
 A full project management tool integrated into the PolyGlid workspace: dashboard, tree architecture, threaded comments, feedback/rating system, real-time collaboration via WebSocket.
 

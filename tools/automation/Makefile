@@ -1,13 +1,17 @@
-# ============================================================================
-# PolyGlid Makefile Automation Core
-# ============================================================================
+# Deprecated compatibility entry point.
+# Use the repository-root Makefile or scripts/ops/polyglid-ops.mjs directly.
 
-include includes/colors.mk
-include includes/config.mk
-include includes/utils.mk
-include includes/help.mk
-include includes/languages.mk
-include includes/docker.mk
-include includes/k8s.mk
-include includes/ci.mk
--include includes/projects/*.mk
+THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
+ROOT := $(abspath $(dir $(THIS_MAKEFILE))/../..)
+ARGS ?=
+BASE ?= main
+HEAD ?= HEAD
+
+COMMANDS := help init doctor dev desktop server format check validate build test clean detect graph site mvp repo-sync
+
+.DEFAULT_GOAL := help
+.PHONY: $(COMMANDS)
+
+$(COMMANDS):
+	@printf '%s\n' 'tools/automation/Makefile is deprecated; delegating to the root Makefile.' >&2
+	@$(MAKE) --no-print-directory -C "$(ROOT)" "$@" ARGS="$(ARGS)" BASE="$(BASE)" HEAD="$(HEAD)"

@@ -206,12 +206,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
       - run: node --check scripts/ops/polyglid-ops.mjs
+      - run: node scripts/ops/test-polyglid-ops.mjs
+      - name: Smoke-test npm and Make compatibility wrappers
+        env:
+          POLYGLID_OPS_DRY_RUN: "1"
+        run: |
+          npm run build -- --release
+          make build ARGS=--release
+          make --no-print-directory -f tools/automation/Makefile help
       - run: node --check scripts/ops/sync-repo.mjs
       - run: bash -n scripts/ops/detect-changes.sh
       - run: bash -n scripts/ops/test-detect-changes.sh
       - run: bash -n scripts/ops/mvp-smoke.sh
+      - run: bash -n tools/automation/scripts/validate-workspace.sh
+      - run: bash -n tools/automation/scripts/generate-graph.sh
       - run: bash scripts/ops/test-detect-changes.sh
+      - run: bash tools/automation/scripts/validate-workspace.sh
+      - name: Validate generated dependency graph
+        shell: bash
+        run: |
+          bash tools/automation/scripts/generate-graph.sh > "$RUNNER_TEMP/polyglid-workspaces.dot"
+          grep -q '^digraph polyglid_workspaces {' "$RUNNER_TEMP/polyglid-workspaces.dot"
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
   infrastructure:

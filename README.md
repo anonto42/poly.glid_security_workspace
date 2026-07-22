@@ -7,7 +7,8 @@ The goal is not to create one large tangled application. The goal is to create a
 ## Product Shape
 
 ```text
-Desktop / CLI / HTTP API
+Dioxus Desktop (primary client)
+CLI runtime harness / HTTP API (supporting clients)
         |
         | typed core services and events
         v
@@ -26,10 +27,11 @@ Recon, audit, reporting, diagnostics
 - Plugins never directly own filesystem, process, or network access.
 - Every host/plugin boundary is described through a stable contract.
 - Every plugin returns structured data instead of free-form terminal text.
-- The full GUI is not required to test plugin behavior. A CLI harness comes first.
+- Runtime and plugin behavior can be tested through the CLI harness, while the
+  desktop journey remains the product acceptance surface.
 - Security features must be designed for authorized testing and defensive validation.
 
-## First Documentation Pass
+## Documentation
 
 - [Codebase Architecture](docs/architecture/CODEBASE.md)
 - [CLI Technology Decision](docs/architecture/CLI_TECH_DECISION.md)
@@ -67,10 +69,10 @@ poly.glid_security_workspace/
 │   └── recon-probe/          # first-party WASM plugin
 ├── site/                     # public website generator
 ├── sdk/                      # plugin SDK and examples
-├── tools/                    # AI and workspace automation
+├── tools/                    # repository tooling and isolated experiments
 ├── scripts/ops/              # stable operations CLI
-├── infrastructure/          # deployment and service definitions
-├── tests/                    # workspace-level tests
+├── infrastructure/          # legacy placeholders; no active deployment stack
+├── tests/                    # reserved workspace-level test area
 └── docs/                     # architecture and operating guides
 ```
 
@@ -84,15 +86,18 @@ poly.glid_security_workspace/
 6. Add the workspace UI.
 7. Add richer plugins only after the boundary is tested.
 
-## Run The Current MVP
+## Run the Runtime Harness
 
 ```bash
 rustup target add wasm32-wasip1
 scripts/run-mvp.sh
 ```
 
-The MVP runs the CLI host, componentizes `recon_probe`, exercises the happy-path
-DNS/report host calls, and writes output under `reports/`.
+This developer and regression harness runs the CLI host, componentizes
+`recon_probe`, exercises the happy-path DNS/report host calls, and writes output
+under `reports/`. It proves the host/plugin boundary; it does not complete the
+desktop product MVP. The user-facing milestone and its remaining acceptance
+work are defined by the [Desktop MVP checklist](docs/planning/MVP.md).
 
 ## Download Releases
 
@@ -109,8 +114,8 @@ git push origin v0.10.0
 ```
 
 GitHub Actions runs the full gate, builds on each operating system, publishes a
-verified release, and checks the stable website download links. The public site
-discovers the latest published version dynamically.
+verified release, and verifies the latest release and expected asset names. The
+public site discovers the latest published version dynamically.
 
 ## License
 

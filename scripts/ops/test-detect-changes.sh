@@ -48,7 +48,22 @@ result=$(cd "$repo" && bash "$detect_script" HEAD^ HEAD)
 assert_flag "$result" workflows true
 assert_flag "$result" full true
 
-commit_file workspace.toml
+commit_file Makefile
+result=$(cd "$repo" && bash "$detect_script" HEAD^ HEAD)
+assert_flag "$result" scripts true
+assert_flag "$result" full false
+
+commit_file package.json
+result=$(cd "$repo" && bash "$detect_script" HEAD^ HEAD)
+assert_flag "$result" scripts true
+assert_flag "$result" full false
+
+commit_file tools/automation/scripts/example.sh
+result=$(cd "$repo" && bash "$detect_script" HEAD^ HEAD)
+assert_flag "$result" scripts true
+assert_flag "$result" full false
+
+commit_file unclassified/example.txt
 result=$(cd "$repo" && bash "$detect_script" HEAD^ HEAD)
 assert_flag "$result" unknown true
 assert_flag "$result" full true

@@ -1,607 +1,72 @@
-# ============================================================================
-# PolyGlid Workspace Makefile
-# ============================================================================
-# Usage: make [target] [options]
-# Examples:
-#   make help           - Show all available commands
-#   make dev            - Run the PolyGlid desktop app
-#   make server         - Run the optional backend API
-#   make build          - Build all projects
-#   make test           - Run all tests
-#   make clean          - Clean all artifacts
-# ============================================================================
+# PolyGlid local command compatibility layer.
+#
+# Repository behavior belongs in scripts/ops/polyglid-ops.mjs. Keep this file
+# intentionally small so Make, npm, and GitHub Actions execute the same tasks.
 
-.ONESHELL:
-.DELETE_ON_ERROR:
-MAKEFLAGS += --warn-undefined-variables
-MAKEFLAGS += --no-builtin-rules
+NODE ?= node
+OPS := $(NODE) scripts/ops/polyglid-ops.mjs
 
-# Include OS detection (first — other includes depend on these vars)
-include tools/automation/includes/os.mk
-
-# Include automation system
-include tools/automation/includes/colors.mk
-include tools/automation/includes/config.mk
-include tools/automation/includes/utils.mk
-include tools/automation/includes/help.mk
-
-# Include language modules
-include tools/automation/includes/languages.mk
-
-# Include infrastructure modules
-include tools/automation/includes/docker.mk
-include tools/automation/includes/k8s.mk
-include tools/automation/includes/ci.mk
--include tools/automation/includes/projects/*.mk
-
-# ============================================================================
-# Default Target
-# ============================================================================
+ARGS ?=
+BASE ?= main
+HEAD ?= HEAD
 
 .DEFAULT_GOAL := help
 
-# ============================================================================
-# Workspace Commands
-# ============================================================================
+.PHONY: help init doctor dev dev-rust desktop server format check validate build test clean detect graph site mvp repo-sync
 
-# ── Init (orchestrator — runs phases in order) ──
+help:
+	@$(OPS) help $(ARGS)
+	@printf '\nMake aliases:\n  init -> doctor (checks prerequisites; installs nothing)\n  dev  -> desktop\n  site -> site-build\n  mvp  -> mvp-smoke\n\nForward extra arguments with ARGS="...".\nUse BASE and HEAD with detect.\n'
 
-.PHONY: init
-init: _init-check-tools _init-install-deps _init-build _init-validate ## Initialize workspace (check, install, build, validate)
-	@$(call print_success,Workspace initialized successfully!)
+# Compatibility setup is deliberately read-only. Tool installation remains an
+# explicit developer decision rather than a side effect of `make init`.
+init:
+	@$(OPS) doctor $(ARGS)
 
-.PHONY: _init-check-tools
-_init-check-tools: _check-dev-tools _check-git _check-docker _check-ollama _check-system _check-gpu _setup-missing-tools _setup-ollama-model _setup-ai-config ## [Phase 1] Check prerequisites & auto-setup
-	@$(call print_success,All prerequisite checks & auto-setup complete!)
+doctor:
+	@$(OPS) doctor $(ARGS)
 
-# ── Tool checks ──
+dev:
+	@$(OPS) desktop $(ARGS)
 
-.PHONY: _check-dev-tools
-_check-dev-tools:
-	@$(call print_header,📦 Phase 1/6 — Development Tools)
-	@$(call print_substep,Running on: $(OS) ($(UNAME_S)) ($(UNAME_M)))
-	@for tool in rustc cargo rustup node npm pnpm; do \
-		if $(CHECK_CMD) $$tool >$(NULL_DEV) 2>&1; then \
-			printf "  $(GREEN)✅$(RESET) %-12s %s\n" "$$tool" "$$($$tool --version 2>&1 | head -1)"; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s not found (install manually)\n" "$$tool"; \
-		fi \
-	done
-
-.PHONY: _check-git
-_check-git:
-	@$(call print_header,📦 Phase 2/6 — Git Configuration)
-	@if $(CHECK_CMD) git >$(NULL_DEV) 2>&1; then \
-		name=$$(git config --global user.name 2>/dev/null || echo ""); \
-		email=$$(git config --global user.email 2>/dev/null || echo ""); \
-		printf "  $(GREEN)✅$(RESET) %-12s %s\n" "git" "$$(git --version 2>&1 | head -1)"; \
-		if [ -n "$$name" ]; then \
-			printf "  $(GREEN)✅$(RESET) %-12s %s\n" "user.name" "$$name"; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s not set (run: git config --global user.name \"Your Name\")\n" "user.name"; \
-		fi; \
-		if [ -n "$$email" ]; then \
-			printf "  $(GREEN)✅$(RESET) %-12s %s\n" "user.email" "$$email"; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s not set (run: git config --global user.email \"you@example.com\")\n" "user.email"; \
-		fi; \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) %-12s not found\n" "git"; \
-	fi
-
-.PHONY: _check-docker
-_check-docker:
-	@$(call print_header,📦 Phase 3/6 — Docker & Containers)
-	@if $(CHECK_CMD) docker >$(NULL_DEV) 2>&1; then \
-		printf "  $(GREEN)✅$(RESET) %-12s %s\n" "docker" "$$(docker --version 2>&1)"; \
-		if docker info >$(NULL_DEV) 2>&1; then \
-			printf "  $(GREEN)✅$(RESET) %-12s daemon running\n" "docker"; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s daemon not running (start Docker Desktop or service)\n" "docker"; \
-		fi; \
-		if docker compose version >$(NULL_DEV) 2>&1; then \
-			printf "  $(GREEN)✅$(RESET) %-12s %s\n" "compose" "$$(docker compose version 2>&1)"; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s not available\n" "compose"; \
-		fi; \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) %-12s not found (install Docker)\n" "docker"; \
-	fi
-
-.PHONY: _check-ollama
-_check-ollama:
-	@$(call print_header,📦 Phase 4/6 — Ollama AI)
-	@if $(CHECK_CMD) ollama >$(NULL_DEV) 2>&1; then \
-		ver=$$(ollama --version 2>&1 | grep -oP 'version is \K\S+' || echo "installed"); \
-		printf "  $(GREEN)✅$(RESET) %-12s %s\n" "ollama" "$$ver"; \
-		models=$$(ollama list 2>&1 | tail -n +2 | awk '{print $$1}' | tr '\n' ' ' || true); \
-		if [ -n "$$models" ]; then \
-			printf "  $(GREEN)✅$(RESET) %-12s %s\n" "models" "$$models"; \
-		else \
-			if ollama list >$(NULL_DEV) 2>&1; then \
-				printf "  $(YELLOW)ℹ️$(RESET)  %-12s no models pulled yet\n" "models"; \
-			else \
-				printf "  $(YELLOW)⚠️$(RESET) %-12s daemon not running (start with: ollama serve)\n" "daemon"; \
-			fi; \
-		fi; \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) %-12s not found (install from ollama.com)\n" "ollama"; \
-	fi
-
-.PHONY: _check-system
-_check-system:
-	@$(call print_header,📦 Phase 5/6 — System Resources)
-	@printf "  $(GREEN)✅$(RESET) %-12s %s\n" "CPU" "$$(nproc 2>/dev/null || echo unknown) cores"
-	@memory=$$(free -h 2>/dev/null | awk '/^Mem:/{print $$2}'); \
-	if [ -n "$$memory" ]; then \
-		printf "  $(GREEN)✅$(RESET) %-12s %s\n" "RAM" "$$memory"; \
-	fi
-	@disk=$$(df -h . 2>/dev/null | awk 'NR==2{print $$4}'); \
-	if [ -n "$$disk" ]; then \
-		printf "  $(GREEN)✅$(RESET) %-12s %s free\n" "disk" "$$disk"; \
-	fi
-	@printf "  $(GREEN)✅$(RESET) %-12s %s\n" "shell" "$$($(SHELL) --version 2>&1 | head -1)"
-
-.PHONY: _check-gpu
-_check-gpu:
-	@$(call print_header,📦 Phase 6/6 — GPU Detection)
-	@if $(CHECK_CMD) nvidia-smi >$(NULL_DEV) 2>&1; then \
-		gpu=$$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1); \
-		printf "  $(GREEN)✅$(RESET) %-12s %s\n" "NVIDIA" "$$gpu"; \
-		printf "  $(GREEN)💡$(RESET) %-12s Use: ollama pull codellama:13b (GPU recommended)\n" "model"; \
-	else \
-		printf "  $(YELLOW)ℹ️$(RESET)  %-12s no NVIDIA GPU detected\n" "gpu"; \
-		if [ "$$(uname -m)" = "arm64" ] || [ "$$(uname -m)" = "aarch64" ]; then \
-			printf "  $(GREEN)💡$(RESET) %-12s Apple Silicon detected — ollama with Metal works\n" "note"; \
-			printf "  $(GREEN)💡$(RESET) %-12s Use: ollama pull codellama:7b\n" "model"; \
-		else \
-			printf "  $(GREEN)💡$(RESET) %-12s CPU-only — use small models: phi3:3.8b\n" "model"; \
-		fi; \
-	fi
-
-# ── Auto-setup (installs missing tools when possible) ──
-
-.PHONY: _setup-missing-tools
-_setup-missing-tools:
-	@$(call print_header,🔧 Auto-Setup — Installing Missing Tools)
-	@installed=0; \
-	\
-	## Rust via rustup \
-	if ! $(CHECK_CMD) rustc >$(NULL_DEV) 2>&1; then \
-		printf "  $(YELLOW)⏳$(RESET) Installing Rust (rustup)...\n"; \
-		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-			| sh -s -- -y 2>&1 | tail -1 || true; \
-		. $$HOME/.cargo/env 2>/dev/null || true; \
-		_rustc_ver=$$(rustc --version 2>&1) || true; \
-		if [ -n "$$_rustc_ver" ]; then \
-			printf "  $(GREEN)✅$(RESET) %-12s %s\n" "rustc" "$$_rustc_ver"; \
-			installed=1; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s install failed\n" "rustc"; \
-		fi; \
-	else \
-		printf "  $(GREEN)✅$(RESET) %-12s already installed\n" "rustc"; \
-	fi; \
-	\
-	## pnpm via npm \
-	if ! $(CHECK_CMD) pnpm >$(NULL_DEV) 2>&1; then \
-		if $(CHECK_CMD) npm >$(NULL_DEV) 2>&1; then \
-			printf "  $(YELLOW)⏳$(RESET) Installing pnpm via npm...\n"; \
-			_npm_prefix=$$(npm config get prefix); \
-			if [ "$$_npm_prefix" = "/usr" ]; then \
-				mkdir -p "$$HOME/.npm-global"; \
-				npm config set prefix "$$HOME/.npm-global" 2>/dev/null; \
-			fi; \
-			npm install -g pnpm 2>/dev/null || true; \
-			_pnpm_bin="$$(npm config get prefix)/bin/pnpm"; \
-			if [ -x "$$_pnpm_bin" ]; then \
-				_pnpm_ver=$$("$$_pnpm_bin" --version 2>&1) || true; \
-				printf "  $(GREEN)✅$(RESET) %-12s %s\n" "pnpm" "$$_pnpm_ver"; \
-				installed=1; \
-			else \
-				printf "  $(YELLOW)⚠️$(RESET) %-12s install failed (try: sudo npm install -g pnpm)\n" "pnpm"; \
-			fi; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s npm missing — install pnpm manually\n" "pnpm"; \
-		fi; \
-	else \
-		printf "  $(GREEN)✅$(RESET) %-12s already installed\n" "pnpm"; \
-	fi; \
-	\
-	## Ollama \
-	if ! $(CHECK_CMD) ollama >$(NULL_DEV) 2>&1; then \
-		if [ "$(UNAME_S)" = "Linux" ] || [ "$(UNAME_S)" = "Darwin" ]; then \
-			printf "  $(YELLOW)⏳$(RESET) Installing Ollama...\n"; \
-			curl -fsSL https://ollama.com/install.sh | sh 2>&1 | tail -3 || true; \
-			if $(CHECK_CMD) ollama >$(NULL_DEV) 2>&1; then \
-				printf "  $(GREEN)✅$(RESET) %-12s %s\n" "ollama" "$$(ollama --version 2>&1)"; \
-				installed=1; \
-			else \
-				printf "  $(YELLOW)⚠️$(RESET) %-12s install failed — see ollama.com\n" "ollama"; \
-			fi; \
-		else \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s install manually from ollama.com\n" "ollama"; \
-		fi; \
-	else \
-		printf "  $(GREEN)✅$(RESET) %-12s already installed\n" "ollama"; \
-	fi; \
-	\
-	## Git user config \
-	if $(CHECK_CMD) git >$(NULL_DEV) 2>&1; then \
-		name=$$(git config --global user.name 2>/dev/null || echo ""); \
-		email=$$(git config --global user.email 2>/dev/null || echo ""); \
-		if [ -z "$$name" ]; then \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s run: git config --global user.name \"Your Name\"\n" "user.name"; \
-		fi; \
-		if [ -z "$$email" ]; then \
-			printf "  $(YELLOW)⚠️$(RESET) %-12s run: git config --global user.email \"you@example.com\"\n" "user.email"; \
-		fi; \
-	fi; \
-	\
-	if [ "$$installed" -eq 0 ]; then \
-		printf "  $(GREEN)✅$(RESET) All tools already present — nothing to install\n"; \
-	fi
-
-.PHONY: _setup-ollama-model
-_setup-ollama-model:
-	@if $(CHECK_CMD) ollama >$(NULL_DEV) 2>&1; then \
-		if ollama list >$(NULL_DEV) 2>&1; then \
-			models=$$(ollama list 2>/dev/null | tail -n +2 | wc -l); \
-			if [ "$$models" -eq 0 ]; then \
-				$(call print_header,🤖 Auto-Setup — Pulling Recommended Ollama Model); \
-				if $(CHECK_CMD) nvidia-smi >$(NULL_DEV) 2>&1; then \
-					model="codellama:7b"; \
-				elif [ "$$(uname -m)" = "arm64" ] || [ "$$(uname -m)" = "aarch64" ]; then \
-					model="codellama:7b"; \
-				else \
-					model="phi3:3.8b"; \
-				fi; \
-				printf "  $(YELLOW)⏳$(RESET) Pulling %s (this may take a while)...\n" "$$model"; \
-				ollama pull "$$model" 2>&1 | tail -1; \
-				printf "  $(GREEN)✅$(RESET) Model %s ready\n" "$$model"; \
-			fi; \
-		fi; \
-	fi
-
-.PHONY: _setup-ai-config
-_setup-ai-config:
-	@$(call print_header,🔧 Auto-Setup — Generating AI Configuration)
-	@config_dir="tools/ai/configs"; \
-	config_file="$$config_dir/ai-config.toml"; \
-	mkdir -p "$$config_dir"; \
-	\
-	## Detect recommended model \
-	if $(CHECK_CMD) nvidia-smi >$(NULL_DEV) 2>&1; then \
-		recommended="codellama:7b"; \
-	elif [ "$$(uname -m)" = "arm64" ] || [ "$$(uname -m)" = "aarch64" ]; then \
-		recommended="codellama:7b"; \
-	else \
-		recommended="phi3:3.8b"; \
-	fi; \
-	\
-	## Check if Ollama has any models pulled \
-	if $(CHECK_CMD) ollama >$(NULL_DEV) 2>&1; then \
-		if ollama list >$(NULL_DEV) 2>&1; then \
-			avail=$$(ollama list 2>/dev/null | tail -n +2 | head -1 | awk '{print $$1}'); \
-			if [ -n "$$avail" ]; then \
-				recommended="$$avail"; \
-			fi; \
-		fi; \
-	fi; \
-	\
-	## Write config (only if changed or missing) \
-	if [ -f "$$config_file" ]; then \
-		current_model=$$(grep -E '^model\s*=' "$$config_file" | head -1 | sed 's/.*= *"\(.*\)"/\1/'); \
-	else \
-		current_model=""; \
-	fi; \
-	if [ "$$current_model" != "$$recommended" ]; then \
-		printf "  $(YELLOW)⏳$(RESET) Writing ai-config.toml (model: %s)...\n" "$$recommended"; \
-		{ \
-			echo 'provider_type = "Ollama"'; \
-			echo 'api_base = "http://localhost:11434/v1"'; \
-			echo 'api_key = ""'; \
-			echo "model = \"$$recommended\""; \
-			echo 'temperature = 0.7'; \
-			echo 'max_tokens = 4096'; \
-			echo 'cache_enabled = true'; \
-			echo 'auto_suggestions = true'; \
-			echo 'suggestion_interval = 3600'; \
-			echo ''; \
-			echo '[models]'; \
-			echo "code     = \"$$recommended\""; \
-			echo "security = \"$$recommended\""; \
-			echo "build    = \"$$recommended\""; \
-			echo "suggest  = \"$$recommended\""; \
-		} > "$$config_file"; \
-		printf "  $(GREEN)✅$(RESET) %-12s %s\n" "config" "$$recommended"; \
-	else \
-		printf "  $(GREEN)✅$(RESET) %-12s %s (unchanged)\n" "config" "$$recommended"; \
-	fi
-
-# ── Init Phase 2: Install Dependencies ──
-
-.PHONY: _init-install-deps
-_init-install-deps: ## [Phase 2] Install project dependencies
-	@$(call print_header,📦 Phase 2/4 — Installing Dependencies)
-	@$(call print_substep,Rust dependencies are managed by Cargo.)
-
-.PHONY: _init-build
-_init-build: build-rust build-ai-engine ## [Phase 3] Build workspace
-
-.PHONY: _init-validate
-_init-validate: ## [Phase 4] Validate workspace structure
-	@$(call print_header,📦 Phase 4/4 — Validating Workspace)
-	@tools/automation/scripts/validate-workspace.sh
-
-.PHONY: status
-status: ## Show workspace status
-	@$(call print_header,📊 Workspace Status)
-	@echo "  $(GREEN)✓$(RESET) Workspace root: $(WORKSPACE_ROOT)"
-	@echo "  $(GREEN)✓$(RESET) Languages enabled: $(LANGUAGES)"
-	@$(call print_step,Project Health:)
-	@tools/automation/scripts/validate-workspace.sh --quiet
-
-.PHONY: graph
-graph: ## Generate and display dependency graph
-	@$(call print_header,📊 Dependency Graph)
-	@tools/automation/scripts/generate-graph.sh
-
-.PHONY: info
-info: ## Show workspace information
-	@$(call print_header,📋 Workspace Information)
-	@echo "  Name: $(WORKSPACE_NAME)"
-	@echo "  Version: $(WORKSPACE_VERSION)"
-	@echo "  Root: $(WORKSPACE_ROOT)"
-	@echo "  Languages: $(LANGUAGES)"
-	@echo "  Make version: $(MAKE_VERSION)"
-	@echo "  Shell: $(SHELL)"
-
-# ============================================================================
-# Development Commands
-# ============================================================================
-
-.PHONY: dev desktop server dev-rust
-dev: desktop ## Run PolyGlid Desktop (default development command)
-
-desktop: ## Run the PolyGlid Dioxus desktop app
-	@$(call print_header,🚀 Starting PolyGlid Desktop)
-	@cargo run -p polyglid-desktop
-
-server: ## Run the optional PolyGlid backend API
-	@$(call print_header,🌐 Starting PolyGlid Server)
-	@cargo run -p polyglid-server
-
-# Compatibility alias for older automation.
+# Compatibility alias retained for callers that used the old server target.
 dev-rust: server
 
-# ============================================================================
-# Build Commands
-# ============================================================================
+desktop:
+	@$(OPS) desktop $(ARGS)
 
-.PHONY: build
-build: ## Build all projects
-	@$(call print_header,📦 Building All Projects)
-	@$(MAKE) build-rust
+server:
+	@$(OPS) server $(ARGS)
 
-.PHONY: build-rust
-build-rust:
-	@$(call print_substep,Building Rust workspace crates...)
-	@cargo build --release
+format:
+	@$(OPS) format $(ARGS)
 
-# ============================================================================
-# Test Commands
-# ============================================================================
+check:
+	@$(OPS) check $(ARGS)
 
-.PHONY: test
-test: ## Run all tests
-	@$(call print_header,🧪 Running All Tests)
-	@$(MAKE) test-rust
+validate:
+	@$(OPS) validate $(ARGS)
 
-.PHONY: test-rust
-test-rust:
-	@$(call print_substep,Testing Rust workspace...)
-	@cargo test --all
+build:
+	@$(OPS) build $(ARGS)
 
-# ============================================================================
-# Clean Commands
-# ============================================================================
+test:
+	@$(OPS) test $(ARGS)
 
-.PHONY: clean
-clean: ## Clean all build artifacts
-	@$(call print_header,🧹 Cleaning Workspace)
-	@$(MAKE) clean-rust
-	@$(call print_success,Clean completed!)
+clean:
+	@$(OPS) clean $(ARGS)
 
-.PHONY: clean-rust
-clean-rust:
-	@$(call print_substep,Cleaning Rust projects...)
-	@cargo clean
+detect:
+	@$(OPS) detect "$(BASE)" "$(HEAD)" $(ARGS)
 
-# ============================================================================
-# AI Commands
-# ============================================================================
+graph:
+	@$(OPS) graph $(ARGS)
 
-AI_BIN := tools/ai/rust/target/release/polyglid-ai
-ARGS ?=
-QUERY ?=
+site:
+	@$(OPS) site-build $(ARGS)
 
-.PHONY: build-ai-engine
-build-ai-engine: ## Build AI engine binary (release)
-	@$(call print_substep,Building AI engine (release)...)
-	@cargo build --release --manifest-path tools/ai/rust/Cargo.toml 2>&1 | tail -3 || \
-		printf "  $(YELLOW)⚠️$(RESET) AI engine build failed\n"
+mvp:
+	@$(OPS) mvp-smoke $(ARGS)
 
-.PHONY: ai-analyze
-ai-analyze: build-ai-engine ## Run AI workspace analysis
-	@$(call print_header,🤖 AI Workspace Analysis)
-	@if [ -f $(AI_BIN) ]; then \
-		$(AI_BIN) analyze $$(ARGS); \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) AI engine binary not found\n"; \
-	fi
-
-.PHONY: ai-suggest
-ai-suggest: build-ai-engine ## Get AI suggestions
-	@$(call print_header,💡 AI Suggestions)
-	@if [ -f $(AI_BIN) ]; then \
-		$(AI_BIN) suggest --limit 10 $(ARGS); \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) AI engine binary not found\n"; \
-	fi
-
-.PHONY: ai-security
-ai-security: build-ai-engine ## Run AI security scan
-	@$(call print_header,🔒 AI Security Scan)
-	@if [ -f $(AI_BIN) ]; then \
-		$(AI_BIN) security $(ARGS); \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) AI engine binary not found\n"; \
-	fi
-
-.PHONY: ai-status
-ai-status: build-ai-engine ## Show AI engine status
-	@$(call print_header,📊 AI Engine Status)
-	@if [ -f $(AI_BIN) ]; then \
-		$(AI_BIN) status $(ARGS); \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) AI engine binary not found\n"; \
-	fi
-
-.PHONY: ai-ingest
-ai-ingest: build-ai-engine ## Build code vector index
-	@$(call print_header,📥 Ingest Workspace Code)
-	@if [ -f $(AI_BIN) ]; then \
-		$(AI_BIN) ingest $(ARGS); \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) AI engine binary not found\n"; \
-	fi
-
-.PHONY: ai-search
-ai-search: build-ai-engine ## Search code index (usage: make ai-search QUERY="find auth logic")
-	@$(call print_header,🔍 Search Code Index)
-	@if [ -f $(AI_BIN) ]; then \
-		$(AI_BIN) search "$(QUERY)" $(ARGS); \
-	else \
-		printf "  $(YELLOW)⚠️$(RESET) AI engine binary not found\n"; \
-	fi
-
-.PHONY: ai-generate-mk
-ai-generate-mk: build-ai-engine ## Generate per-project Makefile templates
-	@$(call print_header,🔧 Generate Makefile Templates)
-	@$(AI_BIN) generate-mk
-
-.PHONY: ai-diagram
-ai-diagram: build-ai-engine ## Generate architecture diagrams -> docs/diagrams/
-	@$(call print_header,📐 Generate Diagrams)
-	@$(AI_BIN) diagram
-
-.PHONY: ai-release
-ai-release: build-ai-engine ## Generate release manifests -> releases/manifests/
-	@$(call print_header,📦 Generate Release Manifests)
-	@$(AI_BIN) release
-
-.PHONY: ai-init-configs
-ai-init-configs: build-ai-engine ## Generate .gitignore, .editorconfig, .vscode settings
-	@$(call print_header,⚙ Generate Configs)
-	@$(AI_BIN) init-configs
-
-.PHONY: ai-detect-changes
-ai-detect-changes: build-ai-engine ## Detect changed projects since main
-	@$(call print_header,🔍 Detect Changes)
-	@$(AI_BIN) detect-changes $(ARGS)
-
-# ============================================================================
-# Deploy Command (stub — real impl depends on Docker + K8s being ready)
-# ============================================================================
-
-.PHONY: deploy
-deploy: build _deploy-docker _deploy-k8s ## Build and deploy (stub)
-	@$(call print_success,Deploy complete!)
-
-.PHONY: _deploy-docker
-_deploy-docker:
-	@$(call print_substep,Building Docker images...)
-	@$(MAKE) docker-up
-
-.PHONY: _deploy-k8s
-_deploy-k8s:
-	@$(call print_substep,Deploying to Kubernetes...)
-	@$(MAKE) k8s-apply
-
-# ============================================================================
-# New Project Scaffolding
-# ============================================================================
-
-.PHONY: new-project
-new-project: ## Create a new project from template
-	@$(call print_header,📁 New Project)
-	@read -p "  Language (rust/node/python/go): " lang; \
-	read -p "  Project name: " name; \
-	template="tools/automation/templates/project.mk.template"; \
-	path="apps/$$name"; \
-	mkdir -p "$$path"; \
-	printf "  $(GREEN)✅$(RESET) Created $$path\n"; \
-	printf "  $(GREEN)💡$(RESET) Add '$$name = { path = \"$$path\", language = \"$$lang\", type = \"service\" }' to workspace.toml\n"
-
-# ============================================================================
-# Site — Download landing page generator
-# ============================================================================
-
-.PHONY: site
-site: ## Generate the PolyGlid download landing page
-	@$(call print_header,🌐 Generate Site)
-	cargo run -p polyglid-site
-
-# ============================================================================
-# WPM — Workspace Project Manager
-# ============================================================================
-
-SITE_DIR := site
-WPM_DIR := apps/desktop
-WPM_INFRA := infrastructure/wpm
-WPM_CONFIG := configs/wpm
-
-.PHONY: init-wpm
-init-wpm: ## Verify the existing PolyGlid desktop project
-	@$(call print_header,🏗️ Verifying PolyGlid Desktop)
-	@test -f $(WPM_DIR)/Cargo.toml
-	@printf "  $(GREEN)✅$(RESET) PolyGlid Desktop found at $(WPM_DIR)\n"
-
-.PHONY: desktop-build wpm-build
-desktop-build: ## Build the PolyGlid desktop app
-	@$(call print_header,🔨 Building WPM)
-	@cargo build --release -p polyglid-desktop
-
-wpm-build: desktop-build ## Compatibility alias for desktop-build
-
-.PHONY: wpm-run
-wpm-run: desktop ## Compatibility alias for desktop
-
-.PHONY: wpm-db-setup
-wpm-db-setup: ## Create and migrate WPM database
-	@$(call print_header,🗄️ Setting up WPM database)
-	@echo "  Run the init.sql script against your PostgreSQL instance:"
-	@echo "    createdb wpm"
-	@echo "    psql -d wpm < infrastructure/wpm/init.sql"
-
-.PHONY: desktop-test wpm-test
-desktop-test: ## Test the PolyGlid desktop app
-	@$(call print_header,🧪 Testing WPM)
-	@cargo test -p polyglid-desktop
-
-wpm-test: desktop-test ## Compatibility alias for desktop-test
-
-.PHONY: wpm-docker-up
-wpm-docker-up: ## Start WPM stack via Docker Compose
-	@$(call print_header,🐳 Starting WPM Docker stack)
-	@docker compose -f $(WPM_INFRA)/docker-compose.yml up -d
-
-.PHONY: wpm-docker-down
-wpm-docker-down: ## Stop WPM Docker stack
-	@$(call print_header,🛑 Stopping WPM Docker stack)
-	@docker compose -f $(WPM_INFRA)/docker-compose.yml down
-
-.PHONY: wpm-plan
-wpm-plan: ## Show WPM design plan
-	@cat tools/ai/planning/wpm-design.md
+repo-sync:
+	@$(OPS) repo-sync $(ARGS)

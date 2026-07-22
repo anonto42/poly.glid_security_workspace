@@ -11,13 +11,11 @@ polyglid/
 ├── contracts/            # Language-neutral WIT contracts
 ├── plugins/              # First-party sandboxed WASM plugins
 ├── site/                 # Public static website generator
-├── sdk/                  # Plugin templates and language SDKs
-├── tools/                # Internal AI and workspace automation
+├── sdk/                  # Rust plugin templates/examples; future language placeholders
+├── tools/                # Experimental AI and compatibility automation
 ├── scripts/ops/          # Stable operations CLI
-├── infrastructure/       # Deployment and external services
-├── tests/                # Workspace-level tests
-├── extensions/           # IDE and browser integrations
-├── releases/             # Release and packaging definitions
+├── infrastructure/       # Legacy WPM SQL; no active deployment stack
+├── tests/                # Reserved workspace-level test area
 └── docs/                 # Architecture and operating knowledge
 ```
 
@@ -79,8 +77,8 @@ flowchart TD
     Detect -->|sdk| SDK[Validate plugin SDK]
     Detect -->|tools/ai| AI[Build AI engine]
     Detect -->|docs| Docs[Validate documentation]
-    Detect -->|workflows or scripts| Ops[Validate operations scripts]
-    Detect -->|infrastructure| Infra[Validate infrastructure layout]
+    Detect -->|workflows or operations tooling| Ops[Validate operations command surface]
+    Detect -->|infrastructure| Infra[Validate required infrastructure file]
 
     Detect -->|site| SiteBuild[Generate static website]
     Detect -->|full run or product change| Smoke[Real CLI and WASM smoke test]
@@ -135,7 +133,7 @@ flowchart LR
     MacIntel --> Draft
     MacArm --> Draft
     Draft --> Publish[Verify assets and publish]
-    Publish --> Website[Verify latest website download links]
+    Publish --> Website[Verify latest release and expected assets]
 ```
 
 ## Generated State

@@ -54,7 +54,7 @@ flowchart TD
     Preflight --> Plugin[Build and inspect Recon component]
     Plugin --> Matrix[Linux, Windows, macOS Intel and Apple builds]
     Matrix --> Publish[Draft, upload, verify, and publish GitHub Release]
-    Publish --> VerifyLatest[Verify latest-release website assets]
+    Publish --> VerifyLatest[Verify latest release and expected assets]
 
     Preview --> Delivery
     PagesDeploy --> Delivery
@@ -80,7 +80,7 @@ top-level GitHub graph.
 | `sdk/**` | SDK | Template, Hello World, and Recon examples compile for `wasm32-wasip1` from the locked SDK workspace | Feeds `CI result` |
 | `tools/ai/**` | AI | The separately locked AI engine builds in release mode | Feeds `CI result` |
 | `docs/**` or root documentation | Docs | Required project and delivery documents exist and are non-empty | Feeds `CI result` |
-| `.github/**` or `scripts/**` | Operations | Node and shell syntax, detector regression cases, and all Actions YAML pass | Workflow-definition changes force a full run and can verify Pages deployment from `main` |
+| `.github/**`, `scripts/**`, `tools/automation/**`, `Makefile`, or `package.json` | Operations | Canonical command routing, Node and shell syntax, Cargo-workspace inventory, dependency-graph generation, detector regressions, and all Actions YAML pass | Workflow-definition changes force a full run and can verify Pages deployment from `main` |
 | `infrastructure/**` | Infrastructure | The current required WPM SQL file exists and is non-empty | Feeds `CI result` |
 | `site/**` or root Cargo version | Website build | The static site generator succeeds | May deploy Pages after `CI result` |
 | `repinfo.json` | Metadata | The requested repository metadata is applied with the configured token | Runs only on `main` after `CI result` |
@@ -205,8 +205,8 @@ Do not tag an unpushed local commit. Release preflight checks:
 
 The release remains a draft while assets upload. The job verifies all expected
 asset names before publishing, and a rerun can safely complete an existing
-draft. The final website verification confirms that `releases/latest` points
-to this tag and contains every download used by the public site.
+draft. The final release verification confirms that `releases/latest` points
+to this tag and that the published release contains the expected asset names.
 
 ## Website And Metadata
 

@@ -165,7 +165,9 @@ The AI doesn't learn from your usage. Every session is cold.
 ## Phase 4 — Autonomy (Workspace Agent)
 
 ### Problem
-You still run `make ai-analyze` manually. The AI never acts proactively.
+You still run
+`cargo run --release --manifest-path tools/ai/rust/Cargo.toml -- analyze`
+manually. The AI never acts proactively.
 
 ### Solution — Background agent with scheduling
 

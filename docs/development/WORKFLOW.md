@@ -20,9 +20,29 @@ For the full phased build plan, see
 6. Add core/runtime tests.
 7. Connect the use case to the Dioxus UI through `ClientGateway`.
 
-## Early Commands
+## Canonical Repository Commands
 
-Current commands:
+The operations CLI coordinates the root product workspace, the Rust SDK
+workspace, and the experimental AI workspace without pretending they are one
+Cargo workspace. Make and npm are thin aliases over this same command surface:
+
+```bash
+npm run doctor
+npm run format
+npm run check
+npm run validate
+npm run build
+npm run test
+npm run graph
+```
+
+Use `make doctor`, `make validate`, and the other matching Make aliases when
+Make is more convenient. Task behavior belongs in
+`scripts/ops/polyglid-ops.mjs`, not in either wrapper.
+
+## Focused Runtime Commands
+
+Use these lower-level commands when working on the host/component boundary:
 
 ```bash
 scripts/run-mvp.sh

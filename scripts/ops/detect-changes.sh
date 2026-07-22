@@ -42,13 +42,15 @@ while IFS= read -r f; do
     infrastructure/*)       infra=true ;;
     .github/*)              workflows=true; full=true ;;
     tools/ai/*)             ai_engine=true ;;
+    tools/automation/*)     scripts=true ;;
     sdk/*)                  sdk=true ;;
     scripts/ops/detect-changes.sh) scripts=true; full=true ;;
     scripts/*)              scripts=true ;;
     repinfo.json)           repinfo=true ;;
     README.md | ARCHITECTURE.md | SUMMARY.md)
       docs=true ;;
-    Makefile | package.json | .gitignore | .gitattributes | .editorconfig)
+    Makefile | package.json) scripts=true ;;
+    .gitignore | .gitattributes | .editorconfig)
       root=true ;;
     *)                       unknown=true ;;
   esac
