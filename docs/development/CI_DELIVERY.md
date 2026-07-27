@@ -126,8 +126,8 @@ cargo test --locked -p polyglid-core \
 | Event | Validation scope | Delivery outcome |
 | --- | --- | --- |
 | Pull request to `main` | Changed areas; unknown/workflow changes force all | Validation only; no artifact, metadata write, deployment, or release |
-| Push to `main` | Changed areas; unknown/workflow changes force all | Applicable four-platform release candidates, Pages, or metadata work, followed by cache maintenance |
-| Manual **Run workflow** on `main` | Every validation branch | Four-platform release candidates, Pages deployment, and cache maintenance; never a formal release |
+| Push to `main` | Changed areas; unknown/workflow changes force all | Product/version changes create four-platform candidates when the public key is configured; applicable Pages or metadata work and cache maintenance still run |
+| Manual **Run workflow** on `main` | Every validation branch | Four-platform candidates when the public key is configured, Pages deployment, and cache maintenance; never a formal release |
 | Manual **Run workflow** on another branch | Every validation branch | Validation only; no candidates, Pages deployment, cache deletion, or formal release |
 | Newly created tag such as `v0.10.1` | Exact-commit candidate promotion | Signed Recon component, checksums, GitHub Release, and latest-link verification without recompiling |
 | Deleted or force-moved version tag | No release publication | The release condition rejects it |
@@ -173,8 +173,8 @@ the job as skipped.
 
 ## Release Candidates
 
-A successful product/full-validation push to `main`, or a manual run on
-`main`, creates these Actions artifacts:
+A successful product/version push to `main`, or a manual run on `main`, creates
+these Actions artifacts when `RECON_SIGNING_PUBLIC_KEY` is configured:
 
 ```text
 release-candidate-linux-x86_64
@@ -189,6 +189,13 @@ and both license files. They deliberately have no `plugins/` directory. The
 Recon candidate contains an unsigned component, manifest, and provenance
 record binding the version, commit SHA, and embedded public key. Candidates
 expire after 14 days and are not GitHub Releases.
+
+Documentation, workflow, and operations-only changes do not rebuild the four
+platform packages, even when change detection requests a full validation run.
+If the public key variable is absent, candidate packaging is skipped rather
+than launching four runners that are guaranteed to fail. Formal release
+promotion remains unavailable until the matching public variable and private
+secret are configured.
 
 ## Formal Version Releases
 
