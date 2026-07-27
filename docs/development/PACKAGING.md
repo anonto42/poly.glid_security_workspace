@@ -16,7 +16,10 @@ polyglid-macos-x86_64
 polyglid-windows-x86_64.exe
 ```
 
-The Dioxus desktop app is currently distributed beside the CLI in a native archive. Platform installers and code signing are a later release-hardening stage.
+The Dioxus desktop app is currently distributed beside the CLI in a native
+archive. The bundled Recon component has a required detached Ed25519 signature.
+Platform-native application signing, notarization, and installers remain later
+release-hardening stages.
 
 ## What Goes Into One CLI Binary
 
@@ -199,6 +202,8 @@ polyglid-windows-x86_64.zip
 polyglid-macos-x86_64.tar.gz
 polyglid-macos-aarch64.tar.gz
 recon-probe.component.wasm
+recon-probe.component.sig
+recon-probe.component.polyglid.toml
 SHA256SUMS
 ```
 
@@ -206,6 +211,24 @@ Before tagging, the value under `[workspace.package]` in `Cargo.toml` and the
 version in `plugins/recon-probe/polyglid.toml` must match the tag without its
 `v` prefix. The tagged commit must already be contained in `main`; the workflow
 rejects mismatched or unmerged versions.
+
+Formal releases additionally require:
+
+- Actions secret `RECON_SIGNING_PRIVATE_SEED`, containing the official
+  32-byte Ed25519 seed as 64 hexadecimal characters; and
+- repository variable `RECON_SIGNING_PUBLIC_KEY`, containing the matching
+  32-byte public key as 64 hexadecimal characters.
+
+The release workflow signs the exact component, compares the generated key ID
+with the configured public key, runs cryptographic verification, and packages
+the adjacent signature and exact-scope manifest on every platform. It also
+executes the unpacked CLI, checks all component sidecars, and rejects unresolved
+Linux shared libraries before publication.
+
+The same public key is embedded into each release desktop binary at compile
+time. On first startup the client enrolls that exact official publisher in the
+local trust store; it refuses to replace an existing official identity that has
+a different key.
 
 ## Design Rule
 

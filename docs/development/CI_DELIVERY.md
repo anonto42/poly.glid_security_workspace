@@ -52,8 +52,10 @@ flowchart TD
     PagesBuild --> PagesDeploy[Deploy from main]
     Release --> Preflight[Validate tag, versions, and main ancestry]
     Preflight --> Plugin[Build and inspect Recon component]
-    Plugin --> Matrix[Linux, Windows, macOS Intel and Apple builds]
-    Matrix --> Publish[Draft, upload, verify, and publish GitHub Release]
+    Plugin --> Sign[Sign and verify Recon component]
+    Sign --> Matrix[Linux, Windows, macOS Intel and Apple builds]
+    Matrix --> PackageSmoke[Smoke-test unpacked packages]
+    PackageSmoke --> Publish[Draft, upload, verify, and publish GitHub Release]
     Publish --> VerifyLatest[Verify latest release and expected assets]
 
     Preview --> Delivery
@@ -203,6 +205,11 @@ Do not tag an unpushed local commit. Release preflight checks:
 4. The checked-out tag resolves to the commit being validated.
 5. The tagged commit is contained in `origin/main`.
 
+The release requires the `RECON_SIGNING_PRIVATE_SEED` Actions secret and the
+matching `RECON_SIGNING_PUBLIC_KEY` repository variable. It signs and verifies
+the exact Recon component, packages its adjacent detached signature, and
+smoke-checks unpacked package contents before any upload.
+
 The release remains a draft while assets upload. The job verifies all expected
 asset names before publishing, and a rerun can safely complete an existing
 draft. The final release verification confirms that `releases/latest` points
@@ -241,10 +248,18 @@ user with direct push access can bypass it.
 
 ## Current Release Boundary
 
-The smoke test proves the happy-path CLI → component → report flow. It does not
-prove capability denial, publisher trust, or signature enforcement. Current
-release files are raw unsigned archives and an unsigned component; there is no
-Windows/macOS code signing, installer, macOS notarization, SBOM/provenance
-attestation, or packaged-binary launch test yet. The Rust `stable` toolchain
-and major-version Action references are also mutable, so builds are not
-bit-for-bit reproducible. These are post-MVP release-hardening tasks.
+The runtime tests now cover denied host imports and exact scoped grants, and
+formal releases enforce a cryptographically verified detached signature for the
+bundled component. Package jobs execute the unpacked CLI, require the bundled
+component, signature, and exact-scope manifest, and reject unresolved Linux
+desktop libraries.
+
+Release builds compile the configured official public key into the desktop
+client. First startup enrolls only that pinned publisher and refuses a database
+record with the same official identity but a different key, so Balanced policy
+can verify the signed bundled component without a Development-policy fallback.
+
+There is still no Windows/macOS platform code signing, installer, macOS
+notarization, SBOM/provenance attestation, or automated headless desktop journey
+on a pristine VM. The Rust `stable` toolchain and major-version Action
+references remain mutable, so builds are not bit-for-bit reproducible.

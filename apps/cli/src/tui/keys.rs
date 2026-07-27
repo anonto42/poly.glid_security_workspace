@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use polyglid_core::execution::ExecutionConfig;
 use polyglid_core::PluginRuntime;
-use polyglid_plugin_api::Capability;
+use polyglid_plugin_api::{Capability, CapabilityRequest};
 use polyglid_runtime::WasmRuntime;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
@@ -246,7 +246,14 @@ fn run_scan(app: &mut App, plugin_path: &str, target_domain: &str, allowed_caps:
         fuel_limit: 25_000_000,
         timeout: Duration::from_secs(30),
         memory_limit: None,
-        allowed_capabilities: allowed_caps,
+        allowed_capabilities: allowed_caps
+            .into_iter()
+            .map(CapabilityRequest::unscoped)
+            .collect(),
+        project_id: None,
+        approval_ids: Vec::new(),
+        plugin_version: String::new(),
+        plugin_checksum: String::new(),
     };
 
     let job_id = app

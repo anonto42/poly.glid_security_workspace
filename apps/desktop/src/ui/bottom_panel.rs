@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::{LocalClient, Report};
+use polyglid_desktop::client::Report;
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::commands::{execute, ShellCommand};
 use super::components::BottomTabButton;
@@ -9,7 +10,7 @@ use super::state::AppState;
 #[component]
 pub(crate) fn BottomPanel() -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let selected = selected_report(state);
     let issue_count = selected.as_ref().map_or(0, |report| report.issues.len());
     rsx! {

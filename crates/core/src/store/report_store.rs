@@ -8,10 +8,19 @@ pub struct DbReportRecord {
     pub id: String,
     pub job_id: Uuid,
     pub plugin_id: String,
+    pub plugin_name: String,
+    pub project_id: Option<String>,
+    pub plugin_version: String,
+    pub plugin_checksum: String,
     pub target: String,
     pub summary: String,
     pub issues: Vec<Issue>,
     pub filepath: String,
+    pub duration_ms: u64,
+    pub fuel_consumed: Option<u64>,
+    pub memory_used: Option<u64>,
+    pub security_profile: String,
+    pub report_format_version: String,
     pub created_at: u64,
 }
 
@@ -24,6 +33,8 @@ impl ReportStore {
         Self { conn }
     }
 
+    /// Persist a report and the complete execution metadata required for export.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert(
         &self,
         report_id: &str,
@@ -32,6 +43,13 @@ impl ReportStore {
         target: &str,
         report: &PluginReport,
         filepath: &str,
+        project_id: Option<&str>,
+        plugin_version: &str,
+        plugin_checksum: &str,
+        duration_ms: u64,
+        fuel_consumed: Option<u64>,
+        memory_used: Option<u64>,
+        security_profile: &str,
     ) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         let issues_json = serde_json::to_string(&report.issues)
@@ -42,17 +60,28 @@ impl ReportStore {
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT OR REPLACE INTO reports (id, job_id, plugin_id, target, summary, issues, filepath, created_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT OR REPLACE INTO reports (
+                id, job_id, plugin_id, plugin_name, target, summary, issues, filepath, created_at,
+                project_id, plugin_version, plugin_checksum, duration_ms, fuel_consumed,
+                memory_used, security_profile, report_format_version
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, '1.0')",
             params![
                 report_id,
                 job_id.to_string(),
                 plugin_id.as_str(),
+                report.plugin_name,
                 target,
                 report.summary,
                 issues_json,
                 filepath,
-                now
+                now,
+                project_id,
+                plugin_version,
+                plugin_checksum,
+                duration_ms as i64,
+                fuel_consumed.map(|value| value as i64),
+                memory_used.map(|value| value as i64),
+                security_profile,
             ],
         )
         .map_err(|err| format!("failed to insert report reference: {err}"))?;
@@ -64,7 +93,9 @@ impl ReportStore {
         let conn = self.conn.lock().unwrap();
         let row = conn
             .query_row(
-                "SELECT id, job_id, plugin_id, target, summary, issues, filepath, created_at
+                "SELECT id, job_id, plugin_id, plugin_name, target, summary, issues, filepath, created_at,
+                        project_id, plugin_version, plugin_checksum, duration_ms, fuel_consumed,
+                        memory_used, security_profile, report_format_version
              FROM reports WHERE id = ?",
                 [id],
                 |row| {
@@ -76,7 +107,16 @@ impl ReportStore {
                         row.get::<_, String>(4)?,
                         row.get::<_, String>(5)?,
                         row.get::<_, String>(6)?,
-                        row.get::<_, i64>(7)?,
+                        row.get::<_, String>(7)?,
+                        row.get::<_, i64>(8)?,
+                        row.get::<_, Option<String>>(9)?,
+                        row.get::<_, String>(10)?,
+                        row.get::<_, String>(11)?,
+                        row.get::<_, i64>(12)?,
+                        row.get::<_, Option<i64>>(13)?,
+                        row.get::<_, Option<i64>>(14)?,
+                        row.get::<_, String>(15)?,
+                        row.get::<_, String>(16)?,
                     ))
                 },
             )
@@ -88,11 +128,20 @@ impl ReportStore {
                 id,
                 job_id_str,
                 plugin_id_str,
+                plugin_name,
                 target,
                 summary,
                 issues_json,
                 filepath,
                 created_at,
+                project_id,
+                plugin_version,
+                plugin_checksum,
+                duration_ms,
+                fuel_consumed,
+                memory_used,
+                security_profile,
+                report_format_version,
             )) => {
                 let job_id = Uuid::parse_str(&job_id_str)
                     .map_err(|err| format!("invalid job UUID in DB: {err}"))?;
@@ -103,10 +152,19 @@ impl ReportStore {
                     id,
                     job_id,
                     plugin_id: plugin_id_str,
+                    plugin_name,
+                    project_id,
+                    plugin_version,
+                    plugin_checksum,
                     target,
                     summary,
                     issues,
                     filepath,
+                    duration_ms: duration_ms.max(0) as u64,
+                    fuel_consumed: fuel_consumed.map(|value| value.max(0) as u64),
+                    memory_used: memory_used.map(|value| value.max(0) as u64),
+                    security_profile,
+                    report_format_version,
                     created_at: created_at as u64,
                 }))
             }
@@ -117,7 +175,12 @@ impl ReportStore {
     pub fn list(&self) -> Result<Vec<DbReportRecord>, String> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT id, job_id, plugin_id, target, summary, issues, filepath, created_at FROM reports ORDER BY created_at DESC")
+            .prepare(
+                "SELECT id, job_id, plugin_id, plugin_name, target, summary, issues, filepath, created_at,
+                        project_id, plugin_version, plugin_checksum, duration_ms, fuel_consumed,
+                        memory_used, security_profile, report_format_version
+                 FROM reports ORDER BY created_at DESC",
+            )
             .map_err(|err| format!("failed to prepare statement: {err}"))?;
 
         let rows = stmt
@@ -130,15 +193,41 @@ impl ReportStore {
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
                     row.get::<_, String>(6)?,
-                    row.get::<_, i64>(7)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, i64>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, String>(10)?,
+                    row.get::<_, String>(11)?,
+                    row.get::<_, i64>(12)?,
+                    row.get::<_, Option<i64>>(13)?,
+                    row.get::<_, Option<i64>>(14)?,
+                    row.get::<_, String>(15)?,
+                    row.get::<_, String>(16)?,
                 ))
             })
             .map_err(|err| format!("failed to query reports: {err}"))?;
 
         let mut list = Vec::new();
         for r in rows {
-            let (id, job_id_str, plugin_id_str, target, summary, issues_json, filepath, created_at) =
-                r.map_err(|err| format!("failed to read row: {err}"))?;
+            let (
+                id,
+                job_id_str,
+                plugin_id_str,
+                plugin_name,
+                target,
+                summary,
+                issues_json,
+                filepath,
+                created_at,
+                project_id,
+                plugin_version,
+                plugin_checksum,
+                duration_ms,
+                fuel_consumed,
+                memory_used,
+                security_profile,
+                report_format_version,
+            ) = r.map_err(|err| format!("failed to read row: {err}"))?;
             let job_id = Uuid::parse_str(&job_id_str)
                 .map_err(|err| format!("invalid job UUID in DB: {err}"))?;
             let issues: Vec<Issue> = serde_json::from_str(&issues_json)
@@ -148,10 +237,19 @@ impl ReportStore {
                 id,
                 job_id,
                 plugin_id: plugin_id_str,
+                plugin_name,
+                project_id,
+                plugin_version,
+                plugin_checksum,
                 target,
                 summary,
                 issues,
                 filepath,
+                duration_ms: duration_ms.max(0) as u64,
+                fuel_consumed: fuel_consumed.map(|value| value.max(0) as u64),
+                memory_used: memory_used.map(|value| value.max(0) as u64),
+                security_profile,
+                report_format_version,
                 created_at: created_at as u64,
             });
         }

@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use polyglid_config::plugin_registry::{
     PluginRegistryEntry, PluginSource as CorePluginSource, PluginStatus as CorePluginStatus,
@@ -14,8 +14,12 @@ use polyglid_core::execution::{
 };
 use polyglid_core::plugin_manager::PluginManager;
 use polyglid_core::services::WorkspaceCatalogService;
+use polyglid_core::store::permission_store::{
+    ApprovalBinding as CoreApprovalBinding, ApprovalDuration as CoreApprovalDuration,
+    DbPermissionRecord,
+};
 use polyglid_core::store::{DbProject, DbWorkspace, WorkspaceStore};
-use polyglid_core::Target as CoreTarget;
+use polyglid_core::{PermissionDecision as CorePermissionDecision, Target as CoreTarget};
 use polyglid_plugin_api::{
     ApiPluginMetadata, Capability as CoreCapability, CapabilityRequest as CoreCapabilityRequest,
     CapabilityScope as CoreCapabilityScope, Issue as CoreIssue, PluginId, PluginManifest,
@@ -24,25 +28,29 @@ use polyglid_plugin_api::{
 use polyglid_runtime::WasmRuntime;
 
 use super::{
-    BootstrapSnapshot, CapabilityKind, CapabilityRequest, CapabilityScope, ClientError,
-    ClientGateway, ClientResult, Execution, ExecutionEvent, ExecutionMetrics, ExecutionReport,
-    ExecutionState, ExecutionSubscription, Issue, JobId, Plugin, PluginInspection, PluginSource,
-    PluginStatus, Project, Report, ReportFormat, SavedTarget, Severity, ShellPreferences,
-    StartExecutionRequest, Workspace,
+    Approval, ApprovalDecision, ApprovalDuration, BootstrapSnapshot, CapabilityKind,
+    CapabilityRequest, CapabilityScope, ClientError, ClientGateway, ClientResult, Execution,
+    ExecutionEvent, ExecutionMetrics, ExecutionPreferences, ExecutionReport, ExecutionState,
+    ExecutionSubscription, Issue, JobId, PermissionDecisionRequest, Plugin, PluginInspection,
+    PluginSource, PluginStatus, Project, Report, ReportFormat, SavedTarget, Severity,
+    ShellPreferences, StartExecutionRequest, Workspace,
 };
 
 #[derive(Clone)]
 pub struct LocalClient {
-    inner: Arc<LocalClientInner>,
+    host: Arc<ApplicationHost>,
 }
 
-struct LocalClientInner {
+/// One long-lived local application service graph shared by every desktop
+/// feature. Views never construct databases, registries, runtimes, or managers.
+struct ApplicationHost {
     catalog: WorkspaceCatalogService,
     plugins: Arc<PluginManager<WasmRuntime>>,
     executions: Arc<ExecutionManager<WasmRuntime>>,
     store: WorkspaceStore,
     default_workspace_root: PathBuf,
     data_directory: PathBuf,
+    session_id: String,
 }
 
 impl LocalClient {
@@ -80,6 +88,7 @@ impl LocalClient {
             .map_err(|error| ClientError::operation("open workspace catalog", error))?;
         let store = WorkspaceStore::new(&database_path)
             .map_err(|error| ClientError::operation("open desktop database", error))?;
+        enroll_official_publisher(&store, option_env!("POLYGLID_OFFICIAL_PUBLISHER_KEY"))?;
         let plugins = Arc::new(
             PluginManager::new(Arc::new(WasmRuntime::new()), &config, store.clone())
                 .map_err(|error| ClientError::operation("open plugin manager", error))?,
@@ -94,34 +103,35 @@ impl LocalClient {
         ));
 
         Ok(Self {
-            inner: Arc::new(LocalClientInner {
+            host: Arc::new(ApplicationHost {
                 catalog,
                 plugins,
                 executions,
                 store,
                 default_workspace_root,
                 data_directory,
+                session_id: uuid::Uuid::now_v7().to_string(),
             }),
         })
     }
 
     pub fn data_directory(&self) -> &Path {
-        &self.inner.data_directory
+        &self.host.data_directory
     }
 
     fn load_active_catalog(&self) -> ClientResult<(Vec<Workspace>, Workspace, Vec<Project>)> {
         let mut workspaces = self
-            .inner
+            .host
             .catalog
             .list_workspaces()
             .map_err(|error| ClientError::operation("list workspaces", error))?;
         if workspaces.is_empty() {
-            self.inner
+            self.host
                 .catalog
-                .register_workspace("PolyGlid Projects", &self.inner.default_workspace_root)
+                .register_workspace("PolyGlid Projects", &self.host.default_workspace_root)
                 .map_err(|error| ClientError::operation("create default workspace", error))?;
             workspaces = self
-                .inner
+                .host
                 .catalog
                 .list_workspaces()
                 .map_err(|error| ClientError::operation("reload workspaces", error))?;
@@ -133,7 +143,7 @@ impl LocalClient {
             let first = workspaces
                 .first()
                 .ok_or_else(|| ClientError::Unavailable("no workspace is available".to_string()))?;
-            self.inner
+            self.host
                 .catalog
                 .activate(&first.id)
                 .map_err(|error| ClientError::operation("activate default workspace", error))?;
@@ -141,12 +151,12 @@ impl LocalClient {
         };
 
         let projects = self
-            .inner
+            .host
             .catalog
             .discover(&active_id)
             .map_err(|error| ClientError::operation("discover projects", error))?;
         let workspaces = self
-            .inner
+            .host
             .catalog
             .list_workspaces()
             .map_err(|error| ClientError::operation("reload active workspace", error))?;
@@ -166,7 +176,7 @@ impl LocalClient {
     }
 
     fn load_shell_preferences(&self) -> ClientResult<ShellPreferences> {
-        let settings = self.inner.store.settings();
+        let settings = self.host.store.settings();
         let defaults = ShellPreferences::default();
         Ok(ShellPreferences {
             sidebar_visible: setting_bool(
@@ -189,6 +199,31 @@ impl LocalClient {
                 120.0,
                 520.0,
             )?,
+        })
+    }
+
+    fn load_execution_preferences(&self) -> ClientResult<ExecutionPreferences> {
+        let settings = self.host.store.settings();
+        let defaults = ExecutionPreferences::default();
+        Ok(ExecutionPreferences {
+            fuel_limit: setting_u64(
+                settings.get("execution.fuel_limit"),
+                defaults.fuel_limit,
+                1,
+                1_000_000_000,
+            )?,
+            timeout_seconds: setting_u64(
+                settings.get("execution.timeout_seconds"),
+                defaults.timeout_seconds,
+                1,
+                300,
+            )?,
+            memory_limit_bytes: Some(setting_u64(
+                settings.get("execution.memory_limit_bytes"),
+                defaults.memory_limit_bytes.unwrap_or(64 * 1024 * 1024),
+                1024 * 1024,
+                1024 * 1024 * 1024,
+            )?),
         })
     }
 
@@ -215,11 +250,12 @@ impl ClientGateway for LocalClient {
             executions: self.list_executions()?,
             reports: self.list_reports()?,
             shell: self.load_shell_preferences()?,
+            execution: self.load_execution_preferences()?,
         })
     }
 
     fn list_workspaces(&self) -> ClientResult<Vec<Workspace>> {
-        self.inner
+        self.host
             .catalog
             .list_workspaces()
             .map(|items| items.into_iter().map(workspace_from_db).collect())
@@ -227,7 +263,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn register_workspace(&self, name: &str, root_path: &str) -> ClientResult<Workspace> {
-        self.inner
+        self.host
             .catalog
             .register_workspace(name, Path::new(root_path))
             .map(workspace_from_db)
@@ -235,14 +271,14 @@ impl ClientGateway for LocalClient {
     }
 
     fn activate_workspace(&self, workspace_id: &str) -> ClientResult<()> {
-        self.inner
+        self.host
             .catalog
             .activate(workspace_id)
             .map_err(|error| ClientError::operation("activate workspace", error))
     }
 
     fn refresh_workspace(&self, workspace_id: &str) -> ClientResult<Vec<Project>> {
-        self.inner
+        self.host
             .catalog
             .discover(workspace_id)
             .map(|items| items.into_iter().map(project_from_db).collect())
@@ -250,7 +286,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn list_projects(&self, workspace_id: &str) -> ClientResult<Vec<Project>> {
-        self.inner
+        self.host
             .catalog
             .list_projects(workspace_id)
             .map(|items| items.into_iter().map(project_from_db).collect())
@@ -258,7 +294,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn create_project(&self, workspace_id: &str, name: &str) -> ClientResult<Project> {
-        self.inner
+        self.host
             .catalog
             .create_project(workspace_id, name)
             .map(project_from_db)
@@ -266,7 +302,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn rename_project(&self, project_id: &str, name: &str) -> ClientResult<Project> {
-        self.inner
+        self.host
             .catalog
             .rename_project(project_id, name)
             .map(project_from_db)
@@ -274,7 +310,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn remove_project(&self, project_id: &str, delete_files: bool) -> ClientResult<()> {
-        self.inner
+        self.host
             .catalog
             .remove_project(project_id, delete_files)
             .map_err(|error| ClientError::operation("remove project", error))
@@ -282,13 +318,20 @@ impl ClientGateway for LocalClient {
 
     fn list_plugins(&self) -> ClientResult<Vec<Plugin>> {
         Ok(self
-            .inner
+            .host
             .plugins
             .get_plugins()
             .into_iter()
             .map(|entry| {
+                let signature = self
+                    .host
+                    .store
+                    .signatures()
+                    .get(entry.id.as_str())
+                    .ok()
+                    .flatten();
                 let requests = self
-                    .inner
+                    .host
                     .plugins
                     .validate_plugin(&entry.path)
                     .ok()
@@ -299,23 +342,29 @@ impl ClientGateway for LocalClient {
                             .map(capability_request_from_core)
                             .collect()
                     });
-                plugin_from_registry(entry, requests)
+                plugin_from_registry(entry, requests, signature)
             })
             .collect())
     }
 
     fn inspect_plugin(&self, path: &str) -> ClientResult<PluginInspection> {
-        let (manifest, metadata) = self
-            .inner
+        let (manifest, metadata, checksum, signature_status, publisher_fingerprint) = self
+            .host
             .plugins
-            .validate_plugin(Path::new(path))
+            .inspect_plugin_package(Path::new(path))
             .map_err(|error| ClientError::operation("inspect plugin", error))?;
-        Ok(plugin_inspection(manifest, metadata))
+        Ok(plugin_inspection(
+            manifest,
+            metadata,
+            checksum,
+            signature_status.to_string(),
+            publisher_fingerprint,
+        ))
     }
 
     fn install_plugin(&self, path: &str) -> ClientResult<Plugin> {
         let entry = self
-            .inner
+            .host
             .plugins
             .install_plugin(
                 Path::new(path),
@@ -323,7 +372,7 @@ impl ClientGateway for LocalClient {
             )
             .map_err(|error| ClientError::operation("install plugin", error))?;
         let requests = self
-            .inner
+            .host
             .plugins
             .validate_plugin(&entry.path)
             .map_err(|error| ClientError::operation("reload installed plugin", error))?
@@ -332,12 +381,18 @@ impl ClientGateway for LocalClient {
             .into_iter()
             .map(capability_request_from_core)
             .collect();
-        Ok(plugin_from_registry(entry, requests))
+        let signature = self
+            .host
+            .store
+            .signatures()
+            .get(entry.id.as_str())
+            .map_err(|error| ClientError::operation("load plugin signature", error))?;
+        Ok(plugin_from_registry(entry, requests, signature))
     }
 
     fn set_plugin_enabled(&self, plugin_id: &str, enabled: bool) -> ClientResult<()> {
         let id = parse_plugin_id(plugin_id)?;
-        self.inner
+        self.host
             .plugins
             .toggle_plugin_enabled(&id, enabled)
             .map_err(|error| ClientError::operation("change plugin status", error))
@@ -345,27 +400,36 @@ impl ClientGateway for LocalClient {
 
     fn uninstall_plugin(&self, plugin_id: &str) -> ClientResult<()> {
         let id = parse_plugin_id(plugin_id)?;
-        self.inner
+        self.host
             .plugins
             .uninstall_plugin(&id)
             .map_err(|error| ClientError::operation("uninstall plugin", error))
     }
 
     fn list_targets(&self) -> ClientResult<Vec<SavedTarget>> {
-        self.inner
+        self.host
             .store
             .targets()
             .list()
             .map(|items| {
                 items
                     .into_iter()
-                    .map(|(name, group)| SavedTarget { name, group })
+                    .map(|(name, group, project_id)| SavedTarget {
+                        name,
+                        group,
+                        project_id,
+                    })
                     .collect()
             })
             .map_err(|error| ClientError::operation("list targets", error))
     }
 
-    fn add_target(&self, name: &str, group: Option<&str>) -> ClientResult<SavedTarget> {
+    fn add_target(
+        &self,
+        name: &str,
+        group: Option<&str>,
+        project_id: &str,
+    ) -> ClientResult<SavedTarget> {
         let target = CoreTarget::parse(name).map_err(|error| ClientError::InvalidInput {
             field: "target",
             message: error.to_string(),
@@ -375,20 +439,155 @@ impl ClientGateway for LocalClient {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
-        self.inner
+        self.host
             .store
             .targets()
-            .add(&name, group.as_deref())
+            .add(&name, group.as_deref(), Some(project_id))
             .map_err(|error| ClientError::operation("save target", error))?;
-        Ok(SavedTarget { name, group })
+        Ok(SavedTarget {
+            name,
+            group,
+            project_id: Some(project_id.to_string()),
+        })
     }
 
-    fn remove_target(&self, name: &str) -> ClientResult<()> {
-        self.inner
+    fn remove_target(&self, name: &str, project_id: &str) -> ClientResult<()> {
+        self.host
             .store
             .targets()
-            .remove(name)
+            .remove(name, Some(project_id))
             .map_err(|error| ClientError::operation("remove target", error))
+    }
+
+    fn record_permission_decision(
+        &self,
+        request: PermissionDecisionRequest,
+    ) -> ClientResult<Approval> {
+        let plugin_id = parse_plugin_id(&request.plugin_id)?;
+        let entry =
+            self.host
+                .plugins
+                .get_plugin(&plugin_id)
+                .ok_or_else(|| ClientError::NotFound {
+                    resource: "plugin",
+                    id: request.plugin_id.clone(),
+                })?;
+        let projects = self
+            .host
+            .catalog
+            .list_projects(&request.workspace_id)
+            .map_err(|error| ClientError::operation("validate approval project", error))?;
+        if !projects
+            .iter()
+            .any(|project| project.id == request.project_id)
+        {
+            return Err(ClientError::InvalidInput {
+                field: "project",
+                message: "the selected project does not belong to the active workspace".to_string(),
+            });
+        }
+        let (manifest, _) = self
+            .host
+            .plugins
+            .validate_plugin(&entry.path)
+            .map_err(|error| ClientError::operation("verify approval plugin", error))?;
+        let core_request = capability_request_to_core(request.request.clone());
+        if !manifest.requested_capabilities.contains(&core_request) {
+            return Err(ClientError::UnexpectedCapabilityApproval {
+                plugin_id: request.plugin_id,
+                capabilities: vec![request.request],
+            });
+        }
+        let binding = CoreApprovalBinding {
+            workspace_id: request.workspace_id,
+            project_id: Some(request.project_id),
+            plugin_version: entry.version.to_string(),
+            plugin_checksum: entry.checksum,
+            target: CoreTarget::parse(&request.target)
+                .map_err(|error| ClientError::InvalidInput {
+                    field: "target",
+                    message: error.to_string(),
+                })?
+                .as_str()
+                .to_string(),
+        };
+        let duration = match request.duration {
+            ApprovalDuration::Once => CoreApprovalDuration::Once,
+            ApprovalDuration::Session => CoreApprovalDuration::Session,
+            ApprovalDuration::Workspace => CoreApprovalDuration::Workspace,
+        };
+        let decision = match request.decision {
+            ApprovalDecision::Allow => CorePermissionDecision::Allow,
+            ApprovalDecision::Deny => CorePermissionDecision::Deny {
+                reason: "operator denied the capability request".to_string(),
+            },
+        };
+        let expiration = match request.duration {
+            ApprovalDuration::Once => Some(now_secs() + 5 * 60),
+            ApprovalDuration::Session | ApprovalDuration::Workspace => None,
+        };
+        let session_id = (request.duration != ApprovalDuration::Workspace)
+            .then_some(self.host.session_id.as_str());
+        let record = self
+            .host
+            .store
+            .permissions()
+            .record_decision(
+                &plugin_id,
+                &core_request,
+                &binding,
+                decision,
+                duration,
+                session_id,
+                expiration,
+            )
+            .map_err(|error| ClientError::operation("record permission decision", error))?;
+        self.host
+            .store
+            .audit_logger()
+            .log(
+                match request.decision {
+                    ApprovalDecision::Allow => "CapabilityApprovalGranted",
+                    ApprovalDecision::Deny => "CapabilityApprovalDenied",
+                },
+                Some(plugin_id.as_str()),
+                serde_json::json!({
+                    "approval_id": record.id,
+                    "workspace_id": binding.workspace_id,
+                    "project_id": binding.project_id,
+                    "target": binding.target,
+                    "request": record.request.to_string(),
+                    "duration": record.duration.as_str(),
+                }),
+            )
+            .map_err(|error| ClientError::operation("audit permission decision", error))?;
+        Ok(approval_from_db(record))
+    }
+
+    fn revoke_approval(&self, approval_id: &str) -> ClientResult<()> {
+        if self
+            .host
+            .store
+            .permissions()
+            .revoke(approval_id)
+            .map_err(|error| ClientError::operation("revoke approval", error))?
+        {
+            Ok(())
+        } else {
+            Err(ClientError::NotFound {
+                resource: "approval",
+                id: approval_id.to_string(),
+            })
+        }
+    }
+
+    fn list_approvals(&self) -> ClientResult<Vec<Approval>> {
+        self.host
+            .store
+            .permissions()
+            .list()
+            .map(|records| records.into_iter().map(approval_from_db).collect())
+            .map_err(|error| ClientError::operation("list approvals", error))
     }
 
     fn start_execution(&self, request: StartExecutionRequest) -> ClientResult<JobId> {
@@ -411,7 +610,7 @@ impl ClientGateway for LocalClient {
                 message: error.to_string(),
             })?;
         let entry =
-            self.inner
+            self.host
                 .plugins
                 .get_plugin(&plugin_id)
                 .ok_or_else(|| ClientError::NotFound {
@@ -428,50 +627,46 @@ impl ClientGateway for LocalClient {
         // Re-inspect the installed component so approval is checked against the
         // executable being launched, not only against cached registry metadata.
         let (manifest, _) = self
-            .inner
+            .host
             .plugins
             .validate_plugin(&entry.path)
             .map_err(|error| ClientError::operation("verify installed plugin", error))?;
-        let requested: Vec<CapabilityKind> = manifest
-            .requested_capabilities
+        let projects = self
+            .host
+            .catalog
+            .list_projects(&request.workspace_id)
+            .map_err(|error| ClientError::operation("validate execution project", error))?;
+        if !projects
             .iter()
-            .map(|item| capability_from_core(item.capability))
-            .collect();
-        let (missing, unexpected) =
-            capability_approval_gaps(&requested, &request.approved_capabilities);
-        if !unexpected.is_empty() {
-            return Err(ClientError::UnexpectedCapabilityApproval {
-                plugin_id: request.plugin_id,
-                capabilities: unexpected,
+            .any(|project| project.id == request.project_id)
+        {
+            return Err(ClientError::InvalidInput {
+                field: "project",
+                message: "the selected project does not belong to the active workspace".to_string(),
             });
         }
-        if !missing.is_empty() {
-            let _ = self.inner.store.audit_logger().log(
-                "CapabilityApprovalRequired",
-                Some(plugin_id.as_str()),
-                serde_json::json!({
-                    "target": target.as_str(),
-                    "missing": missing.iter().map(|item| item.as_str()).collect::<Vec<_>>()
-                }),
-            );
-            return Err(ClientError::CapabilityApprovalRequired {
-                plugin_id: request.plugin_id,
-                missing,
-            });
-        }
-
-        let approved_capabilities: Vec<CoreCapability> =
-            requested.iter().copied().map(capability_to_core).collect();
-        let _ = self.inner.store.audit_logger().log(
-            "CapabilityApprovalGranted",
-            Some(plugin_id.as_str()),
-            serde_json::json!({
-                "target": target.as_str(),
-                "duration": "once",
-                "capabilities": requested.iter().map(|item| item.as_str()).collect::<Vec<_>>()
-            }),
-        );
-        let job_id = self.inner.executions.submit_job(
+        let binding = CoreApprovalBinding {
+            workspace_id: request.workspace_id.clone(),
+            project_id: Some(request.project_id.clone()),
+            plugin_version: entry.version.to_string(),
+            plugin_checksum: entry.checksum.clone(),
+            target: target.as_str().to_string(),
+        };
+        let approved_capabilities = self
+            .host
+            .store
+            .permissions()
+            .validate_and_consume(
+                &request.approval_ids,
+                &plugin_id,
+                &binding,
+                &manifest.requested_capabilities,
+                &self.host.session_id,
+            )
+            .map_err(|error| {
+                ClientError::Conflict(format!("permission validation failed: {error}"))
+            })?;
+        let job_id = self.host.executions.submit_job(
             entry.path.to_string_lossy().into_owned(),
             target.as_str().to_string(),
             ExecutionConfig {
@@ -479,6 +674,10 @@ impl ClientGateway for LocalClient {
                 timeout: request.timeout,
                 memory_limit: request.memory_limit,
                 allowed_capabilities: approved_capabilities,
+                project_id: Some(request.project_id),
+                approval_ids: request.approval_ids,
+                plugin_version: entry.version.to_string(),
+                plugin_checksum: entry.checksum,
             },
         );
         Ok(JobId::new(job_id))
@@ -486,7 +685,7 @@ impl ClientGateway for LocalClient {
 
     fn subscribe_executions(&self) -> ClientResult<ExecutionSubscription> {
         Ok(ExecutionSubscription {
-            receiver: self.inner.executions.subscribe(),
+            receiver: self.host.executions.subscribe(),
         })
     }
 
@@ -518,7 +717,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn cancel_execution(&self, job_id: JobId) -> ClientResult<()> {
-        self.inner
+        self.host
             .executions
             .cancel_job(job_id.as_uuid())
             .map_err(|error| ClientError::operation("cancel execution", error))
@@ -526,7 +725,7 @@ impl ClientGateway for LocalClient {
 
     fn list_executions(&self) -> ClientResult<Vec<Execution>> {
         let records = self
-            .inner
+            .host
             .store
             .executions()
             .list()
@@ -536,7 +735,7 @@ impl ClientGateway for LocalClient {
             .map(|record| (record.job_id, record))
             .collect();
         let mut executions: Vec<_> = self
-            .inner
+            .host
             .executions
             .get_jobs()
             .into_iter()
@@ -550,7 +749,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn list_reports(&self) -> ClientResult<Vec<Report>> {
-        self.inner
+        self.host
             .store
             .reports()
             .list()
@@ -559,7 +758,7 @@ impl ClientGateway for LocalClient {
     }
 
     fn get_report(&self, report_id: &str) -> ClientResult<Report> {
-        self.inner
+        self.host
             .store
             .reports()
             .get(report_id)
@@ -574,31 +773,21 @@ impl ClientGateway for LocalClient {
     fn export_report(&self, report_id: &str, format: ReportFormat) -> ClientResult<String> {
         let report = self.get_report(report_id)?;
         let plugin = self
-            .inner
+            .host
             .plugins
             .get_plugins()
             .into_iter()
             .find(|item| item.id.as_str() == report.plugin_id);
-        let execution = self.execution(report.job_id).ok();
-        let security_profile = self
-            .inner
-            .store
-            .settings()
-            .get("security_profile")
-            .map_err(|error| ClientError::operation("load security profile", error))?
-            .unwrap_or_else(|| "Balanced".to_string());
         let payload = polyglid_core::execution::reports::ExportedReport {
             metadata: polyglid_core::execution::reports::ReportMetadata {
                 polyglid_version: env!("CARGO_PKG_VERSION").to_string(),
                 plugin_id: report.plugin_id.clone(),
-                plugin_version: plugin
-                    .as_ref()
-                    .map_or_else(|| "unknown".to_string(), |item| item.version.to_string()),
+                plugin_version: report.plugin_version.clone(),
                 target: report.target.clone(),
                 timestamp: report.created_at,
-                security_profile,
-                execution_duration_ms: execution.map_or(0, |item| item.duration_ms),
-                report_format_version: "1.0".to_string(),
+                security_profile: report.security_profile.clone(),
+                execution_duration_ms: report.duration_ms,
+                report_format_version: report.report_format_version.clone(),
             },
             report: CorePluginReport {
                 plugin_name: plugin.map_or_else(|| report.plugin_id.clone(), |item| item.name),
@@ -623,7 +812,7 @@ impl ClientGateway for LocalClient {
                 message: "dimensions must be finite numbers".to_string(),
             });
         }
-        let settings = self.inner.store.settings();
+        let settings = self.host.store.settings();
         let values = [
             (
                 "ui.sidebar_visible",
@@ -654,6 +843,39 @@ impl ClientGateway for LocalClient {
             settings
                 .set(key, &value, "Workspace")
                 .map_err(|error| ClientError::operation("save shell preferences", error))?;
+        }
+        Ok(())
+    }
+
+    fn save_execution_preferences(&self, preferences: &ExecutionPreferences) -> ClientResult<()> {
+        if preferences.fuel_limit == 0
+            || !(1..=300).contains(&preferences.timeout_seconds)
+            || preferences.memory_limit_bytes == Some(0)
+        {
+            return Err(ClientError::InvalidInput {
+                field: "execution preferences",
+                message: "fuel and memory must be positive and timeout must be 1–300 seconds"
+                    .to_string(),
+            });
+        }
+        let settings = self.host.store.settings();
+        for (key, value) in [
+            ("execution.fuel_limit", preferences.fuel_limit.to_string()),
+            (
+                "execution.timeout_seconds",
+                preferences.timeout_seconds.to_string(),
+            ),
+            (
+                "execution.memory_limit_bytes",
+                preferences
+                    .memory_limit_bytes
+                    .unwrap_or(64 * 1024 * 1024)
+                    .to_string(),
+            ),
+        ] {
+            settings
+                .set(key, &value, "Workspace")
+                .map_err(|error| ClientError::operation("save execution preferences", error))?;
         }
         Ok(())
     }
@@ -720,13 +942,21 @@ fn project_from_db(value: DbProject) -> Project {
 fn plugin_from_registry(
     value: PluginRegistryEntry,
     requested_capabilities: Vec<CapabilityRequest>,
+    signature: Option<polyglid_core::store::signature_store::PluginSignatureRecord>,
 ) -> Plugin {
+    let signature_status = signature
+        .as_ref()
+        .map_or_else(|| "Missing".to_string(), |record| record.status.clone());
+    let publisher_fingerprint = signature.map(|record| record.fingerprint);
     Plugin {
         id: value.id.as_str().to_string(),
         name: value.name,
         version: value.version.to_string(),
         author: value.author,
         description: value.description,
+        checksum: value.checksum,
+        signature_status,
+        publisher_fingerprint,
         requested_capabilities,
         capabilities: value
             .capabilities
@@ -752,7 +982,13 @@ fn plugin_from_registry(
     }
 }
 
-fn plugin_inspection(manifest: PluginManifest, metadata: ApiPluginMetadata) -> PluginInspection {
+fn plugin_inspection(
+    manifest: PluginManifest,
+    metadata: ApiPluginMetadata,
+    checksum: String,
+    signature_status: String,
+    publisher_fingerprint: Option<String>,
+) -> PluginInspection {
     PluginInspection {
         id: manifest.id.as_str().to_string(),
         name: manifest.name,
@@ -760,6 +996,9 @@ fn plugin_inspection(manifest: PluginManifest, metadata: ApiPluginMetadata) -> P
         version: metadata.version,
         description: metadata.description,
         author: metadata.author,
+        checksum,
+        signature_status,
+        publisher_fingerprint,
         requested_capabilities: manifest
             .requested_capabilities
             .into_iter()
@@ -777,6 +1016,20 @@ fn capability_request_from_core(value: CoreCapabilityRequest) -> CapabilityReque
             CoreCapabilityScope::PathPrefix(path) => CapabilityScope::PathPrefix { path },
             CoreCapabilityScope::HostPort { host, port } => {
                 CapabilityScope::HostPort { host, port }
+            }
+        },
+    }
+}
+
+fn capability_request_to_core(value: CapabilityRequest) -> CoreCapabilityRequest {
+    CoreCapabilityRequest {
+        capability: capability_to_core(value.capability),
+        scope: match value.scope {
+            CapabilityScope::Any => CoreCapabilityScope::Any,
+            CapabilityScope::Target { target } => CoreCapabilityScope::Target(target),
+            CapabilityScope::PathPrefix { path } => CoreCapabilityScope::PathPrefix(path),
+            CapabilityScope::HostPort { host, port } => {
+                CoreCapabilityScope::HostPort { host, port }
             }
         },
     }
@@ -829,6 +1082,8 @@ fn execution_from_core(
     Execution {
         id: JobId::new(value.id),
         plugin_id,
+        project_id: record.and_then(|record| record.project_id.clone()),
+        approval_ids: record.map_or_else(Vec::new, |record| record.approval_ids.clone()),
         target: value.target,
         state: execution_state_from_core(value.state),
         started_at: record.map_or_else(
@@ -886,11 +1141,38 @@ fn report_from_db(value: polyglid_core::store::report_store::DbReportRecord) -> 
         id: value.id,
         job_id: JobId::new(value.job_id),
         plugin_id: value.plugin_id,
+        project_id: value.project_id,
+        plugin_version: value.plugin_version,
+        plugin_checksum: value.plugin_checksum,
         target: value.target,
         summary: value.summary,
         issues: value.issues.into_iter().map(issue_from_core).collect(),
         filepath: value.filepath,
+        duration_ms: value.duration_ms,
+        fuel_consumed: value.fuel_consumed,
+        memory_used: value.memory_used,
+        security_profile: value.security_profile,
+        report_format_version: value.report_format_version,
         created_at: value.created_at,
+    }
+}
+
+fn approval_from_db(value: DbPermissionRecord) -> Approval {
+    Approval {
+        id: value.id,
+        plugin_id: value.plugin_id.as_str().to_string(),
+        request: capability_request_from_core(value.request),
+        decision: match value.decision {
+            CorePermissionDecision::Allow => ApprovalDecision::Allow,
+            CorePermissionDecision::Deny { .. } => ApprovalDecision::Deny,
+        },
+        duration: match value.duration {
+            CoreApprovalDuration::Once => ApprovalDuration::Once,
+            CoreApprovalDuration::Session => ApprovalDuration::Session,
+            CoreApprovalDuration::Workspace => ApprovalDuration::Workspace,
+        },
+        expiration: value.expiration,
+        revoked: value.revoked_at.is_some(),
     }
 }
 
@@ -939,21 +1221,20 @@ fn parse_plugin_id(value: &str) -> ClientResult<PluginId> {
     })
 }
 
+#[cfg(test)]
 fn capability_approval_gaps(
-    requested: &[CapabilityKind],
-    approved: &[CapabilityKind],
-) -> (Vec<CapabilityKind>, Vec<CapabilityKind>) {
-    let requested_set: HashSet<_> = requested.iter().copied().collect();
-    let approved_set: HashSet<_> = approved.iter().copied().collect();
+    requested: &[CapabilityRequest],
+    approved: &[CapabilityRequest],
+) -> (Vec<CapabilityRequest>, Vec<CapabilityRequest>) {
     let missing = requested
         .iter()
-        .copied()
-        .filter(|capability| !approved_set.contains(capability))
+        .filter(|request| !approved.contains(request))
+        .cloned()
         .collect();
     let unexpected = approved
         .iter()
-        .copied()
-        .filter(|capability| !requested_set.contains(capability))
+        .filter(|request| !requested.contains(request))
+        .cloned()
         .collect();
     (missing, unexpected)
 }
@@ -975,6 +1256,73 @@ fn setting_number(
         .filter(|value| value.is_finite())
         .unwrap_or(fallback)
         .clamp(minimum, maximum))
+}
+
+fn setting_u64(
+    value: Result<Option<String>, String>,
+    fallback: u64,
+    minimum: u64,
+    maximum: u64,
+) -> ClientResult<u64> {
+    let value =
+        value.map_err(|error| ClientError::operation("load execution preferences", error))?;
+    Ok(value
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(fallback)
+        .clamp(minimum, maximum))
+}
+
+fn enroll_official_publisher(
+    store: &WorkspaceStore,
+    configured_key: Option<&str>,
+) -> ClientResult<()> {
+    let Some(public_key) = configured_key.map(str::trim).filter(|key| !key.is_empty()) else {
+        return Ok(());
+    };
+    let key_bytes = hex::decode(public_key).map_err(|error| ClientError::InvalidInput {
+        field: "official publisher key",
+        message: format!("the release-embedded key is not valid hexadecimal: {error}"),
+    })?;
+    if key_bytes.len() != 32 {
+        return Err(ClientError::InvalidInput {
+            field: "official publisher key",
+            message: "the release-embedded Ed25519 key must be exactly 32 bytes".to_string(),
+        });
+    }
+    let normalized_key = hex::encode(key_bytes);
+    let fingerprint =
+        polyglid_core::security::publisher::PublisherManager::compute_fingerprint(&normalized_key)
+            .map_err(|error| ClientError::operation("fingerprint official publisher", error))?;
+    let trust = store.trust_store();
+
+    if let Some(existing) = trust
+        .get_publisher("polyglid-official-recon")
+        .map_err(|error| ClientError::operation("load official publisher", error))?
+    {
+        if existing.public_key != normalized_key {
+            return Err(ClientError::Conflict(
+                "the stored official publisher key differs from the key pinned in this build"
+                    .to_string(),
+            ));
+        }
+        return Ok(());
+    }
+    if trust
+        .get_publisher_by_fingerprint(&fingerprint)
+        .map_err(|error| ClientError::operation("find official publisher", error))?
+        .is_some()
+    {
+        return Ok(());
+    }
+    trust
+        .add_publisher(
+            "polyglid-official-recon",
+            "PolyGlid Official Recon Publisher",
+            &normalized_key,
+            &fingerprint,
+            "Official",
+        )
+        .map_err(|error| ClientError::operation("enroll official publisher", error))
 }
 
 fn data_directory() -> ClientResult<PathBuf> {
@@ -999,6 +1347,13 @@ fn default_workspace_root() -> ClientResult<PathBuf> {
         }
     }
     home_directory().map(|home| home.join("polyglid-projects"))
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 fn home_directory() -> ClientResult<PathBuf> {
@@ -1039,7 +1394,7 @@ mod tests {
         assert!(bootstrap.targets.is_empty());
 
         let saved = client
-            .add_target("example.com", Some("Production"))
+            .add_target("example.com", Some("Production"), "project-test")
             .expect("save target");
         assert_eq!(saved.group.as_deref(), Some("Production"));
         assert_eq!(client.list_targets().expect("list targets"), vec![saved]);
@@ -1060,37 +1415,79 @@ mod tests {
                 bottom_panel_height: 20.0,
             })
             .expect("save preferences");
+        client
+            .save_execution_preferences(&ExecutionPreferences {
+                fuel_limit: 12_345,
+                timeout_seconds: 45,
+                memory_limit_bytes: Some(16 * 1024 * 1024),
+            })
+            .expect("save execution preferences");
 
-        let shell = client.bootstrap().expect("bootstrap").shell;
-        assert!(!shell.sidebar_visible);
-        assert_eq!(shell.sidebar_width, 480.0);
-        assert_eq!(shell.bottom_panel_height, 120.0);
+        let snapshot = client.bootstrap().expect("bootstrap");
+        assert!(!snapshot.shell.sidebar_visible);
+        assert_eq!(snapshot.shell.sidebar_width, 480.0);
+        assert_eq!(snapshot.shell.bottom_panel_height, 120.0);
+        assert_eq!(snapshot.execution.fuel_limit, 12_345);
+        assert_eq!(snapshot.execution.timeout_seconds, 45);
+        assert_eq!(
+            snapshot.execution.memory_limit_bytes,
+            Some(16 * 1024 * 1024)
+        );
 
         fs::remove_dir_all(root).expect("clean temporary client");
     }
 
     #[test]
     fn execution_approval_must_match_every_requested_capability() {
-        let requested = [CapabilityKind::DnsResolve, CapabilityKind::ReportWrite];
+        let dns = CapabilityRequest {
+            capability: CapabilityKind::DnsResolve,
+            scope: CapabilityScope::Target {
+                target: "example.com".to_string(),
+            },
+        };
+        let report = CapabilityRequest {
+            capability: CapabilityKind::ReportWrite,
+            scope: CapabilityScope::PathPrefix {
+                path: "reports".to_string(),
+            },
+        };
+        let process = CapabilityRequest {
+            capability: CapabilityKind::ProcessSpawn,
+            scope: CapabilityScope::Any,
+        };
+        let requested = [dns.clone(), report.clone()];
 
         let (missing, unexpected) =
-            capability_approval_gaps(&requested, &[CapabilityKind::DnsResolve]);
-        assert_eq!(missing, vec![CapabilityKind::ReportWrite]);
+            capability_approval_gaps(&requested, std::slice::from_ref(&dns));
+        assert_eq!(missing, vec![report.clone()]);
         assert!(unexpected.is_empty());
 
-        let (missing, unexpected) = capability_approval_gaps(
-            &requested,
-            &[
-                CapabilityKind::DnsResolve,
-                CapabilityKind::ReportWrite,
-                CapabilityKind::ProcessSpawn,
-            ],
-        );
+        let (missing, unexpected) =
+            capability_approval_gaps(&requested, &[dns.clone(), report.clone(), process.clone()]);
         assert!(missing.is_empty());
-        assert_eq!(unexpected, vec![CapabilityKind::ProcessSpawn]);
+        assert_eq!(unexpected, vec![process]);
 
         let (missing, unexpected) = capability_approval_gaps(&requested, &requested);
         assert!(missing.is_empty());
         assert!(unexpected.is_empty());
+    }
+
+    #[test]
+    fn release_pinned_publisher_is_enrolled_without_overwriting_a_different_key() {
+        let store = WorkspaceStore::new(Path::new(":memory:")).expect("workspace");
+        let official_key = hex::encode([7_u8; 32]);
+        enroll_official_publisher(&store, Some(&official_key)).expect("enroll publisher");
+        let publisher = store
+            .trust_store()
+            .get_publisher("polyglid-official-recon")
+            .expect("publisher query")
+            .expect("publisher");
+        assert_eq!(publisher.public_key, official_key);
+
+        let different_key = hex::encode([8_u8; 32]);
+        assert!(enroll_official_publisher(&store, Some(&different_key))
+            .expect_err("pinned key mismatch must fail")
+            .to_string()
+            .contains("differs"));
     }
 }

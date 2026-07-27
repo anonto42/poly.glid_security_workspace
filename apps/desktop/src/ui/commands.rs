@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::{ClientGateway, LocalClient, ShellPreferences};
+use polyglid_desktop::client::ShellPreferences;
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::models::{Overlay, WorkspaceView};
 use super::state::{activate_view, close_view, AppState};
@@ -85,7 +86,7 @@ const fn command(
     }
 }
 
-pub(crate) fn execute(mut state: AppState, action: ShellCommand, client: LocalClient) {
+pub(crate) fn execute(mut state: AppState, action: ShellCommand, controllers: DesktopControllers) {
     let persist = matches!(
         action,
         ShellCommand::ToggleSidebar | ShellCommand::TogglePanel
@@ -100,11 +101,15 @@ pub(crate) fn execute(mut state: AppState, action: ShellCommand, client: LocalCl
         state.shell.overlay.set(None);
     }
     if persist {
-        persist_shell(state, client);
+        persist_shell(state, controllers);
     }
 }
 
-pub(crate) fn handle_shortcut(event: KeyboardEvent, mut state: AppState, client: LocalClient) {
+pub(crate) fn handle_shortcut(
+    event: KeyboardEvent,
+    mut state: AppState,
+    controllers: DesktopControllers,
+) {
     let key = event.key().to_string().to_lowercase();
     let modifiers = event.modifiers();
     let primary = modifiers.ctrl() || modifiers.meta();
@@ -141,11 +146,11 @@ pub(crate) fn handle_shortcut(event: KeyboardEvent, mut state: AppState, client:
     };
     if let Some(action) = action {
         event.prevent_default();
-        execute(state, action, client);
+        execute(state, action, controllers);
     }
 }
 
-pub(crate) fn persist_shell(state: AppState, client: LocalClient) {
+pub(crate) fn persist_shell(state: AppState, controllers: DesktopControllers) {
     let preferences = ShellPreferences {
         sidebar_visible: *state.shell.sidebar_visible.read(),
         bottom_panel_visible: *state.shell.bottom_panel_visible.read(),
@@ -153,7 +158,7 @@ pub(crate) fn persist_shell(state: AppState, client: LocalClient) {
         bottom_panel_height: *state.shell.bottom_panel_height.read(),
     };
     spawn(async move {
-        let _ =
-            tokio::task::spawn_blocking(move || client.save_shell_preferences(&preferences)).await;
+        let settings = controllers.settings;
+        let _ = tokio::task::spawn_blocking(move || settings.save_shell(&preferences)).await;
     });
 }

@@ -2,8 +2,10 @@ use std::time::Duration;
 
 use dioxus::prelude::*;
 use polyglid_desktop::client::{
-    CapabilityKind, ClientGateway, LocalClient, PluginStatus, StartExecutionRequest,
+    ApprovalDecision, ApprovalDuration, CapabilityRequest, ExecutionPreferences,
+    PermissionDecisionRequest, PluginStatus, StartExecutionRequest,
 };
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::commands::{execute, CommandDefinition, COMMANDS};
 use super::components::SettingsButton;
@@ -75,6 +77,7 @@ fn SettingsOverview() -> Element {
 #[component]
 fn ExecutionSettings() -> Element {
     let mut state = use_context::<AppState>();
+    let controllers = use_context::<DesktopControllers>();
     rsx! {
         h2 { "Execution limits" }
         p { class: "muted", "Safety limits apply to each new local WASM execution." }
@@ -86,7 +89,44 @@ fn ExecutionSettings() -> Element {
             value: "{state.runs.fuel_limit}",
             oninput: move |event| if let Ok(value) = event.value().parse() { state.runs.fuel_limit.set(value); }
         }
-        p { class: "field-help", "Fuel bounds guest CPU work. The local timeout is 30 seconds." }
+        label { class: "field-label", r#for: "timeout-seconds", "Timeout in seconds" }
+        input {
+            id: "timeout-seconds",
+            r#type: "number",
+            min: "1",
+            max: "300",
+            value: "{state.runs.timeout_seconds}",
+            oninput: move |event| if let Ok(value) = event.value().parse() { state.runs.timeout_seconds.set(value); }
+        }
+        label { class: "field-label", r#for: "memory-limit", "Maximum memory in bytes" }
+        input {
+            id: "memory-limit",
+            r#type: "number",
+            min: "1048576",
+            value: "{state.runs.memory_limit_bytes}",
+            oninput: move |event| if let Ok(value) = event.value().parse() { state.runs.memory_limit_bytes.set(value); }
+        }
+        p { class: "field-help", "Fuel, timeout, and memory bounds are validated and persisted for new executions." }
+        button {
+            class: "primary small",
+            onclick: move |_| {
+                let settings = controllers.settings.clone();
+                let preferences = ExecutionPreferences {
+                    fuel_limit: *state.runs.fuel_limit.read(),
+                    timeout_seconds: *state.runs.timeout_seconds.read(),
+                    memory_limit_bytes: Some(*state.runs.memory_limit_bytes.read()),
+                };
+                spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || settings.save_execution(&preferences)).await;
+                    match result {
+                        Ok(Ok(())) => push_activity(state, "Saved execution limits"),
+                        Ok(Err(error)) => show_error(state, "Settings were not saved", error.to_string()),
+                        Err(error) => show_error(state, "Settings were not saved", format!("settings task failed: {error}")),
+                    }
+                });
+            },
+            "Save execution limits"
+        }
     }
 }
 
@@ -111,7 +151,7 @@ fn PluginSettings() -> Element {
 #[component]
 fn CommandPalette() -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let mut query = use_signal(String::new);
     let mut selected = use_signal(|| 0usize);
     let commands = filtered_commands(&query.read());
@@ -171,7 +211,7 @@ fn CommandPalette() -> Element {
 #[component]
 fn PluginInstallOverlay(pending: PendingPluginInstall) -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     rsx! {
         div { class: "modal-backdrop", onclick: move |_| state.shell.overlay.set(None),
             div { class: "settings-modal", role: "dialog", aria_modal: "true", aria_labelledby: "plugin-install-title", onclick: move |event| event.stop_propagation(),
@@ -202,7 +242,7 @@ fn PluginInstallOverlay(pending: PendingPluginInstall) -> Element {
                         let client = client.clone();
                         state.shell.overlay.set(None);
                         spawn(async move {
-                            let result = tokio::task::spawn_blocking(move || client.install_plugin(&path)).await;
+                            let result = tokio::task::spawn_blocking(move || client.plugins.install(&path)).await;
                             match result {
                                 Ok(Ok(plugin)) => {
                                     let id = plugin.id.clone();
@@ -230,11 +270,15 @@ fn PluginInstallOverlay(pending: PendingPluginInstall) -> Element {
 #[component]
 fn PermissionReviewOverlay(review: PermissionReview) -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
+    let deny_client = client.clone();
+    let start_client = client;
+    let deny_review = review.clone();
+    let start_review = review.clone();
     let all_approved = review
         .requested
         .iter()
-        .all(|request| review.approved.contains(&request.capability));
+        .all(|request| review.approved.contains(request));
     rsx! {
         div { class: "modal-backdrop", onclick: move |_| state.shell.overlay.set(None),
             div { class: "settings-modal permission-review", role: "dialog", aria_modal: "true", aria_labelledby: "permission-review-title", onclick: move |event| event.stop_propagation(),
@@ -245,7 +289,23 @@ fn PermissionReviewOverlay(review: PermissionReview) -> Element {
                     }
                     div { class: "permission-review-summary",
                         strong { "{review.requested.len()} requested · {review.approved.len()} approved" }
-                        p { "Each approval applies only to this job. Nothing is preselected." }
+                        p { "Nothing is preselected. Choose how long the exact scoped decision remains valid." }
+                        div { class: "segmented-control", role: "group", aria_label: "Approval duration",
+                            for (duration, label) in [
+                                (ApprovalDuration::Once, "Once"),
+                                (ApprovalDuration::Session, "Session"),
+                                (ApprovalDuration::Workspace, "Workspace"),
+                            ] {
+                                button {
+                                    class: if review.duration == duration { "secondary active" } else { "ghost-button" },
+                                    onclick: {
+                                        let review = review.clone();
+                                        move |_| update_duration(state, review.clone(), duration)
+                                    },
+                                    "{label}"
+                                }
+                            }
+                        }
                     }
                     if review.requested.is_empty() {
                         div { class: "state-panel", h3 { "No host permissions requested" } p { "This component can start without a capability grant." } }
@@ -255,11 +315,11 @@ fn PermissionReviewOverlay(review: PermissionReview) -> Element {
                                 label { class: "permission-item permission-choice",
                                     input {
                                         r#type: "checkbox",
-                                        checked: review.approved.contains(&request.capability),
+                                        checked: review.approved.contains(request),
                                         onchange: {
-                                            let capability = request.capability;
+                                            let request = request.clone();
                                             let review = review.clone();
-                                            move |event| update_approval(state, review.clone(), capability, event.checked())
+                                            move |event| update_approval(state, review.clone(), request.clone(), event.checked())
                                         }
                                     }
                                     div { class: "permission-copy",
@@ -276,11 +336,16 @@ fn PermissionReviewOverlay(review: PermissionReview) -> Element {
                     }
                 }
                 div { class: "modal-footer permission-review-actions",
-                    button { class: "secondary", autofocus: true, onclick: move |_| state.shell.overlay.set(None), "Deny and cancel" }
+                    button {
+                        class: "secondary",
+                        autofocus: true,
+                        onclick: move |_| deny_execution(state, deny_client.clone(), deny_review.clone()),
+                        "Deny and cancel"
+                    }
                     button {
                         class: "primary small",
                         disabled: !all_approved,
-                        onclick: move |_| start_execution(state, client.clone(), review.clone()),
+                        onclick: move |_| start_execution(state, start_client.clone(), start_review.clone()),
                         "Approve and run"
                     }
                 }
@@ -289,16 +354,24 @@ fn PermissionReviewOverlay(review: PermissionReview) -> Element {
     }
 }
 
+fn update_duration(mut state: AppState, mut review: PermissionReview, duration: ApprovalDuration) {
+    review.duration = duration;
+    state
+        .shell
+        .overlay
+        .set(Some(Overlay::PermissionReview(review)));
+}
+
 fn update_approval(
     mut state: AppState,
     mut review: PermissionReview,
-    capability: CapabilityKind,
+    request: CapabilityRequest,
     approved: bool,
 ) {
-    if approved && !review.approved.contains(&capability) {
-        review.approved.push(capability);
+    if approved && !review.approved.contains(&request) {
+        review.approved.push(request.clone());
     } else if !approved {
-        review.approved.retain(|candidate| *candidate != capability);
+        review.approved.retain(|candidate| candidate != &request);
     }
     state
         .shell
@@ -306,19 +379,42 @@ fn update_approval(
         .set(Some(Overlay::PermissionReview(review)));
 }
 
-fn start_execution(mut state: AppState, client: LocalClient, review: PermissionReview) {
+fn start_execution(mut state: AppState, controllers: DesktopControllers, review: PermissionReview) {
     state.shell.overlay.set(None);
     state.runs.error.set(None);
-    let request = StartExecutionRequest {
-        plugin_id: review.plugin_id.clone(),
-        target: review.target.clone(),
-        fuel_limit: *state.runs.fuel_limit.read(),
-        timeout: Duration::from_secs(30),
-        memory_limit: None,
-        approved_capabilities: review.approved,
-    };
+    let fuel_limit = *state.runs.fuel_limit.read();
+    let timeout = Duration::from_secs(*state.runs.timeout_seconds.read());
+    let memory_limit = Some(*state.runs.memory_limit_bytes.read());
     spawn(async move {
-        let result = tokio::task::spawn_blocking(move || client.start_execution(request)).await;
+        let approval_review = review.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut approval_ids = Vec::with_capacity(approval_review.approved.len());
+            for capability_request in approval_review.approved.clone() {
+                let approval = controllers
+                    .scanner
+                    .record_decision(PermissionDecisionRequest {
+                        workspace_id: approval_review.workspace_id.clone(),
+                        project_id: approval_review.project_id.clone(),
+                        plugin_id: approval_review.plugin_id.clone(),
+                        target: approval_review.target.clone(),
+                        request: capability_request,
+                        decision: ApprovalDecision::Allow,
+                        duration: approval_review.duration,
+                    })?;
+                approval_ids.push(approval.id);
+            }
+            controllers.scanner.start(StartExecutionRequest {
+                workspace_id: approval_review.workspace_id,
+                project_id: approval_review.project_id,
+                plugin_id: approval_review.plugin_id,
+                target: approval_review.target,
+                fuel_limit,
+                timeout,
+                memory_limit,
+                approval_ids,
+            })
+        })
+        .await;
         match result {
             Ok(Ok(job_id)) => {
                 state.runs.active_job_id.set(Some(job_id));
@@ -337,6 +433,46 @@ fn start_execution(mut state: AppState, client: LocalClient, review: PermissionR
                 state,
                 "Execution was not started",
                 format!("execution task failed: {error}"),
+            ),
+        }
+    });
+}
+
+fn deny_execution(mut state: AppState, controllers: DesktopControllers, review: PermissionReview) {
+    state.shell.overlay.set(None);
+    spawn(async move {
+        let audit_review = review.clone();
+        let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
+            for capability_request in audit_review.requested {
+                controllers
+                    .scanner
+                    .record_decision(PermissionDecisionRequest {
+                        workspace_id: audit_review.workspace_id.clone(),
+                        project_id: audit_review.project_id.clone(),
+                        plugin_id: audit_review.plugin_id.clone(),
+                        target: audit_review.target.clone(),
+                        request: capability_request,
+                        decision: ApprovalDecision::Deny,
+                        duration: ApprovalDuration::Once,
+                    })
+                    .map_err(|error| error.to_string())?;
+            }
+            Ok(())
+        })
+        .await;
+        match result {
+            Ok(Ok(())) => push_activity(
+                state,
+                format!(
+                    "Denied execution of {} for {}",
+                    review.plugin_name, review.target
+                ),
+            ),
+            Ok(Err(error)) => show_error(state, "Denial could not be audited", error),
+            Err(error) => show_error(
+                state,
+                "Denial could not be audited",
+                format!("permission task failed: {error}"),
             ),
         }
     });

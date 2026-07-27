@@ -3,7 +3,7 @@ use crate::plugin_manager::PluginManager;
 use crate::store::WorkspaceStore;
 use crate::PluginRuntime;
 use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginSource, PluginStatus};
-use polyglid_plugin_api::PluginId;
+use polyglid_plugin_api::{CapabilityRequest, PluginId};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -48,21 +48,27 @@ impl<R: PluginRuntime + Send + Sync + 'static> PluginService<R> {
 
 pub struct ExecutionService<R> {
     em: Arc<ExecutionManager<R>>,
+    pm: Arc<PluginManager<R>>,
     store: WorkspaceStore,
 }
 
 impl<R: PluginRuntime + Send + Sync + 'static> ExecutionService<R> {
-    pub fn new(em: Arc<ExecutionManager<R>>, store: WorkspaceStore) -> Self {
-        Self { em, store }
+    pub fn new(
+        em: Arc<ExecutionManager<R>>,
+        pm: Arc<PluginManager<R>>,
+        store: WorkspaceStore,
+    ) -> Self {
+        Self { em, pm, store }
     }
 
-    pub fn run_plugin(&self, plugin_id: &PluginId, target: &str) -> Result<String, String> {
-        let pm = PluginManager::new(
-            self.em.runtime().clone(),
-            &polyglid_config::AppConfig::development(),
-            self.store.clone(),
-        )?;
-        let entry = pm
+    pub fn run_plugin(
+        &self,
+        plugin_id: &PluginId,
+        target: &str,
+        approved_capabilities: Vec<CapabilityRequest>,
+    ) -> Result<String, String> {
+        let entry = self
+            .pm
             .get_plugin(plugin_id)
             .ok_or_else(|| format!("plugin '{}' not found in workspace", plugin_id.as_str()))?;
 
@@ -76,8 +82,12 @@ impl<R: PluginRuntime + Send + Sync + 'static> ExecutionService<R> {
         let config = crate::execution::ExecutionConfig {
             fuel_limit: 25_000_000,
             timeout: std::time::Duration::from_secs(30),
-            memory_limit: None,
-            allowed_capabilities: entry.capabilities,
+            memory_limit: Some(64 * 1024 * 1024),
+            allowed_capabilities: approved_capabilities,
+            project_id: None,
+            approval_ids: Vec::new(),
+            plugin_version: entry.version.to_string(),
+            plugin_checksum: entry.checksum,
         };
 
         let job_id = self.em.submit_job(
@@ -114,15 +124,15 @@ impl TargetService {
 
     pub fn list_targets(&self) -> Result<Vec<String>, String> {
         let list = self.store.targets().list()?;
-        Ok(list.into_iter().map(|(name, _)| name).collect())
+        Ok(list.into_iter().map(|(name, _, _)| name).collect())
     }
 
     pub fn add_target(&self, name: &str) -> Result<(), String> {
-        self.store.targets().add(name, None)
+        self.store.targets().add(name, None, None)
     }
 
     pub fn remove_target(&self, name: &str) -> Result<(), String> {
-        self.store.targets().remove(name)
+        self.store.targets().remove(name, None)
     }
 }
 
@@ -156,17 +166,17 @@ impl ReportService {
 
         let payload = crate::execution::reports::ExportedReport {
             metadata: crate::execution::reports::ReportMetadata {
-                polyglid_version: "0.9.0".to_string(),
-                plugin_id: report_rec.plugin_id,
-                plugin_version: "0.1.0".to_string(),
+                polyglid_version: env!("CARGO_PKG_VERSION").to_string(),
+                plugin_id: report_rec.plugin_id.clone(),
+                plugin_version: report_rec.plugin_version,
                 target: report_rec.target.clone(),
                 timestamp: report_rec.created_at,
-                security_profile: "Balanced".to_string(),
-                execution_duration_ms: 120,
-                report_format_version: "1.0".to_string(),
+                security_profile: report_rec.security_profile,
+                execution_duration_ms: report_rec.duration_ms,
+                report_format_version: report_rec.report_format_version,
             },
             report: polyglid_plugin_api::PluginReport {
-                plugin_name: "Plugin Report".to_string(),
+                plugin_name: report_rec.plugin_name,
                 target_tested: report_rec.target.clone(),
                 issues,
                 summary: report_rec.summary,
@@ -306,20 +316,7 @@ impl MarketplaceService {
 }
 
 fn uuid_v4() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    format!("mkt-{:x}-{:x}", t, rand_bits())
-}
-
-fn rand_bits() -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    std::time::Instant::now().hash(&mut h);
-    h.finish()
+    format!("mkt-{}", uuid::Uuid::new_v4())
 }
 
 fn now_secs() -> i64 {
@@ -334,6 +331,10 @@ fn now_secs() -> i64 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 use crate::store::collaboration_store::{DbTeam, DbTeamMember, DbUser, DbUserToken};
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
 use sha2::{Digest, Sha256};
 
 pub struct CollaborationService {
@@ -345,11 +346,13 @@ impl CollaborationService {
         Self { store }
     }
 
-    pub fn hash_password(&self, password: &str, salt: &str) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(password.as_bytes());
-        hasher.update(salt.as_bytes());
-        hex::encode(hasher.finalize())
+    fn hash_password(&self, password: &str) -> Result<(String, String), String> {
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|error| format!("failed to hash password: {error}"))?
+            .to_string();
+        Ok((hash, salt.to_string()))
     }
 
     pub fn count_users(&self) -> Result<i64, String> {
@@ -365,8 +368,8 @@ impl CollaborationService {
         if username.trim().is_empty() {
             return Err("Username cannot be empty".to_string());
         }
-        if password.len() < 6 {
-            return Err("Password must be at least 6 characters long".to_string());
+        if password.len() < 8 {
+            return Err("Password must be at least 8 characters long".to_string());
         }
         if role != "Owner" && role != "Editor" && role != "Viewer" {
             return Err("Invalid role, must be Owner, Editor, or Viewer".to_string());
@@ -377,11 +380,10 @@ impl CollaborationService {
             return Err(format!("User '{}' already exists", username));
         }
 
-        let salt = format!("{:x}", rand_bits());
-        let password_hash = self.hash_password(password, &salt);
+        let (password_hash, salt) = self.hash_password(password)?;
         let now = now_secs();
         let user = DbUser {
-            id: format!("usr-{:x}", rand_bits()),
+            id: format!("usr-{}", uuid::Uuid::new_v4()),
             username: username.to_string(),
             password_hash,
             salt,
@@ -400,12 +402,28 @@ impl CollaborationService {
             .get_user_by_username(username)?
             .ok_or_else(|| "Invalid username or password".to_string())?;
 
-        let hash = self.hash_password(password, &user.salt);
-        if hash != user.password_hash {
+        let argon2_valid = PasswordHash::new(&user.password_hash)
+            .ok()
+            .is_some_and(|hash| {
+                Argon2::default()
+                    .verify_password(password.as_bytes(), &hash)
+                    .is_ok()
+            });
+        let legacy_valid = !user.password_hash.starts_with("$argon2")
+            && legacy_password_hash(password, &user.salt) == user.password_hash;
+        if !argon2_valid && !legacy_valid {
             return Err("Invalid username or password".to_string());
         }
+        if legacy_valid {
+            let (password_hash, salt) = self.hash_password(password)?;
+            store.update_password(&user.id, &password_hash, &salt, now_secs())?;
+        }
 
-        let token_str = format!("tok-{:x}-{:x}", rand_bits(), rand_bits());
+        let token_str = format!(
+            "tok-{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        );
         let now = now_secs();
         let token = DbUserToken {
             token: token_str.clone(),
@@ -438,7 +456,7 @@ impl CollaborationService {
         }
         let now = now_secs();
         let team = DbTeam {
-            id: format!("team-{:x}", rand_bits()),
+            id: format!("team-{}", uuid::Uuid::new_v4()),
             name: name.to_string(),
             created_at: now,
             updated_at: now,
@@ -472,5 +490,46 @@ impl CollaborationService {
 
     pub fn list_team_members(&self, team_id: &str) -> Result<Vec<(DbUser, String)>, String> {
         self.store.collaboration().list_team_members(team_id)
+    }
+}
+
+fn legacy_password_hash(password: &str, salt: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(password.as_bytes());
+    hasher.update(salt.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod collaboration_service_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_password_is_upgraded_to_argon2_after_login() {
+        let store = WorkspaceStore::new(std::path::Path::new(":memory:")).expect("workspace");
+        let salt = "legacy-salt";
+        store
+            .collaboration()
+            .create_user(&DbUser {
+                id: "legacy-user".to_string(),
+                username: "legacy".to_string(),
+                password_hash: legacy_password_hash("password123", salt),
+                salt: salt.to_string(),
+                role: "Owner".to_string(),
+                created_at: 1,
+                updated_at: 1,
+            })
+            .expect("legacy user");
+
+        CollaborationService::new(store.clone())
+            .login_user("legacy", "password123")
+            .expect("legacy login");
+        let upgraded = store
+            .collaboration()
+            .get_user_by_username("legacy")
+            .expect("user query")
+            .expect("user");
+        assert!(upgraded.password_hash.starts_with("$argon2"));
+        assert_ne!(upgraded.salt, salt);
     }
 }

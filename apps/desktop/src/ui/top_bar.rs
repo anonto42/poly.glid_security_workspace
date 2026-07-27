@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::{ClientGateway, LocalClient};
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::models::{LoadState, Overlay, WorkspaceView};
 use super::state::{activate_view, AppState};
@@ -18,7 +18,7 @@ pub(crate) fn TitleBar() -> Element {
 #[component]
 fn BrandArea() -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let mut menu_open = use_signal(|| false);
     let workspaces = state.catalog.workspaces.read().clone();
     rsx! {
@@ -40,7 +40,7 @@ fn BrandArea() -> Element {
                                         let client = client.clone();
                                         let workspace_id = workspace_id.clone();
                                         spawn(async move {
-                                            let result = tokio::task::spawn_blocking(move || client.activate_workspace(&workspace_id)).await;
+                                            let result = tokio::task::spawn_blocking(move || client.application.activate_workspace(&workspace_id)).await;
                                             match result {
                                                 Ok(Ok(())) => {
                                                     let next = *state.catalog.refresh.read() + 1;

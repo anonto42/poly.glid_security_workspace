@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use polyglid_config::AppConfig;
 use polyglid_events::VecEventSink;
-use polyglid_plugin_api::{Capability, PluginId, PluginReport};
+use polyglid_plugin_api::{CapabilityRequest, PluginId, PluginReport};
 
 use crate::store::WorkspaceStore;
 use crate::{
@@ -33,7 +33,12 @@ pub struct ExecutionConfig {
     pub fuel_limit: u64,
     pub timeout: Duration,
     pub memory_limit: Option<u64>,
-    pub allowed_capabilities: Vec<Capability>,
+    /// Exact capability requests approved for this single execution.
+    pub allowed_capabilities: Vec<CapabilityRequest>,
+    pub project_id: Option<String>,
+    pub approval_ids: Vec<String>,
+    pub plugin_version: String,
+    pub plugin_checksum: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -109,6 +114,8 @@ where
     ) -> Self {
         let (tx, _) = broadcast::channel(100);
         let mut jobs_list = Vec::new();
+        let default_fuel_limit = app_config.max_wasm_fuel;
+        let default_memory_limit = app_config.max_wasm_memory_bytes;
         if let Some(ref s) = store {
             if let Ok(records) = s.executions().list() {
                 for r in records {
@@ -135,7 +142,7 @@ where
                     if state == JobState::Completed {
                         if let Ok(Some(rep_rec)) = s.reports().get(&r.job_id.to_string()) {
                             report = Some(PluginReport {
-                                plugin_name: rep_rec.plugin_id,
+                                plugin_name: rep_rec.plugin_name,
                                 target_tested: rep_rec.target,
                                 issues: rep_rec.issues,
                                 summary: rep_rec.summary,
@@ -148,10 +155,14 @@ where
                         target: r.target,
                         state,
                         config: ExecutionConfig {
-                            fuel_limit: r.fuel_consumed,
+                            fuel_limit: default_fuel_limit,
                             timeout: Duration::from_secs(30),
-                            memory_limit: None,
+                            memory_limit: default_memory_limit,
                             allowed_capabilities: vec![],
+                            project_id: r.project_id,
+                            approval_ids: r.approval_ids,
+                            plugin_version: r.plugin_version,
+                            plugin_checksum: r.plugin_checksum,
                         },
                         metrics: Some(metrics),
                         error: r.error_message,
@@ -204,7 +215,7 @@ where
             .unwrap_or_else(|| plugin_path.clone());
 
         if let Some(ref store) = self.store {
-            let _ = store.executions().insert_job(
+            if let Err(error) = store.executions().insert_job(
                 &job_id,
                 &plugin_id,
                 &target,
@@ -213,7 +224,29 @@ where
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
-            );
+                config.project_id.as_deref(),
+                &config.approval_ids,
+                &config.plugin_version,
+                &config.plugin_checksum,
+            ) {
+                let error = format!("Failed to persist queued execution: {error}");
+                if let Some(job) = self
+                    .jobs
+                    .lock()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|job| job.id == job_id)
+                {
+                    job.state = JobState::Failed;
+                    job.error = Some(error.clone());
+                }
+                let _ = self.event_tx.send(ExecutionEvent::JobFailed {
+                    job_id,
+                    error,
+                    metrics: None,
+                });
+                return job_id;
+            }
         }
 
         let _ = self.event_tx.send(ExecutionEvent::JobStateChanged {
@@ -229,6 +262,7 @@ where
         let plugin_path_clone = plugin_path.clone();
         let target_clone = target.clone();
         let app_config = self.app_config.clone();
+        let timeout = config.timeout;
 
         std::thread::spawn(move || {
             // Update to Starting
@@ -279,12 +313,14 @@ where
 
             // Configure permissions dynamically
             let mut permissions = InMemoryPermissionStore::default();
-            for cap in &config.allowed_capabilities {
-                permissions.grant_for_all(*cap);
+            for request in &config.allowed_capabilities {
+                permissions.grant_request_for_all(request.clone());
             }
 
+            let reports_dir = app_config.reports_dir.clone();
             let mut app_config = app_config;
             app_config.max_wasm_fuel = config.fuel_limit;
+            app_config.max_wasm_memory_bytes = config.memory_limit;
 
             let mut engine = match CoreEngine::new(
                 Arc::clone(&runtime_clone),
@@ -340,7 +376,9 @@ where
             let duration = start_time.elapsed();
             let metrics = JobMetrics {
                 duration,
-                fuel_consumed: Some(config.fuel_limit),
+                // Wasmtime does not currently expose consumed fuel through the
+                // runtime port. Never present the configured budget as usage.
+                fuel_consumed: None,
                 memory_used: None,
                 timestamp,
                 stage: Some("Finished".to_string()),
@@ -358,6 +396,51 @@ where
 
             match result {
                 Ok(report) => {
+                    if let Some(ref store) = store_clone {
+                        let plugin_id_obj = match PluginId::new(&plugin_id) {
+                            Ok(plugin_id) => plugin_id,
+                            Err(error) => {
+                                fail_job(
+                                    job_id,
+                                    &jobs_clone,
+                                    &tx_clone,
+                                    format!("Invalid persisted plugin identity: {error}"),
+                                    start_time,
+                                    timestamp,
+                                    &store_clone,
+                                );
+                                return;
+                            }
+                        };
+                        let security_profile = store
+                            .settings()
+                            .get("security_profile")
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| "Balanced".to_string());
+                        if let Err(error) = persist_completed_report(
+                            store,
+                            &reports_dir,
+                            job_id,
+                            &plugin_id_obj,
+                            &target_clone,
+                            &report,
+                            &config,
+                            &metrics,
+                            &security_profile,
+                        ) {
+                            fail_job(
+                                job_id,
+                                &jobs_clone,
+                                &tx_clone,
+                                format!("Report persistence failed: {error}"),
+                                start_time,
+                                timestamp,
+                                &store_clone,
+                            );
+                            return;
+                        }
+                    }
                     {
                         let mut jobs = jobs_clone.lock().unwrap();
                         if let Some(j) = jobs.iter_mut().find(|j| j.id == job_id) {
@@ -365,27 +448,6 @@ where
                             j.metrics = Some(metrics.clone());
                             j.report = Some(report.clone());
                         }
-                    }
-                    if let Some(ref store) = store_clone {
-                        let _ = store.executions().update_job(
-                            &job_id,
-                            "Completed",
-                            duration.as_millis() as u64,
-                            config.fuel_limit,
-                            None,
-                        );
-
-                        let plugin_id_obj = PluginId::new(&plugin_id)
-                            .unwrap_or_else(|_| PluginId::new("unknown").unwrap());
-                        let filepath = format!("reports/report_{}.json", job_id);
-                        let _ = store.reports().insert(
-                            &job_id.to_string(),
-                            &job_id,
-                            &plugin_id_obj,
-                            &target_clone,
-                            &report,
-                            &filepath,
-                        );
                     }
                     let _ = tx_clone.send(ExecutionEvent::JobFinished {
                         job_id,
@@ -413,8 +475,6 @@ where
         let runtime_clone_to = Arc::clone(&self.runtime);
         let tx_clone_to = self.event_tx.clone();
         let store_clone_to = self.store.clone();
-        let timeout = config.timeout;
-
         std::thread::spawn(move || {
             std::thread::sleep(timeout);
             let mut jobs = jobs_clone_to.lock().unwrap();
@@ -480,6 +540,67 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn persist_completed_report(
+    store: &WorkspaceStore,
+    reports_dir: &Path,
+    job_id: Uuid,
+    plugin_id: &PluginId,
+    target: &str,
+    report: &PluginReport,
+    config: &ExecutionConfig,
+    metrics: &JobMetrics,
+    security_profile: &str,
+) -> Result<(), String> {
+    std::fs::create_dir_all(reports_dir)
+        .map_err(|error| format!("failed to create reports directory: {error}"))?;
+
+    let exported = reports::ExportedReport {
+        metadata: reports::ReportMetadata {
+            polyglid_version: env!("CARGO_PKG_VERSION").to_string(),
+            plugin_id: plugin_id.as_str().to_string(),
+            plugin_version: config.plugin_version.clone(),
+            target: target.to_string(),
+            timestamp: metrics.timestamp,
+            security_profile: security_profile.to_string(),
+            execution_duration_ms: metrics.duration.as_millis() as u64,
+            report_format_version: "1.0".to_string(),
+        },
+        report: report.clone(),
+    };
+    let payload = reports::json::export(&exported)?;
+    let filepath = reports_dir.join(format!("report_{job_id}.json"));
+    let temporary = reports_dir.join(format!(".report_{job_id}.json.tmp"));
+    std::fs::write(&temporary, payload)
+        .map_err(|error| format!("failed to write temporary report: {error}"))?;
+    std::fs::rename(&temporary, &filepath)
+        .map_err(|error| format!("failed to publish report atomically: {error}"))?;
+
+    store.reports().insert(
+        &job_id.to_string(),
+        &job_id,
+        plugin_id,
+        target,
+        report,
+        &filepath.to_string_lossy(),
+        config.project_id.as_deref(),
+        &config.plugin_version,
+        &config.plugin_checksum,
+        metrics.duration.as_millis() as u64,
+        metrics.fuel_consumed,
+        metrics.memory_used,
+        security_profile,
+    )?;
+
+    store.executions().update_job(
+        &job_id,
+        "Completed",
+        metrics.duration.as_millis() as u64,
+        metrics.fuel_consumed.unwrap_or(0),
+        None,
+    )
+}
+
 fn fail_job(
     job_id: Uuid,
     jobs: &Arc<Mutex<Vec<Job>>>,
@@ -530,7 +651,9 @@ thread_local! {
 mod tests {
     use super::*;
     use crate::{CoreError, PluginManifest};
-    use polyglid_plugin_api::PluginId;
+    use polyglid_config::plugin_registry::{PluginRegistryEntry, PluginSource, PluginStatus};
+    use polyglid_plugin_api::{Capability, PluginId};
+    use semver::Version;
 
     struct MockRuntime {
         delay: Duration,
@@ -563,6 +686,7 @@ mod tests {
             &self,
             request: &PluginRunRequest,
             _config: &AppConfig,
+            _effective_grants: &[polyglid_plugin_api::CapabilityRequest],
         ) -> Result<PluginReport, CoreError> {
             std::thread::sleep(self.delay);
             Ok(PluginReport {
@@ -605,6 +729,7 @@ mod tests {
             &self,
             request: &PluginRunRequest,
             config: &AppConfig,
+            _effective_grants: &[polyglid_plugin_api::CapabilityRequest],
         ) -> Result<PluginReport, CoreError> {
             *self.observed.lock().unwrap() = Some(config.clone());
             Ok(PluginReport::clean(
@@ -629,6 +754,10 @@ mod tests {
             timeout: Duration::from_secs(1),
             memory_limit: None,
             allowed_capabilities: vec![],
+            project_id: None,
+            approval_ids: Vec::new(),
+            plugin_version: String::new(),
+            plugin_checksum: String::new(),
         };
 
         let job_id =
@@ -664,6 +793,105 @@ mod tests {
     }
 
     #[test]
+    fn completed_job_persists_a_real_report_and_rehydrates_safe_limits() {
+        let root = std::env::temp_dir().join(format!(
+            "polyglid-report-roundtrip-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let reports_dir = root.join("reports");
+        std::fs::create_dir_all(&root).expect("test directory");
+        let store = WorkspaceStore::new(&root.join("polyglid.db")).expect("workspace store");
+        store
+            .plugins()
+            .insert(&PluginRegistryEntry {
+                id: PluginId::new("mock").expect("plugin id"),
+                name: "Mock Plugin".to_string(),
+                version: Version::new(1, 2, 3),
+                author: "PolyGlid".to_string(),
+                description: "report fixture".to_string(),
+                capabilities: Vec::<Capability>::new(),
+                checksum: "abc123".to_string(),
+                status: PluginStatus::Enabled,
+                source: PluginSource::LocalPath(PathBuf::from("mock.wasm")),
+                file_size: 1,
+                installed_at: 1,
+                last_updated: 1,
+                path: PathBuf::from("mock.wasm"),
+            })
+            .expect("register test plugin");
+        let app_config = AppConfig {
+            plugin_dir: root.join("plugins"),
+            reports_dir: reports_dir.clone(),
+            max_wasm_fuel: 777_000,
+            max_wasm_memory_bytes: Some(32 * 1024 * 1024),
+            ..AppConfig::development()
+        };
+        let manager = ExecutionManager::new_with_config(
+            MockRuntime {
+                delay: Duration::from_millis(1),
+            },
+            Some(store.clone()),
+            app_config.clone(),
+        );
+        let mut events = manager.subscribe();
+        let job_id = manager.submit_job(
+            "mock.wasm".to_string(),
+            "example.com".to_string(),
+            ExecutionConfig {
+                fuel_limit: 1_000,
+                timeout: Duration::from_secs(1),
+                memory_limit: Some(8 * 1024 * 1024),
+                allowed_capabilities: vec![],
+                project_id: Some("project-1".to_string()),
+                approval_ids: vec!["approval-1".to_string()],
+                plugin_version: "1.2.3".to_string(),
+                plugin_checksum: "abc123".to_string(),
+            },
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match events.try_recv() {
+                Ok(ExecutionEvent::JobFinished { job_id: id, .. }) if id == job_id => break,
+                Ok(ExecutionEvent::JobFailed { error, .. }) => panic!("{error}"),
+                _ if Instant::now() >= deadline => panic!("job did not finish"),
+                _ => std::thread::sleep(Duration::from_millis(5)),
+            }
+        }
+
+        let stored = store
+            .reports()
+            .get(&job_id.to_string())
+            .expect("report query")
+            .expect("persisted report");
+        assert_eq!(stored.plugin_name, "Mock Plugin");
+        assert_eq!(stored.plugin_version, "1.2.3");
+        assert_eq!(stored.project_id.as_deref(), Some("project-1"));
+        assert!(Path::new(&stored.filepath).is_file());
+        let payload = std::fs::read_to_string(&stored.filepath).expect("report file");
+        let exported: reports::ExportedReport =
+            serde_json::from_str(&payload).expect("valid exported report");
+        assert_eq!(exported.metadata.plugin_id, "mock");
+
+        let reopened = ExecutionManager::new_with_config(
+            MockRuntime {
+                delay: Duration::ZERO,
+            },
+            Some(store),
+            app_config,
+        );
+        let job = reopened
+            .get_jobs()
+            .into_iter()
+            .find(|job| job.id == job_id)
+            .expect("rehydrated job");
+        assert_eq!(job.config.fuel_limit, 777_000);
+        assert_eq!(job.config.memory_limit, Some(32 * 1024 * 1024));
+
+        std::fs::remove_dir_all(root).expect("remove test data");
+    }
+
+    #[test]
     fn test_job_execution_timeout() {
         let manager = ExecutionManager::new(
             MockRuntime {
@@ -678,6 +906,10 @@ mod tests {
             timeout: Duration::from_millis(20),
             memory_limit: None,
             allowed_capabilities: vec![],
+            project_id: None,
+            approval_ids: Vec::new(),
+            plugin_version: String::new(),
+            plugin_checksum: String::new(),
         };
 
         let job_id =
@@ -717,6 +949,10 @@ mod tests {
             timeout: Duration::from_secs(2),
             memory_limit: None,
             allowed_capabilities: vec![],
+            project_id: None,
+            approval_ids: Vec::new(),
+            plugin_version: String::new(),
+            plugin_checksum: String::new(),
         };
 
         let job_id =
@@ -769,6 +1005,10 @@ mod tests {
                 timeout: Duration::from_secs(1),
                 memory_limit: None,
                 allowed_capabilities: vec![],
+                project_id: None,
+                approval_ids: Vec::new(),
+                plugin_version: String::new(),
+                plugin_checksum: String::new(),
             },
         );
 

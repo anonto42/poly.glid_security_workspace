@@ -14,12 +14,12 @@ gate is [UI-First MVP](MVP.md).
 | --- | --- |
 | Rust workspace, WIT contract, Wasmtime runtime, and Recon component | Present |
 | Native Dioxus workbench | Connected |
-| UI-safe DTOs, typed errors, `ClientGateway`, and `LocalClient` | Connected and tested |
+| UI-safe DTOs, typed errors, `ClientGateway`, feature controllers, and `LocalClient` | Connected and tested |
 | SQLite workspace/project catalog and shell preferences | Connected |
 | Project create, rename, remove, and delete | Connected |
 | Plugin inspect, install, enable/disable, and uninstall | Connected |
 | Official Recon signature | Blocked: v0.10.0 omits the `.component.sig` required by Balanced policy |
-| Permission review | Explicit allow-once review; durable decisions remain |
+| Permission review | Exact once/session/workspace approvals enforced and persisted |
 | Desktop execution | Asynchronous `JobId`, events, history, and cancellation connected |
 | Reports | Persisted detail plus JSON, Markdown, and SARIF export connected |
 | Targets | Validated and persisted |
@@ -56,7 +56,7 @@ Status: foundation delivered; controller separation remains.
 - [x] Remove the old `DesktopBackend` module and database/runtime types from UI
       models.
 - [x] Add focused local-client and core tests.
-- [ ] Move remaining `LocalClient` calls out of Dioxus wiring components and
+- [x] Move remaining `LocalClient` calls out of Dioxus wiring components and
       into feature controllers.
 - [ ] Extract stable contracts to `crates/client-api` before adding a second
       client.
@@ -75,11 +75,11 @@ Status: allow-once slice delivered; durable scoped policy remains.
 - [x] Re-inspect the installed executable and reject missing or unexpected
       capability kinds immediately before submission.
 - [x] Audit required and granted allow-once decisions.
-- [ ] Represent decisions with stable approval IDs rather than copied
+- [x] Represent decisions with stable approval IDs rather than copied
       capability-kind arrays.
-- [ ] Enforce the exact manifest resource scope and bind it to plugin identity,
+- [x] Enforce the exact manifest resource scope and bind it to plugin identity,
       target, checksum, and version.
-- [ ] Add expiration, revocation, allow-session, and allow-workspace decisions.
+- [x] Add expiration, revocation, allow-session, and allow-workspace decisions.
 - [ ] Add a decision-management view and forged/stale/mismatched approval tests.
 
 Exit condition: enabling or installing a plugin cannot implicitly authorize a
@@ -99,7 +99,8 @@ Status: first split and product cleanup delivered; controller tests remain.
       execution, and report styles.
 - [ ] Split Scanner, Executions, Reports, and Settings stores as behavior grows.
 - [ ] Make each feature controller the only writer for its store.
-- [ ] Add controller transition and component-state tests.
+- [x] Add a controller routing test; transition and component-state coverage
+      remains.
 - [ ] Complete focus restoration, reduced-motion, and screen-reader checks.
 
 Exit condition: each production component is understandable and testable
@@ -135,8 +136,9 @@ Status: product surface is honest; acceptance work remains.
       fabricated result metrics from active routing.
 - [x] Add startup, catalog, target, plugin, permission, execution, report, and
       export error presentation.
-- [ ] Make project selection the explicit target/execution/report context.
-- [ ] Persist and validate all product settings.
+- [x] Make project selection the explicit target/execution/report context.
+- [x] Persist and validate the currently exposed shell and execution-limit
+      settings; approval-management and future settings remain feature work.
 - [ ] Complete keyboard, focus, minimum-window, reduced-motion, and screen-reader
       acceptance checks.
 - [ ] Add an end-to-end packaged-desktop test for the full MVP journey.
@@ -156,12 +158,15 @@ Status: release archives exist; user-grade packaging remains.
 - [ ] Produce normal platform installers/packages with declared dependencies.
 - [ ] Create an offline long-lived Ed25519 release-signing identity and protect
       its private seed only in the release environment/CI secret store.
-- [ ] Pin the official public key or fingerprint for explicit trust bootstrap.
-- [ ] Make CI sign and verify `recon-probe.component.wasm`, then package the
+- [x] Pin the configured official public key into release binaries and enroll
+      only that publisher at first startup.
+- [x] Make CI sign and verify `recon-probe.component.wasm`, then package the
       adjacent `recon-probe.component.sig` in every desktop artifact.
 - [ ] Publish a new signed release; do not weaken Balanced policy or silently
       fall back to Development policy for the unsigned v0.10.0 component.
-- [ ] Test packages and the primary journey on clean supported machines.
+- [x] Smoke-test unpacked release CLI/component contents on every build runner
+      and check Linux shared-library resolution; full desktop-journey tests on
+      clean machines remain.
 - [ ] Sign platform artifacts and define upgrade/rollback behavior.
 
 Exit condition: a new user can install a supported package and complete the MVP

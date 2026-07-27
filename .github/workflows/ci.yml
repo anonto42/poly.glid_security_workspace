@@ -362,6 +362,7 @@ jobs:
           cp target/release/polyglid package/
           cp target/release/polyglid-desktop package/
           cp recon-probe.component.wasm package/plugins/
+          cp plugins/recon-probe/polyglid.toml package/plugins/recon-probe.component.polyglid.toml
           cp README.md LICENSE-MIT LICENSE-APACHE package/
           tar -C package -czf polyglid-linux-preview.tar.gz .
           sha256sum polyglid-linux-preview.tar.gz > polyglid-linux-preview.tar.gz.sha256
@@ -393,6 +394,9 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ github.ref_name }}
+      signing_public_key: ${{ vars.RECON_SIGNING_PUBLIC_KEY }}
+    secrets:
+      signing_private_seed: ${{ secrets.RECON_SIGNING_PRIVATE_SEED }}
 
   delivery-result:
     name: Delivery result

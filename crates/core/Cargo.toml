@@ -17,6 +17,8 @@ serde_json = "1"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 ed25519-dalek = "2.0"
 hex = "0.4"
+argon2 = "0.5.3"
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 [lib]
 path = "src/lib.rs"

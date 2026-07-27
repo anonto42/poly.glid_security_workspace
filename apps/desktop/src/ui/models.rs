@@ -1,5 +1,5 @@
 use polyglid_desktop::client::{
-    CapabilityKind, CapabilityRequest, ExecutionState, PluginInspection,
+    ApprovalDuration, CapabilityKind, CapabilityRequest, ExecutionState, PluginInspection,
 };
 
 /// Product areas exposed by the desktop client.
@@ -81,11 +81,14 @@ pub(crate) struct PendingPluginInstall {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PermissionReview {
+    pub(crate) workspace_id: String,
+    pub(crate) project_id: String,
     pub(crate) plugin_id: String,
     pub(crate) plugin_name: String,
     pub(crate) target: String,
     pub(crate) requested: Vec<CapabilityRequest>,
-    pub(crate) approved: Vec<CapabilityKind>,
+    pub(crate) approved: Vec<CapabilityRequest>,
+    pub(crate) duration: ApprovalDuration,
 }
 
 #[derive(Clone, Debug, PartialEq)]

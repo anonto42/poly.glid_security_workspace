@@ -14,6 +14,24 @@ pub struct BootstrapSnapshot {
     pub executions: Vec<Execution>,
     pub reports: Vec<Report>,
     pub shell: ShellPreferences,
+    pub execution: ExecutionPreferences,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ExecutionPreferences {
+    pub fuel_limit: u64,
+    pub timeout_seconds: u64,
+    pub memory_limit_bytes: Option<u64>,
+}
+
+impl Default for ExecutionPreferences {
+    fn default() -> Self {
+        Self {
+            fuel_limit: 25_000_000,
+            timeout_seconds: 30,
+            memory_limit_bytes: Some(64 * 1024 * 1024),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -48,6 +66,9 @@ pub struct Plugin {
     pub version: String,
     pub author: String,
     pub description: String,
+    pub checksum: String,
+    pub signature_status: String,
+    pub publisher_fingerprint: Option<String>,
     /// Full live manifest requests, including scope, for permission review.
     pub requested_capabilities: Vec<CapabilityRequest>,
     /// Capability kinds retained as a compact list for filters and badges.
@@ -67,6 +88,9 @@ pub struct PluginInspection {
     pub version: String,
     pub description: String,
     pub author: String,
+    pub checksum: String,
+    pub signature_status: String,
+    pub publisher_fingerprint: Option<String>,
     pub requested_capabilities: Vec<CapabilityRequest>,
 }
 
@@ -173,6 +197,12 @@ pub struct CapabilityRequest {
     pub scope: CapabilityScope,
 }
 
+impl fmt::Display for CapabilityRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{} ({})", self.capability, self.scope)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum CapabilityScope {
@@ -197,6 +227,7 @@ impl fmt::Display for CapabilityScope {
 pub struct SavedTarget {
     pub name: String,
     pub group: Option<String>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -260,18 +291,59 @@ impl fmt::Display for ExecutionState {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StartExecutionRequest {
+    pub workspace_id: String,
+    pub project_id: String,
     pub plugin_id: String,
     pub target: String,
     pub fuel_limit: u64,
     pub timeout: Duration,
     pub memory_limit: Option<u64>,
-    pub approved_capabilities: Vec<CapabilityKind>,
+    pub approval_ids: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDuration {
+    Once,
+    Session,
+    Workspace,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDecision {
+    Allow,
+    Deny,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PermissionDecisionRequest {
+    pub workspace_id: String,
+    pub project_id: String,
+    pub plugin_id: String,
+    pub target: String,
+    pub request: CapabilityRequest,
+    pub decision: ApprovalDecision,
+    pub duration: ApprovalDuration,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Approval {
+    pub id: String,
+    pub plugin_id: String,
+    pub request: CapabilityRequest,
+    pub decision: ApprovalDecision,
+    pub duration: ApprovalDuration,
+    pub expiration: Option<u64>,
+    pub revoked: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Execution {
     pub id: JobId,
     pub plugin_id: String,
+    pub project_id: Option<String>,
+    pub approval_ids: Vec<String>,
     pub target: String,
     pub state: ExecutionState,
     pub started_at: u64,
@@ -337,10 +409,18 @@ pub struct Report {
     pub id: String,
     pub job_id: JobId,
     pub plugin_id: String,
+    pub project_id: Option<String>,
+    pub plugin_version: String,
+    pub plugin_checksum: String,
     pub target: String,
     pub summary: String,
     pub issues: Vec<Issue>,
     pub filepath: String,
+    pub duration_ms: u64,
+    pub fuel_consumed: Option<u64>,
+    pub memory_used: Option<u64>,
+    pub security_profile: String,
+    pub report_format_version: String,
     pub created_at: u64,
 }
 

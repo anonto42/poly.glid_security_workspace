@@ -25,6 +25,7 @@ pub(crate) struct CatalogStore {
     pub(crate) workspaces: Signal<Vec<Workspace>>,
     pub(crate) projects: Signal<Vec<Project>>,
     pub(crate) active_workspace_id: Signal<Option<String>>,
+    pub(crate) selected_project_id: Signal<Option<String>>,
     pub(crate) active_workspace_name: Signal<String>,
     pub(crate) refresh: Signal<u64>,
     pub(crate) error: Signal<Option<String>>,
@@ -51,6 +52,8 @@ pub(crate) struct RunStore {
     pub(crate) activity: Signal<Vec<String>>,
     pub(crate) error: Signal<Option<String>>,
     pub(crate) fuel_limit: Signal<u64>,
+    pub(crate) timeout_seconds: Signal<u64>,
+    pub(crate) memory_limit_bytes: Signal<u64>,
     pub(crate) refresh: Signal<u64>,
 }
 
@@ -82,6 +85,7 @@ pub(crate) fn use_app_state() -> AppState {
             workspaces: use_signal(Vec::new),
             projects: use_signal(Vec::new),
             active_workspace_id: use_signal(|| None),
+            selected_project_id: use_signal(|| None),
             active_workspace_name: use_signal(|| "PolyGlid Projects".to_string()),
             refresh: use_signal(|| 0),
             error: use_signal(|| None),
@@ -102,6 +106,8 @@ pub(crate) fn use_app_state() -> AppState {
             activity: use_signal(|| vec!["Local client initialized".to_string()]),
             error: use_signal(|| None),
             fuel_limit: use_signal(|| 25_000_000),
+            timeout_seconds: use_signal(|| 30),
+            memory_limit_bytes: use_signal(|| 64 * 1024 * 1024),
             refresh: use_signal(|| 0),
         },
     }

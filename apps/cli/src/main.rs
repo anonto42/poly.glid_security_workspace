@@ -220,7 +220,19 @@ fn plugin_verify(wasm_path: &str) -> Result<(), String> {
         println!("- No signature record found");
     }
 
-    Ok(())
+    match status {
+        polyglid_core::security::SignatureStatus::Invalid => {
+            Err("plugin signature is invalid".to_string())
+        }
+        polyglid_core::security::SignatureStatus::Missing => {
+            Err("plugin signature is missing".to_string())
+        }
+        polyglid_core::security::SignatureStatus::Revoked => {
+            Err("plugin publisher is revoked".to_string())
+        }
+        polyglid_core::security::SignatureStatus::Verified
+        | polyglid_core::security::SignatureStatus::UnknownPublisher => Ok(()),
+    }
 }
 
 fn plugin_sign(wasm_path: &str, key_path: &str) -> Result<(), String> {
@@ -635,7 +647,7 @@ fn target_list() -> Result<(), String> {
     } else {
         println!("{:<30}", "Target Name");
         println!("{:-<30}", "");
-        for (name, _) in targets {
+        for (name, _, _) in targets {
             println!("{name}");
         }
     }
@@ -650,7 +662,7 @@ fn target_add(name: &str) -> Result<(), String> {
         .unwrap_or(&config.plugin_dir)
         .join("polyglid.db");
     let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
-    store.targets().add(name, None)?;
+    store.targets().add(name, None, None)?;
     println!("Target '{name}' added successfully.");
     Ok(())
 }
@@ -663,7 +675,7 @@ fn target_remove(name: &str) -> Result<(), String> {
         .unwrap_or(&config.plugin_dir)
         .join("polyglid.db");
     let store = polyglid_core::store::WorkspaceStore::new(&db_path)?;
-    store.targets().remove(name)?;
+    store.targets().remove(name, None)?;
     println!("Target '{name}' removed successfully.");
     Ok(())
 }

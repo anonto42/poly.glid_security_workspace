@@ -14,6 +14,7 @@ pub struct AppConfig {
     pub plugin_dir: PathBuf,
     pub reports_dir: PathBuf,
     pub max_wasm_fuel: u64,
+    pub max_wasm_memory_bytes: Option<u64>,
     pub default_capabilities: Vec<Capability>,
     pub approved_capabilities: Vec<CapabilityGrant>,
 }
@@ -30,6 +31,7 @@ impl AppConfig {
             plugin_dir: PathBuf::from("plugins"),
             reports_dir: PathBuf::from("reports"),
             max_wasm_fuel: 25_000_000,
+            max_wasm_memory_bytes: Some(64 * 1024 * 1024),
             default_capabilities: Vec::new(),
             approved_capabilities: Vec::new(),
         }
@@ -61,6 +63,7 @@ impl AppConfig {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("reports")),
             max_wasm_fuel: raw_config.max_wasm_fuel.unwrap_or(25_000_000),
+            max_wasm_memory_bytes: raw_config.max_wasm_memory_bytes,
             default_capabilities: raw_config
                 .default_capabilities
                 .into_iter()
@@ -90,6 +93,9 @@ impl AppConfig {
         if self.max_wasm_fuel == 0 {
             return Err(ConfigError::EmptyFuelLimit);
         }
+        if self.max_wasm_memory_bytes == Some(0) {
+            return Err(ConfigError::EmptyMemoryLimit);
+        }
         Ok(())
     }
 
@@ -109,6 +115,8 @@ struct RawAppConfig {
     reports_dir: Option<String>,
     #[serde(default)]
     max_wasm_fuel: Option<u64>,
+    #[serde(default)]
+    max_wasm_memory_bytes: Option<u64>,
     #[serde(default)]
     default_capabilities: Vec<String>,
     #[serde(default)]
@@ -159,6 +167,7 @@ pub enum ConfigError {
     EmptyPluginDir,
     EmptyReportsDir,
     EmptyFuelLimit,
+    EmptyMemoryLimit,
     InvalidCapability(String),
     InvalidCapabilityScope,
     InvalidPluginId(String),
@@ -172,6 +181,9 @@ impl std::fmt::Display for ConfigError {
             Self::EmptyPluginDir => f.write_str("plugin directory cannot be empty"),
             Self::EmptyReportsDir => f.write_str("reports directory cannot be empty"),
             Self::EmptyFuelLimit => f.write_str("max wasm fuel must be greater than zero"),
+            Self::EmptyMemoryLimit => {
+                f.write_str("max wasm memory bytes must be greater than zero when configured")
+            }
             Self::InvalidCapability(message) => write!(f, "invalid capability: {message}"),
             Self::InvalidCapabilityScope => {
                 f.write_str("capability grant must use one scope shape")
@@ -257,5 +269,13 @@ port = 443
         let err = AppConfig::from_toml_str("max_wasm_fuel = 0").expect_err("fuel rejected");
 
         assert_eq!(err, ConfigError::EmptyFuelLimit);
+    }
+
+    #[test]
+    fn rejects_zero_memory_limit() {
+        let err =
+            AppConfig::from_toml_str("max_wasm_memory_bytes = 0").expect_err("memory rejected");
+
+        assert_eq!(err, ConfigError::EmptyMemoryLimit);
     }
 }

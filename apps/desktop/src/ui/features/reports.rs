@@ -1,7 +1,8 @@
 use std::fs;
 
 use dioxus::prelude::*;
-use polyglid_desktop::client::{ClientGateway, LocalClient, Report, ReportFormat, Severity};
+use polyglid_desktop::client::{Report, ReportFormat, Severity};
+use polyglid_desktop::controllers::DesktopControllers;
 
 use crate::ui::models::{DialogError, Overlay};
 use crate::ui::state::AppState;
@@ -114,7 +115,7 @@ fn ReportDetail(report: Report) -> Element {
 #[component]
 fn ExportButton(report_id: String, format: ReportFormat) -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     rsx! {
         button {
             class: "secondary",
@@ -127,7 +128,7 @@ fn ExportButton(report_id: String, format: ReportFormat) -> Element {
                 let report_id = report_id.clone();
                 spawn(async move {
                     let result = tokio::task::spawn_blocking(move || {
-                        let payload = client.export_report(&report_id, format)?;
+                        let payload = client.reports.export(&report_id, format)?;
                         fs::write(&path, payload).map_err(|error| {
                             polyglid_desktop::client::ClientError::Operation {
                                 operation: "export report",

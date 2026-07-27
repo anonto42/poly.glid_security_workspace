@@ -14,7 +14,7 @@ use polyglid_plugin_api::{
 };
 use serde::Deserialize;
 use wasmtime::component::{Component, HasSelf, Linker};
-use wasmtime::{Config, Engine, Store};
+use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder};
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 wasmtime::component::bindgen!({
@@ -68,7 +68,7 @@ impl PluginRuntime for WasmRuntime {
         if let Ok((metadata, capabilities)) = inspect_from_wasm(plugin.path()) {
             let id =
                 PluginId::new(&metadata.name).map_err(|err| CoreError::Runtime(err.to_string()))?;
-            let requested_capabilities = capabilities
+            let embedded_capabilities = capabilities
                 .into_iter()
                 .map(|cap_str| {
                     Capability::from_str(&cap_str)
@@ -76,6 +76,16 @@ impl PluginRuntime for WasmRuntime {
                         .map_err(|err| CoreError::Runtime(err.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            // A sidecar can add exact scopes that the current WIT string list
+            // cannot represent. It is accepted only when it describes the
+            // same component identity and version.
+            let requested_capabilities = manifest_path_for(plugin.path())
+                .map(|path| read_manifest(&path))
+                .transpose()?
+                .filter(|manifest| manifest.id == id && manifest.version == metadata.version)
+                .map_or(embedded_capabilities, |manifest| {
+                    manifest.requested_capabilities
+                });
             return Ok(PluginManifest {
                 id,
                 name: metadata.display_name,
@@ -114,6 +124,7 @@ impl PluginRuntime for WasmRuntime {
         &self,
         request: &PluginRunRequest,
         config: &AppConfig,
+        effective_grants: &[CapabilityRequest],
     ) -> Result<ApiPluginReport, CoreError> {
         ensure_file_exists(request.plugin.path())?;
         run_component(
@@ -121,6 +132,8 @@ impl PluginRuntime for WasmRuntime {
             request.target.as_str(),
             config.reports_dir.clone(),
             config.max_wasm_fuel,
+            config.max_wasm_memory_bytes,
+            effective_grants,
         )
     }
 
@@ -168,11 +181,6 @@ fn manifest_path_for(plugin_path: &Path) -> Option<PathBuf> {
     let same_name = plugin_path.with_extension("polyglid.toml");
     if same_name.is_file() {
         return Some(same_name);
-    }
-
-    let same_dir = plugin_path.parent()?.join("polyglid.toml");
-    if same_dir.is_file() {
-        return Some(same_dir);
     }
 
     for stem in manifest_stems(plugin_path) {
@@ -268,8 +276,14 @@ fn manifest_stems(plugin_path: &Path) -> Vec<String> {
 
 /// Instantiate the WASM component and call `metadata()` + `required-capabilities()`.
 fn inspect_from_wasm(path: &Path) -> Result<(ApiPluginMetadata, Vec<String>), CoreError> {
-    let (mut store, bindings) =
-        instantiate_plugin(path, "_inspect_", PathBuf::from("reports"), 1_000_000)?;
+    let (mut store, bindings, _registration) = instantiate_plugin(
+        path,
+        "_inspect_",
+        PathBuf::from("reports"),
+        1_000_000,
+        Some(16 * 1024 * 1024),
+        &[],
+    )?;
     let metadata = bindings.call_metadata(&mut store).map_runtime_error()?;
     let capabilities = bindings
         .call_required_capabilities(&mut store)
@@ -289,8 +303,14 @@ fn call_panel_export(
     report: &ApiPluginReport,
     kind: PanelKind,
 ) -> Result<ApiPanelLayout, CoreError> {
-    let (mut store, bindings) =
-        instantiate_plugin(path, "_panel_", PathBuf::from("reports"), 1_000_000)?;
+    let (mut store, bindings, _registration) = instantiate_plugin(
+        path,
+        "_panel_",
+        PathBuf::from("reports"),
+        1_000_000,
+        Some(16 * 1024 * 1024),
+        &[],
+    )?;
     let wit_report = api_report_to_wit(report);
     let panel = match kind {
         PanelKind::Cli => bindings
@@ -309,7 +329,9 @@ fn instantiate_plugin(
     allowed_dns_host: &str,
     reports_dir: PathBuf,
     max_fuel: u64,
-) -> Result<(Store<RuntimeState>, SecurityTool), CoreError> {
+    max_memory_bytes: Option<u64>,
+    effective_grants: &[CapabilityRequest],
+) -> Result<(Store<RuntimeState>, SecurityTool, EngineRegistration), CoreError> {
     let mut config = Config::new();
     config.wasm_component_model(true);
     config.consume_fuel(true);
@@ -319,9 +341,11 @@ fn instantiate_plugin(
     let component = Component::from_file(&engine, path).map_runtime_error()?;
 
     // Register the engine clone under the current job ID if configured
-    if let Some(job_id) = CURRENT_JOB_ID.with(|id| id.get()) {
+    let job_id = CURRENT_JOB_ID.with(|id| id.get());
+    if let Some(job_id) = job_id {
         register_engine(job_id, engine.clone());
     }
+    let registration = EngineRegistration(job_id);
 
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_runtime_error()?;
@@ -336,13 +360,22 @@ fn instantiate_plugin(
     )
     .map_runtime_error()?;
 
-    let mut store = Store::new(&engine, RuntimeState::new(allowed_dns_host, reports_dir));
+    let mut store = Store::new(
+        &engine,
+        RuntimeState::new(
+            allowed_dns_host,
+            reports_dir,
+            effective_grants.to_vec(),
+            max_memory_bytes,
+        ),
+    );
+    store.limiter(|state| &mut state.limits);
     store.set_fuel(max_fuel).map_runtime_error()?;
     store.set_epoch_deadline(1);
 
     let bindings =
         SecurityTool::instantiate(&mut store, &component, &linker).map_runtime_error()?;
-    Ok((store, bindings))
+    Ok((store, bindings, registration))
 }
 
 fn run_component(
@@ -350,18 +383,33 @@ fn run_component(
     target: &str,
     reports_dir: PathBuf,
     max_wasm_fuel: u64,
+    max_memory_bytes: Option<u64>,
+    effective_grants: &[CapabilityRequest],
 ) -> Result<ApiPluginReport, CoreError> {
-    let (mut store, bindings) = instantiate_plugin(path, target, reports_dir, max_wasm_fuel)?;
+    let (mut store, bindings, _registration) = instantiate_plugin(
+        path,
+        target,
+        reports_dir,
+        max_wasm_fuel,
+        max_memory_bytes,
+        effective_grants,
+    )?;
     let result = bindings
         .call_execute(&mut store, target)
         .map_runtime_error()?
         .map_err(CoreError::Runtime);
 
-    if let Some(job_id) = CURRENT_JOB_ID.with(|id| id.get()) {
-        unregister_engine(job_id);
-    }
-
     result.map(Into::into)
+}
+
+struct EngineRegistration(Option<Uuid>);
+
+impl Drop for EngineRegistration {
+    fn drop(&mut self) {
+        if let Some(job_id) = self.0 {
+            unregister_engine(job_id);
+        }
+    }
 }
 
 /// Convert host API report back to the WIT representation (needed for panel calls).
@@ -394,16 +442,36 @@ struct RuntimeState {
     wasi: WasiCtx,
     allowed_dns_host: String,
     reports_dir: PathBuf,
+    effective_grants: Vec<CapabilityRequest>,
+    limits: StoreLimits,
 }
 
 impl RuntimeState {
-    fn new(allowed_dns_host: &str, reports_dir: PathBuf) -> Self {
+    fn new(
+        allowed_dns_host: &str,
+        reports_dir: PathBuf,
+        effective_grants: Vec<CapabilityRequest>,
+        max_memory_bytes: Option<u64>,
+    ) -> Self {
+        let mut limits = StoreLimitsBuilder::new();
+        if let Some(max_memory_bytes) = max_memory_bytes {
+            limits = limits.memory_size(max_memory_bytes as usize);
+        }
         Self {
             table: ResourceTable::new(),
             wasi: WasiCtxBuilder::new().build(),
             allowed_dns_host: allowed_dns_host.to_string(),
             reports_dir,
+            effective_grants,
+            limits: limits.build(),
         }
+    }
+
+    fn allows(&self, capability: Capability, requested_scope: &CapabilityScope) -> bool {
+        self.effective_grants.iter().any(|grant| {
+            grant.capability == capability
+                && (grant.scope == CapabilityScope::Any || &grant.scope == requested_scope)
+        })
     }
 }
 
@@ -418,6 +486,12 @@ impl WasiView for RuntimeState {
 
 impl polyglid::engine::dns::Host for RuntimeState {
     fn resolve(&mut self, host: String) -> Result<Vec<String>, String> {
+        let requested_scope = CapabilityScope::Target(host.clone());
+        if !self.allows(Capability::DnsResolve, &requested_scope)
+            && !self.allows(Capability::DnsResolve, &CapabilityScope::Any)
+        {
+            return Err("dns-resolve was not approved for this execution".to_string());
+        }
         if host != self.allowed_dns_host {
             return Err(format!(
                 "dns-resolve is scoped to {}",
@@ -440,6 +514,28 @@ impl polyglid::engine::dns::Host for RuntimeState {
 impl polyglid::engine::reports::Host for RuntimeState {
     fn write(&mut self, filename: String, contents: String) -> Result<String, String> {
         let output_path = safe_report_path(&self.reports_dir, &filename)?;
+        let relative_root = self
+            .reports_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("reports")
+            .to_string();
+        let approved = self.effective_grants.iter().any(|grant| {
+            grant.capability == Capability::ReportWrite
+                && match &grant.scope {
+                    CapabilityScope::Any => true,
+                    CapabilityScope::PathPrefix(prefix) => {
+                        let prefix_path = Path::new(prefix);
+                        (prefix_path.is_absolute() && output_path.starts_with(prefix_path))
+                            || (!prefix_path.is_absolute()
+                                && (prefix == &relative_root || prefix == "reports"))
+                    }
+                    _ => false,
+                }
+        });
+        if !approved {
+            return Err("report-write was not approved for this execution".to_string());
+        }
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
         }
@@ -656,7 +752,12 @@ path_prefix = "/tmp/polyglid"
 
     #[test]
     fn dns_host_import_is_scoped_to_run_target() {
-        let mut state = RuntimeState::new("example.com", PathBuf::from("reports"));
+        let mut state = RuntimeState::new(
+            "example.com",
+            PathBuf::from("reports"),
+            vec![CapabilityRequest::unscoped(Capability::DnsResolve)],
+            None,
+        );
 
         let err = polyglid::engine::dns::Host::resolve(&mut state, "not-example.com".to_string())
             .expect_err("host is denied");
@@ -678,7 +779,12 @@ path_prefix = "/tmp/polyglid"
     #[test]
     fn report_host_import_writes_under_reports_dir() {
         let dir = std::env::temp_dir().join(format!("polyglid-report-test-{}", std::process::id()));
-        let mut state = RuntimeState::new("example.com", dir.clone());
+        let mut state = RuntimeState::new(
+            "example.com",
+            dir.clone(),
+            vec![CapabilityRequest::unscoped(Capability::ReportWrite)],
+            None,
+        );
 
         let path = polyglid::engine::reports::Host::write(
             &mut state,
@@ -694,5 +800,27 @@ path_prefix = "/tmp/polyglid"
 
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_dir(dir);
+    }
+
+    #[test]
+    fn host_imports_deny_missing_effective_grants() {
+        let dir =
+            std::env::temp_dir().join(format!("polyglid-host-deny-test-{}", std::process::id()));
+        let mut state = RuntimeState::new("example.com", dir, Vec::new(), None);
+
+        assert_eq!(
+            polyglid::engine::dns::Host::resolve(&mut state, "example.com".to_string())
+                .expect_err("dns denied"),
+            "dns-resolve was not approved for this execution"
+        );
+        assert_eq!(
+            polyglid::engine::reports::Host::write(
+                &mut state,
+                "demo.txt".to_string(),
+                "body".to_string(),
+            )
+            .expect_err("report denied"),
+            "report-write was not approved for this execution"
+        );
     }
 }

@@ -22,39 +22,38 @@ and migration phases live in the canonical
 
 | Surface | Status | Current behavior | Remaining work |
 | --- | --- | --- | --- |
-| Window and workbench shell | Real | Dioxus window, product rail, contextual sidebar, open views, resizable panes, command palette | Complete feature-controller separation |
-| Client boundary | Real foundation | UI-safe DTOs/errors, `ClientGateway`, `LocalClient`, bootstrap, and execution subscription | Extract stable contracts before a second client; remove gateway calls from views |
+| Window and workbench shell | Real | Dioxus window, product rail, contextual sidebar, open views, resizable panes, command palette | Accessibility acceptance |
+| Client boundary | Real foundation | UI-safe DTOs/errors, `ClientGateway`, one `ApplicationHost`, feature controllers, bootstrap, and execution subscription | Extract stable contracts before a second client; make controllers the sole store writers |
 | Shell preferences | Real | Pane visibility and sizes persist through local settings | Persist any new shell preferences through the same boundary |
 | Workspace selector | Real | Loads registered workspaces and changes the active workspace | Workspace registration UI |
-| Projects | Real | Discovers, creates, renames, removes, and optionally deletes real folders | Project selection as explicit scan/report context |
+| Projects | Real | Discovers, creates, renames, removes, selects, and optionally deletes real folders | Filtering and recovery polish |
 | Plugin registry | Partial | Loads, validates, installs, enables, disables, and uninstalls valid WASM components under the configured signature policy | Official signed-component packaging and trust bootstrap |
-| New scan | Partial | Uses a real target and installed plugin, shows live manifest capability requests/scopes, starts asynchronously, and returns a `JobId` | Resource-scope enforcement and persisted session/workspace decisions |
-| Saved targets | Real | Validates, persists, selects, and removes local targets | Project grouping and richer target metadata |
+| New scan | Real foundation | Uses a project-bound target and installed plugin, records exact scoped once/session/workspace approvals, starts asynchronously, and returns a `JobId` | Approval-management and richer progress UI |
+| Saved targets | Real | Validates, persists, selects, filters, and removes project-bound local targets | Richer target metadata |
 | Executions | Real foundation | Shows local job history and states, opens reports, and requests cancellation | Rich progress stages, cancellation confirmation, and event reconnect polish |
 | Reports | Real | Loads persisted reports, shows real severity/findings, and exports JSON, Markdown, or SARIF | Report filters and optional HTML action in the UI |
 | Findings panel | Real | Shows findings from the selected persisted report | Selection context polish |
 | Activity panel | Partial | Shows safe local lifecycle messages and errors | Complete typed execution-log/event history |
-| Settings | Partial | Shows real local counts and applies the fuel limit to new jobs | Persist execution settings and expose validated host health |
+| Settings | Partial | Shows real local counts and persists validated fuel, timeout, memory, and shell limits | Expose validated host health and approval management |
 | Work Tracks, Automation, and AI Agents | Removed | Seeded preview modules and routing were deleted | Design real services before adding new implementations |
 | Source preview and terminal | Removed | Placeholder source and terminal implementations were deleted | Add only with a real, justified service and security design |
 
-The capability review is an allow-once gate. It starts with nothing selected,
-requires every capability kind requested by the executable, rejects extra or
-missing approvals, and writes audit events. Installation and enablement are not
-execution approval. Durable approval IDs, enforcement of the displayed
-manifest resource scopes, expiration, and session/workspace decisions remain
-part of the MVP security work.
+The capability review starts with nothing selected, requires every exact
+request and scope exposed by the executable, and writes auditable approval
+records. Approval IDs bind the workspace, project, target, plugin version,
+checksum, capability, and resource scope. Once, session, and workspace
+durations are enforced; installation and enablement are never execution
+approval.
 
 ### Current release trust blocker
 
-Balanced policy requires a valid adjacent component signature. The v0.10.0
-release includes `recon-probe.component.wasm` but not its
-`recon-probe.component.sig`, so that bundled component cannot be installed
-safely under the default policy. Do not weaken the client policy to hide this
-packaging failure. Release hardening must establish an offline long-lived
-Ed25519 signing identity, protect its seed in CI secrets, pin the official
-public key/fingerprint for trust bootstrap, sign and verify the release
-component, package both files, and publish a new signed release.
+Balanced policy requires a valid adjacent component signature. The existing
+v0.10.0 release predates signed packaging. New formal release automation
+requires a protected Ed25519 seed and matching configured public key, signs and
+verifies the component, packages its adjacent `.sig`, and embeds that public key
+in release desktop binaries for explicit first-start trust enrollment.
+Publishing the first new signed release remains required; the client policy
+must not be weakened to hide that distribution requirement.
 
 ## Current Composition
 
@@ -76,7 +75,8 @@ flowchart TD
     EDITOR --> PLUGINS[features/plugins.rs]
 
     APP --> STORES[Shell, Catalog, Plugin, and Run stores]
-    APP --> LOCAL[client/local.rs · LocalClient]
+    APP --> CONTROLLERS[controllers.rs · Feature controllers]
+    CONTROLLERS --> LOCAL[client/local.rs · LocalClient]
     LOCAL --> PORT[client/gateway.rs · ClientGateway]
     LOCAL --> CORE[Core services and policy]
     CORE --> SQLITE[(SQLite)]
@@ -96,14 +96,15 @@ Paths below are relative to `apps/desktop/src/`.
 | `client/error.rs` | Typed, presentation-safe client failures |
 | `client/gateway.rs` | `ClientGateway` operations and execution subscription |
 | `client/local.rs` | Local adapter over core services, SQLite, plugin manager, and execution manager |
-| `ui/app.rs` | Creates contexts, loads the bootstrap snapshot, watches operational changes, and composes the shell |
+| `controllers.rs` | Feature-specific operations over the gateway; the only adapter capability exposed to views |
+| `ui/app.rs` | Creates the application host/controller context, loads the bootstrap snapshot, watches operational changes, and composes the shell |
 | `ui/state.rs` | Composes `ShellStore`, `CatalogStore`, `PluginStore`, and `RunStore` |
 | `ui/models.rs` | Navigation, overlay, permission-review, and presentation models |
 | `ui/commands.rs` | Product navigation shortcuts and shell-preference persistence |
 | `ui/top_bar.rs` | Brand, workspace picker, command entry, live local status, and notifications |
 | `ui/shell.rs` | Product activity rail and status bar |
 | `ui/sidebar.rs` | Project, target, execution, report, and plugin sidebars |
-| `ui/editor.rs` | Open-view routing and current local-client action wiring |
+| `ui/editor.rs` | Open-view routing and feature-controller action wiring |
 | `ui/bottom_panel.rs` | Persisted findings and local activity |
 | `ui/overlays.rs` | Settings, commands, plugin inspection/install, permission review, and safe errors |
 | `ui/features/projects.rs` | Real workspace project management |

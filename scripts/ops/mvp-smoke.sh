@@ -34,7 +34,7 @@ version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
 grep -Fxq "id: polyglid.recon_probe" <<<"$inspect"
 grep -Fxq "version: $version" <<<"$inspect"
 grep -Fxq -- "- dns-resolve" <<<"$inspect"
-grep -Fxq -- "- report-write" <<<"$inspect"
+grep -Fxq -- "- report-write (path-prefix=reports)" <<<"$inspect"
 
 echo "==> Executing the real host-to-component path"
 output=$(POLYGLID_CONFIG="$config_path" target/debug/polyglid plugin run \

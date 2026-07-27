@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::{ClientGateway, ExecutionState, JobId, LocalClient, PluginStatus};
+use polyglid_desktop::client::{ApprovalDuration, ExecutionState, JobId, PluginStatus};
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::features::{
     ExecutionsDashboard, PluginDashboard, ProjectsDashboard, ReportsDashboard, ScannerDashboard,
@@ -84,14 +85,22 @@ fn ScannerEditor() -> Element {
             on_target: move |value| state.runs.selected_target.set(value),
             on_plugin: move |value| state.plugins.selected_id.set(Some(value)),
             on_review: move |_| {
+                let Some(workspace_id) = state.catalog.active_workspace_id.read().clone() else { return; };
+                let Some(project_id) = state.catalog.selected_project_id.read().clone() else {
+                    state.runs.error.set(Some("Select a project before starting a scan.".to_string()));
+                    return;
+                };
                 let Some(plugin_id) = state.plugins.selected_id.read().clone() else { return; };
                 let Some(plugin) = state.plugins.items.read().iter().find(|item| item.id == plugin_id).cloned() else { return; };
                 state.shell.overlay.set(Some(Overlay::PermissionReview(PermissionReview {
+                    workspace_id,
+                    project_id,
                     plugin_id: plugin.id,
                     plugin_name: plugin.name,
                     target: state.runs.selected_target.read().trim().to_string(),
                     requested: plugin.requested_capabilities,
                     approved: Vec::new(),
+                    duration: ApprovalDuration::Once,
                 })));
             }
         }
@@ -101,7 +110,7 @@ fn ScannerEditor() -> Element {
 #[component]
 fn ExecutionsEditor() -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let cancel_client = client.clone();
     rsx! {
         ExecutionsDashboard {
@@ -110,7 +119,7 @@ fn ExecutionsEditor() -> Element {
             on_cancel: move |job_id: JobId| {
                 let client = cancel_client.clone();
                 spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || client.cancel_execution(job_id)).await;
+                    let result = tokio::task::spawn_blocking(move || client.executions.cancel(job_id)).await;
                     match result {
                         Ok(Ok(())) => {
                             state.runs.activity.write().push(format!("Cancelled execution {job_id}"));
@@ -137,7 +146,7 @@ fn ExecutionsEditor() -> Element {
 #[component]
 fn PluginsEditor() -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let toggle_client = client.clone();
     let uninstall_client = client.clone();
     rsx! {
@@ -156,7 +165,7 @@ fn PluginsEditor() -> Element {
                 let client = toggle_client.clone();
                 spawn(async move {
                     let toggle_id = id.clone();
-                    let result = tokio::task::spawn_blocking(move || client.set_plugin_enabled(&toggle_id, enabled)).await;
+                    let result = tokio::task::spawn_blocking(move || client.plugins.set_enabled(&toggle_id, enabled)).await;
                     match result {
                         Ok(Ok(())) => {
                             if let Some(plugin) = state.plugins.items.write().iter_mut().find(|plugin| plugin.id == id) {
@@ -173,7 +182,7 @@ fn PluginsEditor() -> Element {
                 let removed_id = id.clone();
                 spawn(async move {
                     let operation_id = removed_id.clone();
-                    let result = tokio::task::spawn_blocking(move || client.uninstall_plugin(&operation_id)).await;
+                    let result = tokio::task::spawn_blocking(move || client.plugins.uninstall(&operation_id)).await;
                     match result {
                         Ok(Ok(())) => {
                             state.plugins.items.write().retain(|plugin| plugin.id != removed_id);

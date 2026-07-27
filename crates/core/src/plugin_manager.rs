@@ -104,6 +104,30 @@ impl PluginRepository {
         fs::copy(src_path, &dest_path)
             .map_err(|err| format!("failed to copy plugin to workspace: {err}"))?;
 
+        for (source, destination) in [
+            (
+                src_path.with_extension("sig"),
+                plugin_dir.join(format!("{}.sig", id.as_str())),
+            ),
+            (
+                src_path.with_extension("polyglid.toml"),
+                plugin_dir.join(format!("{}.polyglid.toml", id.as_str())),
+            ),
+        ] {
+            if source.is_file() {
+                if let Err(error) = fs::copy(&source, &destination) {
+                    let _ = fs::remove_file(&dest_path);
+                    let _ = fs::remove_file(plugin_dir.join(format!("{}.sig", id.as_str())));
+                    let _ =
+                        fs::remove_file(plugin_dir.join(format!("{}.polyglid.toml", id.as_str())));
+                    return Err(format!(
+                        "failed to copy plugin sidecar '{}' to workspace: {error}",
+                        source.display()
+                    ));
+                }
+            }
+        }
+
         Ok(dest_path)
     }
 
@@ -112,6 +136,19 @@ impl PluginRepository {
         if path.exists() {
             fs::remove_file(&path)
                 .map_err(|err| format!("failed to delete plugin file from workspace: {err}"))?;
+        }
+        for sidecar in [
+            plugin_dir.join(format!("{}.sig", id.as_str())),
+            plugin_dir.join(format!("{}.polyglid.toml", id.as_str())),
+        ] {
+            if sidecar.exists() {
+                fs::remove_file(&sidecar).map_err(|err| {
+                    format!(
+                        "failed to delete plugin sidecar '{}': {err}",
+                        sidecar.display()
+                    )
+                })?;
+            }
         }
         Ok(())
     }
@@ -302,6 +339,31 @@ where
         src_path: &Path,
     ) -> Result<(PluginManifest, polyglid_plugin_api::ApiPluginMetadata), String> {
         PluginValidator::validate(self.runtime.as_ref(), src_path)
+    }
+
+    pub fn inspect_plugin_package(
+        &self,
+        src_path: &Path,
+    ) -> Result<
+        (
+            PluginManifest,
+            polyglid_plugin_api::ApiPluginMetadata,
+            String,
+            crate::security::SignatureStatus,
+            Option<String>,
+        ),
+        String,
+    > {
+        let (manifest, metadata) = self.validate_plugin(src_path)?;
+        let checksum = compute_sha256(src_path)?;
+        let (status, signature) = self.verify_plugin_signature(src_path, &manifest.id)?;
+        Ok((
+            manifest,
+            metadata,
+            checksum,
+            status,
+            signature.map(|record| record.fingerprint),
+        ))
     }
 
     pub fn install_plugin(
@@ -564,6 +626,7 @@ mod tests {
             &self,
             _request: &crate::PluginRunRequest,
             _config: &AppConfig,
+            _effective_grants: &[polyglid_plugin_api::CapabilityRequest],
         ) -> Result<crate::PluginReport, crate::CoreError> {
             Err(crate::CoreError::Runtime("cancelled".to_string()))
         }
@@ -625,6 +688,12 @@ mod tests {
         let dest_dir = temp_dir.join(format!("dest_dir_{timestamp}"));
 
         fs::write(&src_path, b"\x00asmdummy").unwrap();
+        fs::write(src_path.with_extension("sig"), b"signature").unwrap();
+        fs::write(
+            src_path.with_extension("polyglid.toml"),
+            b"id = \"repo.test\"",
+        )
+        .unwrap();
 
         let repo = PluginRepository;
         let id = PluginId::new("repo.test").unwrap();
@@ -633,6 +702,8 @@ mod tests {
         let installed_path = repo.install(&id, &src_path, &dest_dir).unwrap();
         assert!(installed_path.exists());
         assert_eq!(installed_path.file_name().unwrap(), "repo.test.wasm");
+        assert!(dest_dir.join("repo.test.sig").is_file());
+        assert!(dest_dir.join("repo.test.polyglid.toml").is_file());
 
         // 2. Discover
         let discovered = repo.discover(&dest_dir).unwrap();
@@ -642,9 +713,13 @@ mod tests {
         // 3. Remove
         repo.remove(&id, &dest_dir).unwrap();
         assert!(!installed_path.exists());
+        assert!(!dest_dir.join("repo.test.sig").exists());
+        assert!(!dest_dir.join("repo.test.polyglid.toml").exists());
 
         // Clean up
         let _ = fs::remove_file(&src_path);
+        let _ = fs::remove_file(src_path.with_extension("sig"));
+        let _ = fs::remove_file(src_path.with_extension("polyglid.toml"));
         let _ = fs::remove_dir_all(&dest_dir);
     }
 

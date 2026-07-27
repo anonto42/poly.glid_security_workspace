@@ -338,4 +338,42 @@ pub const MIGRATIONS: &[Migration] = &[
             "#,
         ],
     },
+    Migration {
+        version: 6,
+        sqls: &[
+            r#"ALTER TABLE permissions ADD COLUMN project_id TEXT;"#,
+            r#"ALTER TABLE permissions ADD COLUMN plugin_version TEXT NOT NULL DEFAULT '';"#,
+            r#"ALTER TABLE permissions ADD COLUMN plugin_checksum TEXT NOT NULL DEFAULT '';"#,
+            r#"ALTER TABLE permissions ADD COLUMN target TEXT NOT NULL DEFAULT '';"#,
+            r#"ALTER TABLE permissions ADD COLUMN duration TEXT NOT NULL DEFAULT 'workspace'
+                CHECK(duration IN ('once', 'session', 'workspace'));"#,
+            r#"ALTER TABLE permissions ADD COLUMN session_id TEXT;"#,
+            r#"ALTER TABLE permissions ADD COLUMN revoked_at INTEGER;"#,
+            r#"CREATE INDEX IF NOT EXISTS idx_permissions_context
+                ON permissions(plugin_id, workspace, project_id, target, decision, expiration, revoked_at);"#,
+            r#"ALTER TABLE targets ADD COLUMN project_id TEXT;"#,
+            r#"CREATE INDEX IF NOT EXISTS idx_targets_project ON targets(project_id, name);"#,
+            r#"ALTER TABLE execution_history ADD COLUMN project_id TEXT;"#,
+            r#"ALTER TABLE execution_history ADD COLUMN approval_ids TEXT NOT NULL DEFAULT '[]';"#,
+            r#"ALTER TABLE execution_history ADD COLUMN plugin_version TEXT NOT NULL DEFAULT '';"#,
+            r#"ALTER TABLE execution_history ADD COLUMN plugin_checksum TEXT NOT NULL DEFAULT '';"#,
+            r#"ALTER TABLE execution_history ADD COLUMN memory_used INTEGER;"#,
+            r#"CREATE INDEX IF NOT EXISTS idx_execution_project
+                ON execution_history(project_id, started_at);"#,
+            r#"ALTER TABLE reports ADD COLUMN project_id TEXT;"#,
+            r#"ALTER TABLE reports ADD COLUMN plugin_version TEXT NOT NULL DEFAULT '';"#,
+            r#"ALTER TABLE reports ADD COLUMN plugin_checksum TEXT NOT NULL DEFAULT '';"#,
+            r#"ALTER TABLE reports ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0;"#,
+            r#"ALTER TABLE reports ADD COLUMN fuel_consumed INTEGER;"#,
+            r#"ALTER TABLE reports ADD COLUMN memory_used INTEGER;"#,
+            r#"ALTER TABLE reports ADD COLUMN security_profile TEXT NOT NULL DEFAULT 'Balanced';"#,
+            r#"ALTER TABLE reports ADD COLUMN report_format_version TEXT NOT NULL DEFAULT '1.0';"#,
+            r#"CREATE INDEX IF NOT EXISTS idx_reports_project
+                ON reports(project_id, created_at);"#,
+        ],
+    },
+    Migration {
+        version: 7,
+        sqls: &[r#"ALTER TABLE reports ADD COLUMN plugin_name TEXT NOT NULL DEFAULT '';"#],
+    },
 ];

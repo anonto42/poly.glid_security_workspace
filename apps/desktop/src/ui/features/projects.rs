@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::{ClientGateway, LocalClient, Project};
+use polyglid_desktop::client::Project;
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::super::models::LoadState;
 use super::super::state::AppState;
@@ -7,7 +8,7 @@ use super::super::state::AppState;
 #[component]
 pub(crate) fn ProjectsDashboard() -> Element {
     let state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let create_client = client.clone();
     let mut new_name = use_signal(String::new);
     let load_state = state.catalog.load.read().clone();
@@ -36,7 +37,7 @@ pub(crate) fn ProjectsDashboard() -> Element {
                             let name = new_name.read().trim().to_string();
                             new_name.set(String::new());
                             let client = create_client.clone();
-                            run_mutation(state, move || client.create_project(&workspace_id, &name).map(|_| ()).map_err(|error| error.to_string()));
+                            run_mutation(state, move || client.projects.create(&workspace_id, &name).map(|_| ()).map_err(|error| error.to_string()));
                         },
                         "+ Create project"
                     }
@@ -74,14 +75,20 @@ pub(crate) fn ProjectsDashboard() -> Element {
 
 #[component]
 fn ProjectCard(project: Project) -> Element {
-    let client = use_context::<LocalClient>();
-    let state = use_context::<AppState>();
+    let client = use_context::<DesktopControllers>();
+    let mut state = use_context::<AppState>();
     let mut editing = use_signal(|| false);
     let mut confirming = use_signal(|| false);
     let mut name = use_signal(|| project.name.clone());
     let project_id = project.id.clone();
+    let selected = state
+        .catalog
+        .selected_project_id
+        .read()
+        .as_ref()
+        .is_some_and(|id| id == &project.id);
     rsx! {
-        article { class: "project-card",
+        article { class: if selected { "project-card selected" } else { "project-card" },
             div { class: "project-card-head", span { class: "project-symbol", "◇" } span { class: "badge good", "{project.kind}" } }
             if *editing.read() {
                 input { value: "{name}", aria_label: "Rename project", oninput: move |event| name.set(event.value()) }
@@ -98,7 +105,7 @@ fn ProjectCard(project: Project) -> Element {
                             let id = project_id.clone();
                             let name = name.read().trim().to_string();
                             let client = client.clone();
-                            run_mutation(state, move || client.rename_project(&id, &name).map(|_| ()).map_err(|error| error.to_string()));
+                            run_mutation(state, move || client.projects.rename(&id, &name).map(|_| ()).map_err(|error| error.to_string()));
                             editing.set(false);
                         }
                     }, "Save" }
@@ -110,7 +117,7 @@ fn ProjectCard(project: Project) -> Element {
                         move |_| {
                             let id = project_id.clone();
                             let client = client.clone();
-                            run_mutation(state, move || client.remove_project(&id, false).map_err(|error| error.to_string()));
+                            run_mutation(state, move || client.projects.remove(&id, false).map_err(|error| error.to_string()));
                         }
                     }, "Remove only" }
                     button { class: "danger-button", onclick: {
@@ -119,11 +126,20 @@ fn ProjectCard(project: Project) -> Element {
                         move |_| {
                             let id = project_id.clone();
                             let client = client.clone();
-                            run_mutation(state, move || client.remove_project(&id, true).map_err(|error| error.to_string()));
+                            run_mutation(state, move || client.projects.remove(&id, true).map_err(|error| error.to_string()));
                         }
                     }, "Delete files" }
                     button { class: "ghost-button", onclick: move |_| confirming.set(false), "Cancel" }
                 } else {
+                    button {
+                        class: if selected { "secondary" } else { "primary small" },
+                        disabled: selected,
+                        onclick: {
+                            let project_id = project_id.clone();
+                            move |_| state.catalog.selected_project_id.set(Some(project_id.clone()))
+                        },
+                        if selected { "Selected" } else { "Use project" }
+                    }
                     button { class: "secondary", onclick: move |_| editing.set(true), "Rename" }
                     button { class: "ghost-button", onclick: move |_| confirming.set(true), "Remove" }
                 }

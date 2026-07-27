@@ -117,6 +117,24 @@ impl CollaborationStore {
             .next())
     }
 
+    pub fn update_password(
+        &self,
+        user_id: &str,
+        password_hash: &str,
+        salt: &str,
+        updated_at: i64,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE users
+             SET password_hash = ?1, salt = ?2, updated_at = ?3
+             WHERE id = ?4",
+            params![password_hash, salt, updated_at, user_id],
+        )
+        .map_err(|error| format!("update_password failed: {error}"))?;
+        Ok(())
+    }
+
     pub fn count_users(&self) -> Result<i64, String> {
         let conn = self.conn.lock().unwrap();
         conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))

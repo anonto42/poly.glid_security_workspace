@@ -209,18 +209,25 @@ must sign and verify the exact component and package its adjacent signature.
 The client must never silently switch to Development policy for an unsigned
 component.
 
-### Current migration position
+### Current implementation position
 
-The desktop local-client boundary now re-inspects the installed component,
-requires an explicit per-run selection matching all requested capability kinds,
-rejects missing or unexpected approvals, and audits the allow-once decision.
-This closes the earlier path that copied every registered capability into the
-execution configuration without a separate review.
+The desktop creates one `ApplicationHost`, wraps its `LocalClient` gateway in
+feature controllers, and provides those controllers to Dioxus. Presentation
+components no longer receive the concrete local adapter. Controllers currently
+route feature operations while the existing Dioxus feature stores retain UI
+state; making controllers the sole store writers remains a follow-up.
 
-The current allow-once step is the first security slice, not the final approval
-model. Approval IDs, manifest resource scopes, expiration, session/workspace
-decisions, and a persisted decision-management view still belong in core before
-the desktop MVP satisfies the complete flow above.
+Before a run, the local boundary re-inspects the installed component and binds
+each approval ID to the workspace, project, target, plugin ID, version,
+checksum, exact capability, and exact resource scope. Once, session, and
+workspace durations are persisted; expiration, revocation, session matching,
+and atomic one-time consumption are enforced in SQLite. The core forwards only
+the resulting exact grants to the runtime, and each host import independently
+checks its grant.
+
+The remaining permission product work is an approval-management view and
+broader UI transition/accessibility testing, not a fallback to copied
+capability arrays.
 
 ## Primary Desktop Journey
 

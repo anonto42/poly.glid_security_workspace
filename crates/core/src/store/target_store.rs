@@ -1,6 +1,8 @@
 use rusqlite::{params, Connection};
 use std::sync::{Arc, Mutex};
 
+pub type SavedTargetRecord = (String, Option<String>, Option<String>);
+
 pub struct TargetStore {
     conn: Arc<Mutex<Connection>>,
 }
@@ -10,7 +12,12 @@ impl TargetStore {
         Self { conn }
     }
 
-    pub fn add(&self, name: &str, group_name: Option<&str>) -> Result<(), String> {
+    pub fn add(
+        &self,
+        name: &str,
+        group_name: Option<&str>,
+        project_id: Option<&str>,
+    ) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -18,31 +25,39 @@ impl TargetStore {
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT OR REPLACE INTO targets (name, group_name, created_at, updated_at) 
-             VALUES (?1, ?2, ?3, ?3)",
-            params![name, group_name, now],
+            "INSERT OR REPLACE INTO targets (name, group_name, created_at, updated_at, project_id)
+             VALUES (?1, ?2, ?3, ?3, ?4)",
+            params![name, group_name, now, project_id],
         )
         .map_err(|err| format!("failed to add target: {err}"))?;
 
         Ok(())
     }
 
-    pub fn remove(&self, name: &str) -> Result<(), String> {
+    pub fn remove(&self, name: &str, project_id: Option<&str>) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM targets WHERE name = ?", [name])
-            .map_err(|err| format!("failed to remove target: {err}"))?;
+        conn.execute(
+            "DELETE FROM targets
+             WHERE name = ?1 AND (?2 IS NULL OR project_id = ?2)",
+            params![name, project_id],
+        )
+        .map_err(|err| format!("failed to remove target: {err}"))?;
         Ok(())
     }
 
-    pub fn list(&self) -> Result<Vec<(String, Option<String>)>, String> {
+    pub fn list(&self) -> Result<Vec<SavedTargetRecord>, String> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT name, group_name FROM targets ORDER BY name")
+            .prepare("SELECT name, group_name, project_id FROM targets ORDER BY name")
             .map_err(|err| format!("failed to prepare target query: {err}"))?;
 
         let rows = stmt
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
             })
             .map_err(|err| format!("failed to map target query: {err}"))?;
 

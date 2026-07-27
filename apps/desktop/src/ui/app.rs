@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::{ClientGateway, ClientResult, ExecutionEvent, LocalClient};
+use polyglid_desktop::client::{ClientResult, ExecutionEvent, LocalClient};
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::bottom_panel::BottomPanel;
 use super::commands::{handle_shortcut, persist_shell};
@@ -39,14 +40,15 @@ pub(crate) fn App() -> Element {
             };
         }
     };
-    use_context_provider(|| client.clone());
+    let controllers = DesktopControllers::new(client);
+    use_context_provider(|| controllers.clone());
 
-    load_bootstrap(state, client.clone());
-    refresh_execution_data(state, client.clone());
-    subscribe_to_executions(state, client.clone());
+    load_bootstrap(state, controllers.clone());
+    refresh_execution_data(state, controllers.clone());
+    subscribe_to_executions(state, controllers.clone());
 
-    let mouse_client = client.clone();
-    let shortcut_client = client.clone();
+    let mouse_controllers = controllers.clone();
+    let shortcut_controllers = controllers.clone();
     let mut shell_state = state;
     rsx! {
         style { dangerous_inner_html: APP_CSS }
@@ -54,9 +56,9 @@ pub(crate) fn App() -> Element {
             class: if state.shell.resizing.read().is_some() { "developer-space resizing" } else { "developer-space" },
             tabindex: 0,
             autofocus: true,
-            onkeydown: move |event| handle_shortcut(event, state, shortcut_client.clone()),
+            onkeydown: move |event| handle_shortcut(event, state, shortcut_controllers.clone()),
             onmousemove: move |event| resize_shell(shell_state, event),
-            onmouseup: move |_| finish_resize(state, mouse_client.clone()),
+            onmouseup: move |_| finish_resize(state, mouse_controllers.clone()),
             TitleBar {}
             div { class: "workspace-body",
                 ActivityRail {}
@@ -78,14 +80,14 @@ pub(crate) fn App() -> Element {
     }
 }
 
-fn load_bootstrap(mut state: AppState, client: LocalClient) {
+fn load_bootstrap(mut state: AppState, controllers: DesktopControllers) {
     use_effect(move || {
         let refresh = *state.catalog.refresh.read();
         let _ = refresh;
         state.catalog.load.set(LoadState::Loading);
-        let client = client.clone();
+        let controller = controllers.application.clone();
         spawn(async move {
-            let result = tokio::task::spawn_blocking(move || client.bootstrap()).await;
+            let result = tokio::task::spawn_blocking(move || controller.bootstrap()).await;
             match result {
                 Ok(Ok(snapshot)) => {
                     let load = if snapshot.projects.is_empty() {
@@ -117,6 +119,20 @@ fn load_bootstrap(mut state: AppState, client: LocalClient) {
                         .active_workspace_name
                         .set(snapshot.active_workspace.name.clone());
                     state.catalog.workspaces.set(snapshot.workspaces);
+                    let selected_project_is_valid = state
+                        .catalog
+                        .selected_project_id
+                        .read()
+                        .as_ref()
+                        .is_some_and(|id| {
+                            snapshot.projects.iter().any(|project| &project.id == id)
+                        });
+                    if !selected_project_is_valid {
+                        state
+                            .catalog
+                            .selected_project_id
+                            .set(snapshot.projects.first().map(|project| project.id.clone()));
+                    }
                     state.catalog.projects.set(snapshot.projects);
                     state.catalog.error.set(None);
                     state.catalog.load.set(load);
@@ -143,6 +159,17 @@ fn load_bootstrap(mut state: AppState, client: LocalClient) {
                             .set(snapshot.reports.first().map(|report| report.id.clone()));
                     }
                     state.runs.reports.set(snapshot.reports);
+                    state.runs.fuel_limit.set(snapshot.execution.fuel_limit);
+                    state
+                        .runs
+                        .timeout_seconds
+                        .set(snapshot.execution.timeout_seconds);
+                    state.runs.memory_limit_bytes.set(
+                        snapshot
+                            .execution
+                            .memory_limit_bytes
+                            .unwrap_or(64 * 1024 * 1024),
+                    );
 
                     state
                         .shell
@@ -169,17 +196,17 @@ fn load_bootstrap(mut state: AppState, client: LocalClient) {
     });
 }
 
-fn refresh_execution_data(mut state: AppState, client: LocalClient) {
+fn refresh_execution_data(mut state: AppState, controllers: DesktopControllers) {
     use_effect(move || {
         let refresh = *state.runs.refresh.read();
         let _ = refresh;
-        let client = client.clone();
+        let controller = controllers.application.clone();
         spawn(async move {
             let result = tokio::task::spawn_blocking(move || -> ClientResult<_> {
                 Ok((
-                    client.list_executions()?,
-                    client.list_reports()?,
-                    client.list_targets()?,
+                    controller.list_executions()?,
+                    controller.list_reports()?,
+                    controller.list_targets()?,
                 ))
             })
             .await;
@@ -214,13 +241,13 @@ fn refresh_execution_data(mut state: AppState, client: LocalClient) {
     });
 }
 
-fn subscribe_to_executions(mut state: AppState, client: LocalClient) {
+fn subscribe_to_executions(mut state: AppState, controllers: DesktopControllers) {
     use_effect(move || {
         let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-        let subscription_client = client.clone();
+        let controller = controllers.application.clone();
         spawn(async move {
             let worker = tokio::task::spawn_blocking(move || -> ClientResult<()> {
-                let mut subscription = subscription_client.subscribe_executions()?;
+                let mut subscription = controller.subscribe_executions()?;
                 loop {
                     let event = subscription.blocking_recv()?;
                     if sender.send(event).is_err() {
@@ -291,9 +318,9 @@ fn resize_shell(mut state: AppState, event: MouseEvent) {
     }
 }
 
-fn finish_resize(mut state: AppState, client: LocalClient) {
+fn finish_resize(mut state: AppState, controllers: DesktopControllers) {
     if state.shell.resizing.read().is_some() {
         state.shell.resizing.set(None);
-        persist_shell(state, client);
+        persist_shell(state, controllers);
     }
 }

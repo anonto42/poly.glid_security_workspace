@@ -7,6 +7,14 @@ on:
         description: Existing version tag to release, for example v0.10.0
         required: true
         type: string
+      signing_public_key:
+        description: Hex-encoded Ed25519 public key for the official Recon publisher
+        required: true
+        type: string
+    secrets:
+      signing_private_seed:
+        description: Hex-encoded 32-byte Ed25519 private seed
+        required: true
 
 permissions:
   contents: read
@@ -104,6 +112,8 @@ jobs:
           key: release-${{ matrix.target }}
 
       - name: Build native applications
+        env:
+          POLYGLID_OFFICIAL_PUBLISHER_KEY: ${{ inputs.signing_public_key }}
         run: cargo build --locked --release --target ${{ matrix.target }} -p polyglid-cli -p polyglid-desktop
 
       - name: Download bundled Recon Probe
@@ -121,6 +131,19 @@ jobs:
           cp "target/${{ matrix.target }}/release/polyglid-desktop" package/
           cp README.md LICENSE-MIT LICENSE-APACHE package/
           tar -C package -czf "${{ matrix.archive }}" .
+      - name: Smoke-test Unix package contents
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          package/polyglid --help
+          test -x package/polyglid-desktop
+          test -s package/plugins/recon-probe.component.wasm
+          test -s package/plugins/recon-probe.component.sig
+          test -s package/plugins/recon-probe.component.polyglid.toml
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            ldd package/polyglid-desktop | tee desktop-libraries.txt
+            ! grep -F "not found" desktop-libraries.txt
+          fi
 
       - name: Package Windows applications
         if: runner.os == 'Windows'
@@ -131,6 +154,15 @@ jobs:
           Copy-Item "target/${{ matrix.target }}/release/polyglid-desktop.exe" package/
           Copy-Item -Path README.md, LICENSE-MIT, LICENSE-APACHE -Destination package/
           Compress-Archive -Path package/* -DestinationPath "${{ matrix.archive }}"
+      - name: Smoke-test Windows package contents
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & package/polyglid.exe --help
+          if (!(Test-Path package/polyglid-desktop.exe)) { throw "desktop executable is missing" }
+          if (!(Test-Path package/plugins/recon-probe.component.wasm)) { throw "Recon component is missing" }
+          if (!(Test-Path package/plugins/recon-probe.component.sig)) { throw "Recon signature is missing" }
+          if (!(Test-Path package/plugins/recon-probe.component.polyglid.toml)) { throw "Recon manifest is missing" }
 
       - uses: actions/upload-artifact@v7
         with:
@@ -155,7 +187,40 @@ jobs:
       - run: cargo build --locked --release -p polyglid-cli
       - run: cargo build --locked --release -p recon-probe --target wasm32-wasip1
       - name: Componentize plugin
-        run: target/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
+        run: |
+          target/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
+          cp plugins/recon-probe/polyglid.toml recon-probe.component.polyglid.toml
+      - name: Sign and cryptographically verify component
+        shell: bash
+        env:
+          SIGNING_PRIVATE_SEED: ${{ secrets.signing_private_seed }}
+          SIGNING_PUBLIC_KEY: ${{ inputs.signing_public_key }}
+        run: |
+          test "${#SIGNING_PRIVATE_SEED}" -eq 64 || {
+            echo "::error::RECON_SIGNING_PRIVATE_SEED must contain exactly 64 hexadecimal characters"
+            exit 1
+          }
+          test "${#SIGNING_PUBLIC_KEY}" -eq 64 || {
+            echo "::error::RECON_SIGNING_PUBLIC_KEY must contain exactly 64 hexadecimal characters"
+            exit 1
+          }
+          [[ "$SIGNING_PRIVATE_SEED" =~ ^[0-9A-Fa-f]{64}$ ]] || {
+            echo "::error::RECON_SIGNING_PRIVATE_SEED is not valid hexadecimal"
+            exit 1
+          }
+          [[ "$SIGNING_PUBLIC_KEY" =~ ^[0-9A-Fa-f]{64}$ ]] || {
+            echo "::error::RECON_SIGNING_PUBLIC_KEY is not valid hexadecimal"
+            exit 1
+          }
+          key_file="$RUNNER_TEMP/recon-signing-seed"
+          printf '%s' "$SIGNING_PRIVATE_SEED" > "$key_file"
+          chmod 600 "$key_file"
+          target/release/polyglid plugin sign recon-probe.component.wasm --key "$key_file"
+          test "$(jq -r .key_id recon-probe.component.sig)" = "${SIGNING_PUBLIC_KEY,,}" || {
+            echo "::error::The configured public key does not match the signing seed"
+            exit 1
+          }
+          target/release/polyglid plugin verify recon-probe.component.wasm
       - name: Verify component release metadata
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
@@ -164,11 +229,14 @@ jobs:
           grep -F "id: polyglid.recon_probe" plugin-metadata.txt
           grep -F "version: $VERSION" plugin-metadata.txt
           grep -F -- "- dns-resolve" plugin-metadata.txt
-          grep -F -- "- report-write" plugin-metadata.txt
+          grep -F -- "- report-write (path-prefix=reports)" plugin-metadata.txt
       - uses: actions/upload-artifact@v7
         with:
           name: recon-probe
-          path: recon-probe.component.wasm
+          path: |
+            recon-probe.component.wasm
+            recon-probe.component.sig
+            recon-probe.component.polyglid.toml
           if-no-files-found: error
 
   publish:
@@ -190,7 +258,7 @@ jobs:
           mkdir release-assets
           find artifacts -maxdepth 2 -type f -exec cp {} release-assets/ \;
           cd release-assets
-          sha256sum polyglid-* recon-probe.component.wasm > SHA256SUMS
+          sha256sum polyglid-* recon-probe.component.wasm recon-probe.component.sig recon-probe.component.polyglid.toml > SHA256SUMS
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -204,6 +272,8 @@ jobs:
             polyglid-macos-x86_64.tar.gz
             polyglid-macos-aarch64.tar.gz
             recon-probe.component.wasm
+            recon-probe.component.sig
+            recon-probe.component.polyglid.toml
             SHA256SUMS
           )
 
@@ -273,6 +343,8 @@ jobs:
             polyglid-macos-x86_64.tar.gz \
             polyglid-macos-aarch64.tar.gz \
             recon-probe.component.wasm \
+            recon-probe.component.sig \
+            recon-probe.component.polyglid.toml \
             SHA256SUMS; do
             grep -Fxq "$expected" <<<"$assets" || {
               echo "::error::Release asset $expected is missing"

@@ -25,9 +25,10 @@ mod integration_tests {
         let runtime = std::sync::Arc::new(WasmRuntime::new());
         let store = WorkspaceStore::new(Path::new(":memory:")).unwrap();
         let pm = Arc::new(PluginManager::new(runtime.clone(), &config, store.clone()).unwrap());
-        let em = Arc::new(ExecutionManager::new(
+        let em = Arc::new(ExecutionManager::new_with_config(
             WasmRuntime::new(),
             Some(store.clone()),
+            config,
         ));
 
         let admin_token = auth::initialize_auth_token(&store).unwrap();
@@ -35,7 +36,11 @@ mod integration_tests {
 
         let server_state = ServerState {
             plugin_service: Arc::new(PluginService::new(pm.clone())),
-            execution_service: Arc::new(ExecutionService::new(em.clone(), store.clone())),
+            execution_service: Arc::new(ExecutionService::new(
+                em.clone(),
+                pm.clone(),
+                store.clone(),
+            )),
             target_service: Arc::new(TargetService::new(store.clone())),
             report_service: Arc::new(ReportService::new(store.clone())),
             settings_service: Arc::new(SettingsService::new(store.clone())),
@@ -177,6 +182,8 @@ mod integration_tests {
             .unwrap();
         let auth_res: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         let token = auth_res["token"].as_str().unwrap();
+        assert!(auth_res["user"].get("password_hash").is_none());
+        assert!(auth_res["user"].get("salt").is_none());
 
         // 4. Try to add target as Viewer (should fail with 403 Forbidden)
         let fail_req = Request::builder()

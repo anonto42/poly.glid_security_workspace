@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use super::{CapabilityKind, JobId};
+use super::{CapabilityRequest, JobId};
 
 pub type ClientResult<T> = Result<T, ClientError>;
 
@@ -24,13 +24,13 @@ pub enum ClientError {
     #[error("plugin '{plugin_id}' still needs approval for {missing:?}")]
     CapabilityApprovalRequired {
         plugin_id: String,
-        missing: Vec<CapabilityKind>,
+        missing: Vec<CapabilityRequest>,
     },
 
     #[error("plugin '{plugin_id}' did not request {capabilities:?}")]
     UnexpectedCapabilityApproval {
         plugin_id: String,
-        capabilities: Vec<CapabilityKind>,
+        capabilities: Vec<CapabilityRequest>,
     },
 
     #[error("{operation} failed: {message}")]

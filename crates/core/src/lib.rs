@@ -71,6 +71,7 @@ pub trait PluginRuntime {
         &self,
         request: &PluginRunRequest,
         config: &AppConfig,
+        effective_grants: &[CapabilityRequest],
     ) -> Result<PluginReport, CoreError>;
     fn cancel(&self, _job_id: uuid::Uuid) -> Result<(), CoreError> {
         Ok(())
@@ -91,8 +92,9 @@ impl<R: PluginRuntime + ?Sized> PluginRuntime for std::sync::Arc<R> {
         &self,
         request: &PluginRunRequest,
         config: &AppConfig,
+        effective_grants: &[CapabilityRequest],
     ) -> Result<PluginReport, CoreError> {
-        (**self).execute(request, config)
+        (**self).execute(request, config, effective_grants)
     }
     fn cancel(&self, job_id: uuid::Uuid) -> Result<(), CoreError> {
         (**self).cancel(job_id)
@@ -205,7 +207,7 @@ where
 
     pub fn run_plugin(&mut self, request: PluginRunRequest) -> Result<PluginReport, CoreError> {
         let manifest = self.runtime.inspect(&request.plugin)?;
-
+        let mut actual_config = self.config.clone();
         let db_path = self
             .config
             .plugin_dir
@@ -295,150 +297,70 @@ where
                 ));
             }
 
-            let mut actual_config = self.config.clone();
             if let Some(fuel) = profile.max_fuel {
-                actual_config.max_wasm_fuel = fuel;
+                actual_config.max_wasm_fuel = actual_config.max_wasm_fuel.min(fuel);
             }
+        }
 
-            for request_cap in &manifest.requested_capabilities {
-                // Per-run grants (for example an explicit desktop approval)
-                // are evaluated first. Workspace profile and durable database
-                // grants remain valid fallbacks, but the presence of a
-                // workspace database must not discard the caller's one-run
-                // permission decision.
-                let mut approved = match self.permissions.decide(&manifest.id, request_cap) {
-                    Ok(PermissionDecision::Allow) => true,
-                    Ok(PermissionDecision::Deny { .. }) => false,
-                    Err(err) => {
-                        self.events.emit(PolyGlidEvent::CapabilityCheckFailed {
-                            plugin_id: manifest.id.clone(),
-                            capability: request_cap.to_string(),
-                            message: err.to_string(),
-                        });
-                        return Err(err);
-                    }
-                };
-                if !approved
-                    && profile
-                        .allowed_capabilities
-                        .contains(&request_cap.capability)
-                {
-                    approved = true;
-                } else if !approved {
-                    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
-                        let now = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
-
-                        if let Ok((decision, expiration)) = conn.query_row(
-                            "SELECT decision, expiration FROM permissions WHERE plugin_id = ? AND capability = ?",
-                            [manifest.id.as_str(), &request_cap.capability.to_string()],
-                            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<u64>>(1)?))
-                        ) {
-                            let expired = match expiration {
-                                Some(exp) => exp < now,
-                                None => false,
-                            };
-                            if decision == "Allow" && !expired {
-                                approved = true;
-                            }
-                        }
-                    }
-                }
-
-                if !approved {
-                    self.events.emit(PolyGlidEvent::CapabilityDenied {
-                        plugin_id: manifest.id.clone(),
-                        capability: request_cap.to_string(),
-                        reason: "Not approved in permission engine or profile policy".to_string(),
-                    });
-                    return Err(CoreError::CapabilityDenied {
-                        plugin_id: manifest.id,
-                        request: request_cap.clone(),
-                        reason: "Permission not approved in Workspace".to_string(),
-                    });
-                } else {
+        // Capabilities are never granted by a security profile or by plugin
+        // installation. Every request must be covered by the caller's
+        // permission store, and the exact request is forwarded to the runtime
+        // for enforcement again at the host-call boundary.
+        let mut effective_grants = Vec::with_capacity(manifest.requested_capabilities.len());
+        for request_cap in &manifest.requested_capabilities {
+            match self.permissions.decide(&manifest.id, request_cap) {
+                Ok(PermissionDecision::Allow) => {
+                    effective_grants.push(request_cap.clone());
                     self.events.emit(PolyGlidEvent::CapabilityAllowed {
                         plugin_id: manifest.id.clone(),
                         capability: request_cap.to_string(),
                     });
                 }
-            }
-
-            self.events.emit(PolyGlidEvent::PluginRunStarted {
-                plugin_id: manifest.id.clone(),
-                target: request.target.as_str().to_string(),
-            });
-
-            match self.runtime.execute(&request, &actual_config) {
-                Ok(report) => {
-                    self.events.emit(PolyGlidEvent::PluginRunCompleted {
-                        plugin_id: manifest.id,
-                        report: report.clone(),
+                Ok(PermissionDecision::Deny { reason }) => {
+                    self.events.emit(PolyGlidEvent::CapabilityDenied {
+                        plugin_id: manifest.id.clone(),
+                        capability: request_cap.to_string(),
+                        reason: reason.clone(),
                     });
-                    Ok(report)
+                    return Err(CoreError::CapabilityDenied {
+                        plugin_id: manifest.id,
+                        request: request_cap.clone(),
+                        reason,
+                    });
                 }
                 Err(err) => {
-                    self.events.emit(PolyGlidEvent::PluginRunFailed {
-                        plugin_id: manifest.id,
+                    self.events.emit(PolyGlidEvent::CapabilityCheckFailed {
+                        plugin_id: manifest.id.clone(),
+                        capability: request_cap.to_string(),
                         message: err.to_string(),
                     });
-                    Err(err)
+                    return Err(err);
                 }
             }
-        } else {
-            for request_cap in &manifest.requested_capabilities {
-                match self.permissions.decide(&manifest.id, request_cap) {
-                    Ok(PermissionDecision::Allow) => {
-                        self.events.emit(PolyGlidEvent::CapabilityAllowed {
-                            plugin_id: manifest.id.clone(),
-                            capability: request_cap.to_string(),
-                        });
-                    }
-                    Ok(PermissionDecision::Deny { reason }) => {
-                        self.events.emit(PolyGlidEvent::CapabilityDenied {
-                            plugin_id: manifest.id.clone(),
-                            capability: request_cap.to_string(),
-                            reason: reason.clone(),
-                        });
-                        return Err(CoreError::CapabilityDenied {
-                            plugin_id: manifest.id,
-                            request: request_cap.clone(),
-                            reason,
-                        });
-                    }
-                    Err(err) => {
-                        self.events.emit(PolyGlidEvent::CapabilityCheckFailed {
-                            plugin_id: manifest.id.clone(),
-                            capability: request_cap.to_string(),
-                            message: err.to_string(),
-                        });
-                        return Err(err);
-                    }
-                }
+        }
+
+        self.events.emit(PolyGlidEvent::PluginRunStarted {
+            plugin_id: manifest.id.clone(),
+            target: request.target.as_str().to_string(),
+        });
+
+        match self
+            .runtime
+            .execute(&request, &actual_config, &effective_grants)
+        {
+            Ok(report) => {
+                self.events.emit(PolyGlidEvent::PluginRunCompleted {
+                    plugin_id: manifest.id,
+                    report: report.clone(),
+                });
+                Ok(report)
             }
-
-            self.events.emit(PolyGlidEvent::PluginRunStarted {
-                plugin_id: manifest.id.clone(),
-                target: request.target.as_str().to_string(),
-            });
-
-            match self.runtime.execute(&request, &self.config) {
-                Ok(report) => {
-                    self.events.emit(PolyGlidEvent::PluginRunCompleted {
-                        plugin_id: manifest.id,
-                        report: report.clone(),
-                    });
-                    Ok(report)
-                }
-                Err(err) => {
-                    self.events.emit(PolyGlidEvent::PluginRunFailed {
-                        plugin_id: manifest.id,
-                        message: err.to_string(),
-                    });
-                    Err(err)
-                }
+            Err(err) => {
+                self.events.emit(PolyGlidEvent::PluginRunFailed {
+                    plugin_id: manifest.id,
+                    message: err.to_string(),
+                });
+                Err(err)
             }
         }
     }
@@ -534,6 +456,7 @@ mod tests {
             &self,
             request: &PluginRunRequest,
             _config: &AppConfig,
+            _effective_grants: &[CapabilityRequest],
         ) -> Result<PluginReport, CoreError> {
             Ok(PluginReport {
                 plugin_name: "Demo".to_string(),

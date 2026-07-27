@@ -123,15 +123,17 @@ flowchart LR
     Tag[Push new version tag] --> CI[Full CI result]
     CI --> Preflight[Validate exact versions and main ancestry]
     Preflight --> Plugin[Build and inspect Recon component]
-    Plugin --> Matrix[Native build matrix]
+    Plugin --> Sign[Sign and verify component + exact-scope manifest]
+    Sign --> Matrix[Native build matrix]
     Matrix --> Linux[Linux x86_64]
     Matrix --> Windows[Windows x86_64]
     Matrix --> MacIntel[macOS Intel]
     Matrix --> MacArm[macOS Apple Silicon]
-    Linux --> Draft[Draft release + SHA256SUMS]
-    Windows --> Draft
-    MacIntel --> Draft
-    MacArm --> Draft
+    Linux --> Smoke[Smoke-test unpacked packages]
+    Windows --> Smoke
+    MacIntel --> Smoke
+    MacArm --> Smoke
+    Smoke --> Draft[Draft release + SHA256SUMS]
     Draft --> Publish[Verify assets and publish]
     Publish --> Website[Verify latest release and expected assets]
 ```

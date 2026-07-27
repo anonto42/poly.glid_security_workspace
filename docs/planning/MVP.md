@@ -121,37 +121,43 @@ The MVP cannot ship while any of these conditions is false:
 ### Primary journey
 
 - [ ] A new user can launch the packaged desktop app on every supported target.
-- [ ] The user can create or select a real project without opening a terminal.
-- [ ] The user can inspect and install `recon-probe` from the UI.
+- [x] The user can create or select a real project without opening a terminal.
+- [x] The user can inspect and install a valid locally selected component from
+      the UI.
 - [ ] The packaged Recon component and adjacent signature verify under default
       Balanced policy without a Development-policy fallback.
-- [ ] The UI explains every requested capability and its exact scope.
-- [ ] Denying a capability prevents execution and creates an audit record.
-- [ ] Allowing a valid scope starts a job and returns a visible job ID.
-- [ ] Run progress and state changes appear without blocking the UI.
-- [ ] The user can request cancellation and see the confirmed final state.
-- [ ] A completed run creates a persisted report with real values only.
-- [ ] The user can close the app, reopen it, find the report, and export JSON.
+- [x] The UI explains every requested capability and its exact scope.
+- [x] Denying a capability prevents execution and creates an audit record.
+- [x] Allowing a valid scope starts a job and returns a visible job ID.
+- [x] Run state changes appear without blocking the UI; richer progress stages
+      remain.
+- [x] The user can request cancellation and see the persisted final state.
+- [x] A completed run creates a persisted report with real values only.
+- [x] Persisted reports rehydrate after restart and export through the report
+      service.
 
 ### Product clarity
 
-- [ ] Navigation contains Projects, New scan, Executions, Reports, Plugins, and Settings.
-- [ ] Excluded preview/reserved areas are absent from the compiled desktop UI.
+- [x] Navigation contains Projects, New scan, Executions, Reports, Plugins, and Settings.
+- [x] Excluded preview/reserved areas are absent from the compiled desktop UI.
 - [ ] Loading, empty, error, denied, running, and completed states are tested.
 - [ ] Destructive project and plugin actions state their exact effect.
 - [ ] Icon-only controls have accessible names and visible keyboard focus.
-- [ ] No fake health score, timing, automation status, or agent activity appears
+- [x] No fake health score, timing, automation status, or agent activity appears
       as live data.
 
 ### Engineering evidence
 
-- [ ] Client views depend on feature controllers and stores, not
+- [x] Client views depend on feature controllers and stores, not
       `DesktopBackend`, SQLite, or Wasmtime.
-- [ ] `ClientGateway` has focused contract and local-adapter tests.
-- [ ] Permission enforcement has allow, deny, expiration, and scope tests.
-- [ ] Execution has progress, timeout, cancellation-race, and failure tests.
-- [ ] Report persistence and export round-trip tests pass.
-- [ ] Core, runtime, plugin, and desktop test suites pass in CI.
+- [x] `ClientGateway` has focused contract and local-adapter tests.
+- [x] Permission enforcement has allow, deny, expiration, and scope tests.
+- [ ] Execution has timeout and cancellation tests; richer progress,
+      cancellation-race, and injected persistence-failure coverage remain.
+- [x] Report persistence and JSON round-trip tests pass; format-specific
+      round-trip coverage can grow.
+- [x] Core, runtime, plugin, desktop, and server suites pass locally under the
+      same locked commands used by CI.
 - [ ] Clean-machine desktop smoke tests pass for supported release artifacts.
 
 The MVP is complete only when the desktop journey satisfies this checklist.

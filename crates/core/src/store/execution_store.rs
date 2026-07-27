@@ -6,6 +6,10 @@ use uuid::Uuid;
 pub struct DbJobRecord {
     pub job_id: Uuid,
     pub plugin_id: String,
+    pub project_id: Option<String>,
+    pub approval_ids: Vec<String>,
+    pub plugin_version: String,
+    pub plugin_checksum: String,
     pub target: String,
     pub state: String,
     pub started_at: u64,
@@ -24,6 +28,8 @@ impl ExecutionStore {
         Self { conn }
     }
 
+    /// Persist the immutable identity and policy context accepted at queue time.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_job(
         &self,
         job_id: &Uuid,
@@ -31,6 +37,10 @@ impl ExecutionStore {
         target: &str,
         state: &str,
         started_at: u64,
+        project_id: Option<&str>,
+        approval_ids: &[String],
+        plugin_version: &str,
+        plugin_checksum: &str,
     ) -> Result<(), String> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
@@ -38,10 +48,13 @@ impl ExecutionStore {
             .unwrap_or_default()
             .as_secs() as i64;
 
+        let approval_ids = serde_json::to_string(approval_ids)
+            .map_err(|err| format!("failed to serialize approval ids: {err}"))?;
         conn.execute(
             "INSERT OR REPLACE INTO execution_history (
-                job_id, plugin_id, target, state, started_at, duration_ms, error_message, fuel_consumed, created_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                job_id, plugin_id, target, state, started_at, duration_ms, error_message,
+                fuel_consumed, created_at, project_id, approval_ids, plugin_version, plugin_checksum
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 job_id.to_string(),
                 plugin_id,
@@ -51,7 +64,11 @@ impl ExecutionStore {
                 0i64,
                 None::<String>,
                 0i64,
-                now
+                now,
+                project_id,
+                approval_ids,
+                plugin_version,
+                plugin_checksum,
             ],
         )
         .map_err(|err| format!("failed to insert execution job: {err}"))?;
@@ -87,7 +104,8 @@ impl ExecutionStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT job_id, plugin_id, target, state, started_at, duration_ms, error_message, fuel_consumed, created_at 
+                "SELECT job_id, plugin_id, target, state, started_at, duration_ms, error_message,
+                        fuel_consumed, created_at, project_id, approval_ids, plugin_version, plugin_checksum
                  FROM execution_history ORDER BY started_at DESC"
             )
             .map_err(|err| format!("failed to prepare statement: {err}"))?;
@@ -97,9 +115,16 @@ impl ExecutionStore {
                 let job_id_str: String = row.get(0)?;
                 let job_id = Uuid::parse_str(&job_id_str)
                     .map_err(|_| rusqlite::Error::ExecuteReturnedResults)?;
+                let approval_ids_json: String = row.get(10)?;
+                let approval_ids = serde_json::from_str(&approval_ids_json)
+                    .map_err(|_| rusqlite::Error::ExecuteReturnedResults)?;
                 Ok(DbJobRecord {
                     job_id,
                     plugin_id: row.get(1)?,
+                    project_id: row.get(9)?,
+                    approval_ids,
+                    plugin_version: row.get(11)?,
+                    plugin_checksum: row.get(12)?,
                     target: row.get(2)?,
                     state: row.get(3)?,
                     started_at: row.get::<_, i64>(4)? as u64,

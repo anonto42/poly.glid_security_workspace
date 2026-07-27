@@ -3,7 +3,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path as AxumPath, Query, State,
     },
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware,
     response::IntoResponse,
     routing::{delete, get, post},
@@ -12,7 +12,7 @@ use axum::{
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 use polyglid_config::AppConfig;
 use polyglid_core::{
@@ -58,9 +58,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let store = WorkspaceStore::new(&db_path)?;
     let pm = Arc::new(PluginManager::new(runtime.clone(), &config, store.clone())?);
-    let em = Arc::new(ExecutionManager::new(
+    let em = Arc::new(ExecutionManager::new_with_config(
         WasmRuntime::new(),
         Some(store.clone()),
+        config.clone(),
     ));
 
     // Sync plugins
@@ -71,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server_state = ServerState {
         plugin_service: Arc::new(PluginService::new(pm.clone())),
-        execution_service: Arc::new(ExecutionService::new(em.clone(), store.clone())),
+        execution_service: Arc::new(ExecutionService::new(em.clone(), pm.clone(), store.clone())),
         target_service: Arc::new(TargetService::new(store.clone())),
         report_service: Arc::new(ReportService::new(store.clone())),
         settings_service: Arc::new(SettingsService::new(store.clone())),
@@ -86,6 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let public_routes = Router::new()
+        .route("/health", get(|| async { StatusCode::OK }))
         .route("/auth/register", post(register_user))
         .route("/auth/login", post(login_user));
 
@@ -115,6 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/reports", get(list_reports))
         .route("/reports/:id", get(get_report))
         .route("/reports/:id/download", get(download_report))
+        .route("/events", get(ws_handler))
         // Marketplace
         .route("/marketplace", get(marketplace_list))
         .route("/marketplace/search", get(marketplace_search))
@@ -142,32 +145,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(protected_routes)
         .with_state(server_state.clone());
 
-    let ws_routes = Router::new()
-        .route("/ws/v1/events", get(ws_handler))
-        .with_state(server_state);
-
     let app = Router::new()
         .nest("/api/v1", api_routes)
-        .merge(ws_routes)
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_headers(Any)
-                .allow_methods(Any),
-        );
+        .layer(cors_layer()?);
 
     let port = std::env::var("PORT")
         .unwrap_or_else(|_| "8080".to_string())
         .parse::<u16>()
         .unwrap_or(8080);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let bind_ip = std::env::var("POLYGLID_BIND")
+        .unwrap_or_else(|_| "127.0.0.1".to_string())
+        .parse()?;
+    let addr = SocketAddr::new(bind_ip, port);
     println!("PolyGlid server running on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+fn cors_layer() -> Result<CorsLayer, Box<dyn std::error::Error>> {
+    let origins = std::env::var("POLYGLID_ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "http://127.0.0.1:3000,http://localhost:3000".to_string())
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(HeaderValue::from_str)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(CorsLayer::new()
+        .allow_origin(origins)
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE]))
 }
 
 // Handlers implementation
@@ -254,6 +264,8 @@ async fn toggle_plugin(
 struct RunExecutionRequest {
     plugin_id: String,
     target: String,
+    #[serde(default)]
+    approved_capabilities: Vec<polyglid_plugin_api::CapabilityRequest>,
 }
 
 #[derive(serde::Serialize)]
@@ -276,7 +288,7 @@ async fn run_execution(
         PluginId::new(&req.plugin_id).map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?;
     state
         .execution_service
-        .run_plugin(&pid, &req.target)
+        .run_plugin(&pid, &req.target, req.approved_capabilities)
         .map(|job_id| (StatusCode::ACCEPTED, Json(RunExecutionResponse { job_id })))
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))
 }
@@ -531,14 +543,15 @@ async fn marketplace_publish(
 
 #[derive(serde::Deserialize)]
 struct MarketplaceInstallRequest {
-    plugin_id: Option<String>,
+    #[serde(rename = "plugin_id")]
+    _plugin_id: Option<String>,
 }
 
 async fn marketplace_install(
     axum::Extension(user): axum::Extension<DbUser>,
     State(state): State<ServerState>,
     AxumPath(id): AxumPath<String>,
-    Json(req): Json<MarketplaceInstallRequest>,
+    Json(_req): Json<MarketplaceInstallRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     if user.role != "Owner" {
         return Err((
@@ -546,18 +559,14 @@ async fn marketplace_install(
             "Only Owners can install marketplace packages".to_string(),
         ));
     }
-    // Get the package's download_url so the caller can install via PluginService
-    let _url = state
+    let _download_url = state
         .marketplace_service
         .get_package_download_url(&id)
         .map_err(|e| (StatusCode::NOT_FOUND, e))?;
-
-    // Record the install tracking
-    state
-        .marketplace_service
-        .record_package_install(&id, req.plugin_id)
-        .map(|_| StatusCode::OK)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
+    Err((
+        StatusCode::NOT_IMPLEMENTED,
+        "Marketplace installation is disabled until authenticated download, checksum verification, signature verification, and atomic plugin installation are implemented".to_string(),
+    ))
 }
 
 async fn marketplace_list_ratings(
@@ -626,16 +635,7 @@ async fn marketplace_register_publisher(
 }
 
 fn uuid_hex() -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    std::time::Instant::now().hash(&mut h);
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos()
-        .hash(&mut h);
-    format!("{:016x}", h.finish())
+    uuid::Uuid::new_v4().simple().to_string()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -652,13 +652,34 @@ struct RegisterRequest {
 #[derive(serde::Serialize)]
 struct AuthResponse {
     token: String,
-    user: DbUser,
+    user: PublicUser,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct PublicUser {
+    id: String,
+    username: String,
+    role: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl From<DbUser> for PublicUser {
+    fn from(user: DbUser) -> Self {
+        Self {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+        }
+    }
 }
 
 async fn register_user(
     State(state): State<ServerState>,
     Json(req): Json<RegisterRequest>,
-) -> Result<(StatusCode, Json<DbUser>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<PublicUser>), (StatusCode, String)> {
     let count = state
         .collaboration_service
         .count_users()
@@ -679,7 +700,7 @@ async fn register_user(
         .collaboration_service
         .register_user(&req.username, &req.password, &final_role)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    Ok((StatusCode::CREATED, Json(user)))
+    Ok((StatusCode::CREATED, Json(user.into())))
 }
 
 #[derive(serde::Deserialize)]
@@ -696,17 +717,20 @@ async fn login_user(
         .collaboration_service
         .login_user(&req.username, &req.password)
         .map_err(|e| (StatusCode::UNAUTHORIZED, e))?;
-    Ok(Json(AuthResponse { token, user }))
+    Ok(Json(AuthResponse {
+        token,
+        user: user.into(),
+    }))
 }
 
-async fn get_current_user(axum::Extension(user): axum::Extension<DbUser>) -> Json<DbUser> {
-    Json(user)
+async fn get_current_user(axum::Extension(user): axum::Extension<DbUser>) -> Json<PublicUser> {
+    Json(user.into())
 }
 
 async fn list_users(
     axum::Extension(user): axum::Extension<DbUser>,
     State(state): State<ServerState>,
-) -> Result<Json<Vec<DbUser>>, (StatusCode, String)> {
+) -> Result<Json<Vec<PublicUser>>, (StatusCode, String)> {
     if user.role != "Owner" && user.role != "Editor" {
         return Err((
             StatusCode::FORBIDDEN,
@@ -716,7 +740,7 @@ async fn list_users(
     state
         .collaboration_service
         .list_users()
-        .map(Json)
+        .map(|users| Json(users.into_iter().map(PublicUser::from).collect()))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }
 
@@ -801,10 +825,17 @@ async fn remove_team_member(
 async fn list_team_members(
     State(state): State<ServerState>,
     AxumPath(team_id): AxumPath<String>,
-) -> Result<Json<Vec<(DbUser, String)>>, (StatusCode, String)> {
+) -> Result<Json<Vec<(PublicUser, String)>>, (StatusCode, String)> {
     state
         .collaboration_service
         .list_team_members(&team_id)
-        .map(Json)
+        .map(|members| {
+            Json(
+                members
+                    .into_iter()
+                    .map(|(user, role)| (user.into(), role))
+                    .collect(),
+            )
+        })
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
 }

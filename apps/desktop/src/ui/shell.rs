@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::LocalClient;
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::commands::{execute, ShellCommand};
 use super::components::RailButton;
@@ -26,7 +26,7 @@ pub(crate) fn ActivityRail() -> Element {
 #[component]
 pub(crate) fn StatusBar() -> Element {
     let state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let catalog_status = match &*state.catalog.load.read() {
         LoadState::Loading => "Catalog indexing",
         LoadState::Error(_) => "Catalog error",

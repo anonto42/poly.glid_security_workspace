@@ -137,10 +137,18 @@ pub struct PluginId(String);
 impl PluginId {
     pub fn new(value: impl Into<String>) -> Result<Self, ApiError> {
         let value = value.into();
-        if value.trim().is_empty() {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
             return Err(ApiError::EmptyPluginId);
         }
-        Ok(Self(value))
+        if trimmed.len() > 128
+            || !trimmed.bytes().enumerate().all(|(index, byte)| {
+                byte.is_ascii_alphanumeric() || (index > 0 && matches!(byte, b'.' | b'_' | b'-'))
+            })
+        {
+            return Err(ApiError::InvalidPluginId(value));
+        }
+        Ok(Self(trimmed.to_string()))
     }
 
     pub fn as_str(&self) -> &str {
@@ -267,6 +275,7 @@ impl fmt::Display for CapabilityScope {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApiError {
     EmptyPluginId,
+    InvalidPluginId(String),
     UnknownCapability(String),
 }
 
@@ -274,6 +283,10 @@ impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyPluginId => f.write_str("plugin id cannot be empty"),
+            Self::InvalidPluginId(value) => write!(
+                f,
+                "plugin id '{value}' must start with an ASCII letter or number and contain only letters, numbers, '.', '_' or '-'"
+            ),
             Self::UnknownCapability(value) => write!(f, "unknown capability: {value}"),
         }
     }
@@ -311,6 +324,23 @@ mod tests {
         assert_eq!(
             request.to_string(),
             "network-connect (host=example.com,port=443)"
+        );
+    }
+
+    #[test]
+    fn plugin_ids_reject_paths_and_control_characters() {
+        for value in ["../escape", "plugin/name", "/absolute", "bad id", "bad\nid"] {
+            assert!(
+                matches!(PluginId::new(value), Err(ApiError::InvalidPluginId(_))),
+                "{value:?} should be rejected"
+            );
+        }
+
+        assert_eq!(
+            PluginId::new("polyglid.recon_probe-1")
+                .expect("valid id")
+                .as_str(),
+            "polyglid.recon_probe-1"
         );
     }
 }

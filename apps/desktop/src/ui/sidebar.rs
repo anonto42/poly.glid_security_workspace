@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::{ClientGateway, LocalClient, PluginStatus};
+use polyglid_desktop::client::PluginStatus;
+use polyglid_desktop::controllers::DesktopControllers;
 
 use super::commands::{execute, ShellCommand};
 use super::models::{
@@ -10,7 +11,7 @@ use super::state::{push_activity, refresh_operational_data, AppState};
 #[component]
 pub(crate) fn WorkspaceSidebar() -> Element {
     let state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let active_view = *state.shell.active_view.read();
     rsx! {
         aside { class: "sidebar", style: "width: {state.shell.sidebar_width}px; flex-basis: {state.shell.sidebar_width}px",
@@ -55,7 +56,17 @@ fn ProjectsSidebar() -> Element {
 #[component]
 fn ScannerSidebar() -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
+    let selected_project_id = state.catalog.selected_project_id.read().clone();
+    let project_for_add = selected_project_id.clone();
+    let visible_targets: Vec<_> = state
+        .runs
+        .targets
+        .read()
+        .iter()
+        .filter(|target| target.project_id == selected_project_id)
+        .cloned()
+        .collect();
     let add_client = client.clone();
     let remove_client = client.clone();
     rsx! {
@@ -72,12 +83,16 @@ fn ScannerSidebar() -> Element {
                     title: "Save target",
                     disabled: state.runs.new_target.read().trim().is_empty(),
                     onclick: move |_| {
+                        let Some(project_id) = project_for_add.clone() else {
+                            show_error(state, "Select a project", "Choose a project before saving a target.");
+                            return;
+                        };
                         let target = state.runs.new_target.read().trim().to_string();
                         if target.is_empty() { return; }
                         let client = add_client.clone();
                         spawn(async move {
                             let operation_target = target.clone();
-                            let result = tokio::task::spawn_blocking(move || client.add_target(&operation_target, None)).await;
+                            let result = tokio::task::spawn_blocking(move || client.scanner.add_target(&operation_target, None, &project_id)).await;
                             match result {
                                 Ok(Ok(saved)) => {
                                     if !state.runs.targets.read().iter().any(|item| item.name == saved.name) {
@@ -99,7 +114,7 @@ fn ScannerSidebar() -> Element {
                 if state.runs.targets.read().is_empty() {
                     p { class: "muted", "No saved targets. You can also type one directly in New scan." }
                 }
-                for saved in state.runs.targets.read().iter() {
+                for saved in visible_targets {
                     div { class: "target-row",
                         button {
                             class: if *state.runs.selected_target.read() == saved.name { "target active" } else { "target" },
@@ -116,13 +131,15 @@ fn ScannerSidebar() -> Element {
                             aria_label: "Remove {saved.name}",
                             onclick: {
                                 let target = saved.name.clone();
+                                let project_id = saved.project_id.clone();
                                 let client = remove_client.clone();
                                 move |_| {
+                                    let Some(project_id) = project_id.clone() else { return; };
                                     let target = target.clone();
                                     let client = client.clone();
                                     spawn(async move {
                                         let operation_target = target.clone();
-                                        let result = tokio::task::spawn_blocking(move || client.remove_target(&operation_target)).await;
+                                        let result = tokio::task::spawn_blocking(move || client.scanner.remove_target(&operation_target, &project_id)).await;
                                         match result {
                                             Ok(Ok(())) => state.runs.targets.write().retain(|item| item.name != target),
                                             Ok(Err(error)) => show_error(state, "Target could not be removed", error.to_string()),
@@ -201,7 +218,7 @@ fn ReportsSidebar() -> Element {
 #[component]
 fn PluginsSidebar() -> Element {
     let mut state = use_context::<AppState>();
-    let client = use_context::<LocalClient>();
+    let client = use_context::<DesktopControllers>();
     let inspect_client = client.clone();
     rsx! {
         div { class: "sidebar-section",
@@ -263,11 +280,11 @@ fn PluginsSidebar() -> Element {
     }
 }
 
-fn inspect_plugin(mut state: AppState, client: LocalClient, path: String) {
+fn inspect_plugin(mut state: AppState, controllers: DesktopControllers, path: String) {
     spawn(async move {
         let inspected_path = path.clone();
         let result =
-            tokio::task::spawn_blocking(move || client.inspect_plugin(&inspected_path)).await;
+            tokio::task::spawn_blocking(move || controllers.plugins.inspect(&inspected_path)).await;
         match result {
             Ok(Ok(plugin)) => {
                 state
