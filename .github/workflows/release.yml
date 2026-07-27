@@ -131,7 +131,10 @@ jobs:
         run: |
           package/polyglid --help
           test -x package/polyglid-desktop
-          test ! -e package/plugins
+          if [ -e package/plugins ]; then
+            echo "::error::application archive must start without installed plugins"
+            exit 1
+          fi
           if [ "$RUNNER_OS" = "Linux" ]; then
             ldd package/polyglid-desktop | tee desktop-libraries.txt
             ! grep -F "not found" desktop-libraries.txt
