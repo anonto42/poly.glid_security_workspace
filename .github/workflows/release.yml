@@ -1,10 +1,10 @@
-name: Reusable · Release PolyGlid
+name: Reusable · Promote PolyGlid release
 
 on:
   workflow_call:
     inputs:
       tag:
-        description: Existing version tag to release, for example v0.10.0
+        description: Existing version tag to release, for example v0.10.2
         required: true
         type: string
       signing_public_key:
@@ -17,32 +17,34 @@ on:
         required: true
 
 permissions:
-  contents: read
+  actions: read
+  contents: write
 
 concurrency:
   group: polyglid-release
   cancel-in-progress: false
 
 jobs:
-  preflight:
-    name: Validate release tag and version
+  release:
+    name: Validate, sign, publish, and verify
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ inputs.tag }}
-      - id: version
-        name: Require an exact version match
+
+      - id: preflight
+        name: Validate tag and resolve exact-commit candidates
         shell: bash
         env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
         run: |
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Release tag must look exactly like v0.10.0"
+            echo "::error::Release tag must look exactly like v0.10.2"
             exit 1
           fi
           version="${TAG#v}"
@@ -61,136 +63,98 @@ jobs:
             echo "::error::The validated commit does not match $TAG"
             exit 1
           }
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo "::error::$TAG must point to a commit contained in main"
+          git fetch --no-tags origin "$DEFAULT_BRANCH"
+          git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH" || {
+            echo "::error::$TAG must point to a commit contained in $DEFAULT_BRANCH"
             exit 1
           }
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          runs=$(gh api -X GET "repos/$GH_REPO/actions/workflows/ci.yml/runs" \
+            -f branch="$DEFAULT_BRANCH" \
+            -f event=push \
+            -f status=success \
+            -f per_page=100)
+          candidate_run_id=
+          while IFS= read -r run_id; do
+            [ -n "$run_id" ] || continue
+            artifacts=$(gh api --paginate \
+              "repos/$GH_REPO/actions/runs/$run_id/artifacts" \
+              --jq '.artifacts[] | select(.expired == false) | .name')
+            complete=true
+            for expected in \
+              release-candidate-linux-x86_64 \
+              release-candidate-windows-x86_64 \
+              release-candidate-macos-x86_64 \
+              release-candidate-macos-aarch64 \
+              release-candidate-recon-probe; do
+              if ! grep -Fxq "$expected" <<<"$artifacts"; then
+                complete=false
+                break
+              fi
+            done
+            if [ "$complete" = "true" ]; then
+              candidate_run_id=$run_id
+              break
+            fi
+          done < <(jq -r --arg sha "$GITHUB_SHA" \
+            '.workflow_runs[] | select(.head_sha == $sha) | .id' \
+            <<<"$runs")
+          test -n "$candidate_run_id" || {
+            echo "::error::No successful main-branch CI run with complete, unexpired release candidates exists for $GITHUB_SHA"
+            exit 1
+          }
+
+          candidate=$(gh api "repos/$GH_REPO/actions/runs/$candidate_run_id")
+          test "$(jq -r .head_sha <<<"$candidate")" = "$GITHUB_SHA"
+          test "$(jq -r .head_branch <<<"$candidate")" = "$DEFAULT_BRANCH"
+          test "$(jq -r .event <<<"$candidate")" = "push"
+          test "$(jq -r .conclusion <<<"$candidate")" = "success"
+
+          echo "Using release candidates from run $candidate_run_id"
+          echo "candidate_run_id=$candidate_run_id" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  build:
-    name: Build ${{ matrix.asset }}
-    needs: preflight
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-            asset: linux-x86_64
-            archive: polyglid-linux-x86_64.tar.gz
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            asset: windows-x86_64
-            archive: polyglid-windows-x86_64.zip
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            asset: macos-x86_64
-            archive: polyglid-macos-x86_64.tar.gz
-          - os: macos-15
-            target: aarch64-apple-darwin
-            asset: macos-aarch64
-            archive: polyglid-macos-aarch64.tar.gz
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.tag }}
-
-      - name: Install Linux desktop dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: release-${{ matrix.target }}
-
-      - name: Build native applications
+      - name: Download exact-commit release candidates
         env:
-          POLYGLID_OFFICIAL_PUBLISHER_KEY: ${{ inputs.signing_public_key }}
-        run: cargo build --locked --release --target ${{ matrix.target }} -p polyglid-cli -p polyglid-desktop
+          CANDIDATE_RUN_ID: ${{ steps.preflight.outputs.candidate_run_id }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for artifact in \
+            release-candidate-linux-x86_64 \
+            release-candidate-windows-x86_64 \
+            release-candidate-macos-x86_64 \
+            release-candidate-macos-aarch64 \
+            release-candidate-recon-probe; do
+            gh run download "$CANDIDATE_RUN_ID" --repo "$GH_REPO" --name "$artifact" --dir "artifacts/$artifact"
+          done
 
-      - name: Package Unix applications
-        if: runner.os != 'Windows'
+      - name: Verify candidate identity
         shell: bash
+        env:
+          SIGNING_PUBLIC_KEY: ${{ inputs.signing_public_key }}
+          VERSION: ${{ steps.preflight.outputs.version }}
         run: |
-          mkdir -p package
-          cp "target/${{ matrix.target }}/release/polyglid" package/
-          cp "target/${{ matrix.target }}/release/polyglid-desktop" package/
-          cp README.md LICENSE-MIT LICENSE-APACHE package/
-          tar -C package -czf "${{ matrix.archive }}" .
-      - name: Smoke-test Unix package contents
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          package/polyglid --help
-          test -x package/polyglid-desktop
-          if [ -e package/plugins ]; then
-            echo "::error::application archive must start without installed plugins"
+          metadata=artifacts/release-candidate-recon-probe/release-candidate.json
+          test "$(jq -r .commit "$metadata")" = "$GITHUB_SHA" || {
+            echo "::error::Candidate metadata commit does not match $GITHUB_SHA"
             exit 1
-          fi
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            ldd package/polyglid-desktop | tee desktop-libraries.txt
-            if grep -F "not found" desktop-libraries.txt; then
-              echo "::error::Linux desktop has unresolved shared libraries"
-              exit 1
-            fi
-          fi
+          }
+          test "$(jq -r .version "$metadata")" = "$VERSION" || {
+            echo "::error::Candidate metadata version does not match $VERSION"
+            exit 1
+          }
+          test "$(jq -r .signing_public_key "$metadata")" = "${SIGNING_PUBLIC_KEY,,}" || {
+            echo "::error::Candidate applications were not built with the configured release public key"
+            exit 1
+          }
 
-      - name: Package Windows applications
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force package | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/polyglid.exe" package/
-          Copy-Item "target/${{ matrix.target }}/release/polyglid-desktop.exe" package/
-          Copy-Item -Path README.md, LICENSE-MIT, LICENSE-APACHE -Destination package/
-          Compress-Archive -Path package/* -DestinationPath "${{ matrix.archive }}"
-      - name: Smoke-test Windows package contents
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          & package/polyglid.exe --help
-          if (!(Test-Path package/polyglid-desktop.exe)) { throw "desktop executable is missing" }
-          if (Test-Path package/plugins) { throw "application archive must start without installed plugins" }
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.asset }}
-          path: ${{ matrix.archive }}
-          if-no-files-found: error
-
-  plugin:
-    name: Build Recon Probe component
-    needs: preflight
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.tag }}
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: release-plugin
-      - run: cargo build --locked --release -p polyglid-cli
-      - run: cargo build --locked --release -p recon-probe --target wasm32-wasip1
-      - name: Componentize plugin
-        run: |
-          target/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
-          cp plugins/recon-probe/polyglid.toml recon-probe.component.polyglid.toml
-      - name: Sign and cryptographically verify component
+      - name: Sign and cryptographically verify Recon component
         shell: bash
         env:
           SIGNING_PRIVATE_SEED: ${{ secrets.signing_private_seed }}
           SIGNING_PUBLIC_KEY: ${{ inputs.signing_public_key }}
+          VERSION: ${{ steps.preflight.outputs.version }}
         run: |
           test "${#SIGNING_PRIVATE_SEED}" -eq 64 || {
             echo "::error::RECON_SIGNING_PRIVATE_SEED must contain exactly 64 hexadecimal characters"
@@ -208,58 +172,46 @@ jobs:
             echo "::error::RECON_SIGNING_PUBLIC_KEY is not valid hexadecimal"
             exit 1
           }
+
+          mkdir candidate-linux
+          tar -xzf artifacts/release-candidate-linux-x86_64/polyglid-linux-x86_64.tar.gz -C candidate-linux
+          cli=candidate-linux/polyglid
+          component=artifacts/release-candidate-recon-probe/recon-probe.component.wasm
           key_file="$RUNNER_TEMP/recon-signing-seed"
           printf '%s' "$SIGNING_PRIVATE_SEED" > "$key_file"
           chmod 600 "$key_file"
-          target/release/polyglid plugin sign recon-probe.component.wasm --key "$key_file"
-          test "$(jq -r .key_id recon-probe.component.sig)" = "${SIGNING_PUBLIC_KEY,,}" || {
+          "$cli" plugin sign "$component" --key "$key_file"
+          signature="${component%.wasm}.sig"
+          test "$(jq -r .key_id "$signature")" = "${SIGNING_PUBLIC_KEY,,}" || {
             echo "::error::The configured public key does not match the signing seed"
             exit 1
           }
-          target/release/polyglid plugin verify recon-probe.component.wasm
-      - name: Verify component release metadata
-        env:
-          VERSION: ${{ needs.preflight.outputs.version }}
-        run: |
-          target/release/polyglid plugin inspect recon-probe.component.wasm | tee plugin-metadata.txt
+          "$cli" plugin verify "$component"
+          "$cli" plugin inspect "$component" | tee plugin-metadata.txt
           grep -F "id: polyglid.recon_probe" plugin-metadata.txt
           grep -F "version: $VERSION" plugin-metadata.txt
           grep -F -- "- dns-resolve" plugin-metadata.txt
           grep -F -- "- report-write (path-prefix=reports)" plugin-metadata.txt
-      - uses: actions/upload-artifact@v7
-        with:
-          name: recon-probe
-          path: |
-            recon-probe.component.wasm
-            recon-probe.component.sig
-            recon-probe.component.polyglid.toml
-          if-no-files-found: error
 
-  publish:
-    name: Publish GitHub Release
-    needs: [preflight, build, plugin]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.tag }}
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
       - name: Collect assets and checksums
+        shell: bash
         run: |
           mkdir release-assets
-          find artifacts -maxdepth 2 -type f -exec cp {} release-assets/ \;
+          cp artifacts/release-candidate-linux-x86_64/polyglid-linux-x86_64.tar.gz release-assets/
+          cp artifacts/release-candidate-windows-x86_64/polyglid-windows-x86_64.zip release-assets/
+          cp artifacts/release-candidate-macos-x86_64/polyglid-macos-x86_64.tar.gz release-assets/
+          cp artifacts/release-candidate-macos-aarch64/polyglid-macos-aarch64.tar.gz release-assets/
+          cp artifacts/release-candidate-recon-probe/recon-probe.component.wasm release-assets/
+          cp artifacts/release-candidate-recon-probe/recon-probe.component.sig release-assets/
+          cp artifacts/release-candidate-recon-probe/recon-probe.component.polyglid.toml release-assets/
           cd release-assets
           sha256sum polyglid-* recon-probe.component.wasm recon-probe.component.sig recon-probe.component.polyglid.toml > SHA256SUMS
-      - name: Create release
+
+      - name: Publish verified GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.preflight.outputs.tag }}
+          TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           expected=(
@@ -309,20 +261,14 @@ jobs:
           }
           gh release edit "$TAG" --draft=false
 
-  verify-downloads:
-    name: Website · Verify latest release assets
-    needs: [preflight, publish]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Require the website's latest-release links to resolve to this release
+      - name: Verify latest-release downloads
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.preflight.outputs.tag }}
+          TAG: ${{ inputs.tag }}
+        shell: bash
         run: |
-          latest=""
+          latest=
           for attempt in 1 2 3 4 5 6; do
             latest=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
             [ "$latest" = "$TAG" ] && break

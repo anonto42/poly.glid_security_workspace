@@ -181,16 +181,20 @@ Goal: desktop users install a normal app while the same Rust core still powers t
 
 ## Automated GitHub Release
 
-`.github/workflows/ci.yml` receives a newly created version tag matching
-`v*.*.*`, runs every validation branch, and then calls the reusable
-`.github/workflows/release.yml` workflow.
+`.github/workflows/ci.yml` builds promotable candidates after authoritative
+validation succeeds on `main`. A newly created version tag matching `v*.*.*`
+then calls `.github/workflows/release.yml` to promote candidates from the exact
+tagged commit.
 
 ```text
-version tag
-  → full CI and release preflight
-  → Recon Probe WebAssembly component
-  → native Linux, Windows, Intel macOS, and Apple macOS builds
-  → compressed archives and SHA256SUMS
+main push
+  → authoritative CI
+  → native Linux, Windows, Intel macOS, and Apple macOS candidates
+  → unsigned Recon Probe candidate plus provenance
+version tag on the same commit
+  → exact-commit run and release preflight
+  → download and verify candidates
+  → sign Recon Probe and generate SHA256SUMS
   → verified draft promoted to GitHub Release
   → stable latest-release website links verified
 ```
@@ -212,7 +216,9 @@ SHA256SUMS
 Before tagging, the value under `[workspace.package]` in `Cargo.toml` and the
 version in `plugins/recon-probe/polyglid.toml` must match the tag without its
 `v` prefix. The tagged commit must already be contained in `main`; the workflow
-rejects mismatched or unmerged versions.
+rejects mismatched or unmerged versions. It also requires the successful
+`main` run and its candidate artifacts to still exist; candidates are retained
+for 14 days.
 
 Formal releases additionally require:
 
@@ -221,7 +227,9 @@ Formal releases additionally require:
 - repository variable `RECON_SIGNING_PUBLIC_KEY`, containing the matching
   32-byte public key as 64 hexadecimal characters.
 
-The release workflow signs the exact component, compares the generated key ID
+The candidate build embeds the configured public key in every desktop binary
+and records the key, version, and commit in provenance. The release workflow
+checks that provenance, signs the exact component, compares the generated key ID
 with the configured public key, and runs cryptographic verification. The
 component, adjacent signature, and exact-scope manifest are separate GitHub
 Release assets rather than files inside native application archives. Package

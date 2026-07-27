@@ -95,12 +95,12 @@ flowchart TD
     SiteBuild --> Result
 
     Result --> DeliveryResult[Delivery result]
-    Result -->|product push to main or manual run| Preview[Package Linux preview]
+    Result -->|product push to main or manual main run| Candidate[Build promotable four-platform candidates]
     Result -->|site, root, or workflow push to main; manual main run| Pages[Deploy GitHub Pages]
     Result -->|repinfo.json on main| Metadata[Sync repository metadata]
-    Result -->|new version tag| Release[Build and publish cross-platform release]
+    Result -->|new version tag| Release[Promote exact-commit candidates]
     Release --> Latest[Verify stable latest-release website links]
-    Preview --> DeliveryResult
+    Candidate --> DeliveryResult
     Pages --> DeliveryResult
     Metadata --> DeliveryResult
     Latest --> DeliveryResult
@@ -109,31 +109,26 @@ flowchart TD
 
 - GitHub renders top-level jobs and reusable-workflow caller nodes in the run overview; opening a reusable call shows its nested jobs and steps.
 - `ci.yml` detects changes and connects the validation, build, test, deployment, and final-result jobs.
-- Pull requests and ordinary `main` pushes are selective. Manual runs, new version tags, workflow changes, and unknown paths force every validation branch.
+- Rust format, Clippy, build, nextest, and doctests share one runner job; WASM build and tests share another. Formal release validation, signing, publication, and verification also share one runner job.
+- Pull requests and ordinary `main` pushes are selective. Manual runs, workflow changes, and unknown paths force every validation branch. Version tags promote artifacts from an already successful exact-commit `main` run.
 - `deploy-site.yml` is a reusable workflow called by CI after a successful site build on `main`.
 - `repo-sync.yml` is a reusable workflow called by CI when `repinfo.json` changes on `main`.
 - The non-blocking `cache-cleanup` job in `ci.yml` runs after successful delivery, deletes closed-PR caches, and retains only the most recently accessed cache in each matching default-branch `v0-rust-…-<8 hex>-<8 hex>` family.
 - `scripts/ops/polyglid-ops.mjs` is the shared local and CI entry point.
-- `docs/development/CI_DELIVERY.md` explains the event, preview, and release lifecycle step by step.
+- `docs/development/CI_DELIVERY.md` explains the event, candidate, and release lifecycle step by step.
 
 ## Release Flow
 
 ```mermaid
 flowchart LR
-    Tag[Push new version tag] --> CI[Full CI result]
-    CI --> Preflight[Validate exact versions and main ancestry]
-    Preflight --> Plugin[Build and inspect Recon component]
-    Plugin --> Sign[Sign and verify component + exact-scope manifest]
-    Sign --> Matrix[Native build matrix]
-    Matrix --> Linux[Linux x86_64]
-    Matrix --> Windows[Windows x86_64]
-    Matrix --> MacIntel[macOS Intel]
-    Matrix --> MacArm[macOS Apple Silicon]
-    Linux --> Smoke[Smoke-test unpacked packages]
-    Windows --> Smoke
-    MacIntel --> Smoke
-    MacArm --> Smoke
-    Smoke --> Draft[Draft release + SHA256SUMS]
+    Main[Successful main CI] --> Candidates[Build and smoke-test four native candidates]
+    Candidates --> Provenance[Record commit, version, and public key]
+    Tag[Push new version tag on same commit] --> Resolve[Resolve successful exact-commit run]
+    Resolve --> Preflight[Validate versions, ancestry, artifacts, and provenance]
+    Provenance --> Preflight
+    Preflight --> Promote[Download candidates without recompiling]
+    Promote --> Sign[Sign and verify component + exact-scope manifest]
+    Sign --> Draft[Draft release + SHA256SUMS]
     Draft --> Publish[Verify assets and publish]
     Publish --> Website[Verify latest release and expected assets]
 ```

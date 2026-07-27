@@ -113,9 +113,12 @@ git tag v0.10.1
 git push origin v0.10.1
 ```
 
-GitHub Actions runs the full gate, builds on each operating system, publishes a
-verified release, and verifies the latest release and expected asset names. The
-public site discovers the latest published version dynamically.
+Wait for the commit's `main` workflow to finish successfully before creating
+the tag. GitHub Actions then promotes that exact commit's already-green,
+four-platform release candidates, signs Recon, publishes a verified release,
+and verifies the latest release and expected asset names. This keeps
+tag-to-release time short without trusting bypassable local hooks. Enable fast
+local feedback once per clone with `scripts/ops/install-git-hooks.sh`.
 
 ## License
 

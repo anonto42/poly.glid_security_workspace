@@ -1,0 +1,151 @@
+name: Reusable · Build release candidate
+
+on:
+  workflow_call:
+    inputs:
+      signing_public_key:
+        description: Hex-encoded Ed25519 public key embedded in native applications
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build candidate ${{ matrix.asset }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            asset: linux-x86_64
+            archive: polyglid-linux-x86_64.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: windows-x86_64
+            archive: polyglid-windows-x86_64.zip
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: macos-x86_64
+            archive: polyglid-macos-x86_64.tar.gz
+          - os: macos-15
+            target: aarch64-apple-darwin
+            asset: macos-aarch64
+            archive: polyglid-macos-aarch64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: identity
+        name: Validate candidate identity
+        shell: bash
+        env:
+          SIGNING_PUBLIC_KEY: ${{ inputs.signing_public_key }}
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
+          plugin_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' plugins/recon-probe/polyglid.toml | head -n 1)
+          test "$plugin_version" = "$version"
+          test "${#SIGNING_PUBLIC_KEY}" -eq 64
+          [[ "$SIGNING_PUBLIC_KEY" =~ ^[0-9A-Fa-f]{64}$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-candidate-${{ matrix.target }}
+
+      - name: Build native applications
+        env:
+          POLYGLID_OFFICIAL_PUBLISHER_KEY: ${{ inputs.signing_public_key }}
+        run: cargo build --locked --release --target ${{ matrix.target }} -p polyglid-cli -p polyglid-desktop
+
+      - name: Package Unix applications
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p package
+          cp "target/${{ matrix.target }}/release/polyglid" package/
+          cp "target/${{ matrix.target }}/release/polyglid-desktop" package/
+          cp README.md LICENSE-MIT LICENSE-APACHE package/
+          tar -C package -czf "${{ matrix.archive }}" .
+
+      - name: Smoke-test Unix package contents
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          package/polyglid --help
+          test -x package/polyglid-desktop
+          if [ -e package/plugins ]; then
+            echo "::error::application archive must start without installed plugins"
+            exit 1
+          fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            ldd package/polyglid-desktop | tee desktop-libraries.txt
+            if grep -F "not found" desktop-libraries.txt; then
+              echo "::error::Linux desktop has unresolved shared libraries"
+              exit 1
+            fi
+          fi
+
+      - name: Package Windows applications
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/polyglid.exe" package/
+          Copy-Item "target/${{ matrix.target }}/release/polyglid-desktop.exe" package/
+          Copy-Item -Path README.md, LICENSE-MIT, LICENSE-APACHE -Destination package/
+          Compress-Archive -Path package/* -DestinationPath "${{ matrix.archive }}"
+
+      - name: Smoke-test Windows package contents
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & package/polyglid.exe --help
+          if (!(Test-Path package/polyglid-desktop.exe)) { throw "desktop executable is missing" }
+          if (Test-Path package/plugins) { throw "application archive must start without installed plugins" }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-candidate-${{ matrix.asset }}
+          path: ${{ matrix.archive }}
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Build Recon component candidate
+        if: matrix.asset == 'linux-x86_64'
+        shell: bash
+        env:
+          SIGNING_PUBLIC_KEY: ${{ inputs.signing_public_key }}
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          rustup target add wasm32-wasip1
+          cargo build --locked --release -p recon-probe --target wasm32-wasip1
+          target/${{ matrix.target }}/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
+          cp plugins/recon-probe/polyglid.toml recon-probe.component.polyglid.toml
+          jq -n \
+            --arg commit "$GITHUB_SHA" \
+            --arg version "$VERSION" \
+            --arg signing_public_key "${SIGNING_PUBLIC_KEY,,}" \
+            '{commit: $commit, version: $version, signing_public_key: $signing_public_key}' \
+            > release-candidate.json
+      - uses: actions/upload-artifact@v7
+        if: matrix.asset == 'linux-x86_64'
+        with:
+          name: release-candidate-recon-probe
+          path: |
+            recon-probe.component.wasm
+            recon-probe.component.polyglid.toml
+            release-candidate.json
+          retention-days: 14
+          if-no-files-found: error

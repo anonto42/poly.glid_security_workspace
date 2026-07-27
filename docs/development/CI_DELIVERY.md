@@ -1,9 +1,9 @@
 # CI And Delivery Lifecycle
 
 PolyGlid uses `.github/workflows/ci.yml` as the single entry point for pull
-requests, changes on `main`, manual full checks, preview builds, and formal
-version releases. An ordinary commit can create a temporary preview, but it
-cannot create a GitHub Release.
+requests, changes on `main`, manual full checks, release-candidate builds, and
+formal version releases. An ordinary commit can create temporary candidates,
+but it cannot create a GitHub Release.
 
 ## Complete Flow
 
@@ -12,7 +12,7 @@ flowchart TD
     Change[Developer changes code] --> Event{GitHub event}
     Event --> Detect[Detect changed paths]
     Detect --> Scope{Selective or full run}
-    Event -->|Manual run or new vX.Y.Z tag| Full[Force full validation]
+    Event -->|Manual run| Full[Force full validation]
     Full --> Scope
 
     Scope --> Format[Rust format]
@@ -43,22 +43,21 @@ flowchart TD
     Site --> Result
 
     Result --> Delivery[Delivery result]
-    Result -->|Product push to main or manual run| Preview[Linux preview artifact]
+    Result -->|Product push to main or manual main run| Candidates[Build four native candidates and Recon component]
     Result -->|Site, root, or workflow push to main; manual main run| Pages[Pages reusable workflow]
     Result -->|repinfo.json push to main| Metadata[Repository metadata sync]
-    Result -->|New vX.Y.Z tag| Release[Release reusable workflow]
+    Result -->|New vX.Y.Z tag| Resolve[Find successful main run for exact tagged commit]
 
     Pages --> PagesBuild[Build and upload Pages artifact]
     PagesBuild --> PagesDeploy[Deploy from main]
-    Release --> Preflight[Validate tag, versions, and main ancestry]
-    Preflight --> Plugin[Build and inspect Recon component]
-    Plugin --> Sign[Sign and verify Recon component]
-    Sign --> Matrix[Linux, Windows, macOS Intel and Apple builds]
-    Matrix --> PackageSmoke[Smoke-test unpacked packages]
-    PackageSmoke --> Publish[Draft, upload, verify, and publish GitHub Release]
+    Candidates --> CandidateSmoke[Smoke-test plugin-free packages]
+    CandidateSmoke --> Delivery
+    Resolve --> Preflight[Validate tag, versions, successful run, candidate provenance, and main ancestry]
+    Preflight --> Promote[Download exact-commit candidates]
+    Promote --> Sign[Sign and verify Recon component]
+    Sign --> Publish[Draft, upload, verify, and publish GitHub Release]
     Publish --> VerifyLatest[Verify latest release and expected assets]
 
-    Preview --> Delivery
     PagesDeploy --> Delivery
     Metadata --> Delivery
     VerifyLatest --> Delivery
@@ -71,11 +70,18 @@ open one to see its nested jobs and steps. Some boxes above expand a job's
 important internal steps, so the documentation is more detailed than the
 top-level GitHub graph.
 
+The Actions overview intentionally groups related work. Formatting, Clippy,
+workspace build, nextest, and doctests run as named steps on one Rust runner;
+WASM build and tests share one WASM runner. Candidate resolution, preflight,
+signing, publication, and download verification also share one formal-release
+runner. This removes repeated runner startup, checkout, dependency installation,
+cache restoration, and intermediate artifact handoffs without removing checks.
+
 ## Why A Job Runs
 
 | Changed path or event | Job or chain | What it proves | What happens next |
 | --- | --- | --- | --- |
-| `apps/**`, `crates/**`, `Cargo.toml`, or `Cargo.lock` | Format → Clippy → build → tests | Rust is formatted, warning-free under Clippy, compilable, and tested | Feeds `CI result` |
+| `apps/**`, `crates/**`, `Cargo.toml`, or `Cargo.lock` | One Rust job: format → Clippy → build → nextest → doctests | Rust is formatted, warning-free under Clippy, compilable, and tested | Feeds `CI result` |
 | `plugins/**`, `contracts/**`, or WIT files | Rust chain and WASM build → tests | Host code and Recon guest compile; plugin tests pass | Feeds `CI result` |
 | Product code, WASM, scripts, or root build files | MVP smoke | The real CLI componentizes and runs Recon against `localhost`, then writes the exact expected report | Feeds `CI result` |
 | `crates/config/**` or `configs/**` | Config | Rust config tests and JavaScript config syntax pass | Feeds `CI result` |
@@ -88,18 +94,20 @@ top-level GitHub graph.
 | `repinfo.json` | Metadata | The requested repository metadata is applied with the configured token | Runs only on `main` after `CI result` |
 | Successful push or manual run on the default branch | Cache maintenance | Closed-PR caches and less-recently-accessed duplicate versions of each matching default-branch Rust cache family are deleted | Runs after `Delivery result` as a non-blocking maintenance stage |
 | Unknown or newly added path | Every validation branch | New project areas cannot receive an empty green run | `CI result` requires every branch to execute |
-| Manual run or new version tag | Every validation branch | The complete repository gate passes, not only changed areas | Preview for manual; formal release for a new tag |
+| Manual run | Every validation branch | The complete repository gate passes, not only changed areas | Release candidates for a manual run on `main` |
+| New version tag | Exact-commit promotion gate | The tagged commit already has a successful `main` run and unexpired candidate artifacts | Sign, checksum, and publish without recompiling |
 
 Selective pull-request and `main` runs intentionally show unrelated jobs in
 gray. Gray means the job's path condition was false, or an upstream dependency
-failed. On a manual or formal-release run, `CI result` rejects any skipped
-validation branch. A green `Delivery result` means every validation and
-delivery branch that applied to that event completed successfully. Cache
+failed. On a manual run, `CI result` rejects any skipped validation branch.
+A version tag deliberately skips repeated compilation and instead requires a
+successful exact-commit `main` run. A green `Delivery result` means every
+validation and delivery branch that applied to that event completed successfully. Cache
 maintenance runs afterward and is intentionally not a delivery gate.
 
 Delivery jobs evaluate their event/path rules after `CI result` even when an
 unrelated validation branch is gray. Their explicit `CI result == success`
-guard still blocks preview packaging, Pages, metadata writes, and releases when
+guard still blocks candidate packaging, Pages, metadata writes, and releases when
 an applicable validation job fails. Cache maintenance has its own guard and
 runs only after `Delivery result` succeeds.
 
@@ -118,10 +126,10 @@ cargo test --locked -p polyglid-core \
 | Event | Validation scope | Delivery outcome |
 | --- | --- | --- |
 | Pull request to `main` | Changed areas; unknown/workflow changes force all | Validation only; no artifact, metadata write, deployment, or release |
-| Push to `main` | Changed areas; unknown/workflow changes force all | Applicable Linux preview, Pages, or metadata work, followed by cache maintenance |
-| Manual **Run workflow** on `main` | Every validation branch | Linux preview, Pages deployment, and cache maintenance; never a formal release |
-| Manual **Run workflow** on another branch | Every validation branch | Linux preview only; no Pages deployment, cache deletion, or formal release |
-| Newly created tag such as `v0.10.1` | Every validation branch | Four native archives, Recon component, checksums, GitHub Release, and latest-link verification |
+| Push to `main` | Changed areas; unknown/workflow changes force all | Applicable four-platform release candidates, Pages, or metadata work, followed by cache maintenance |
+| Manual **Run workflow** on `main` | Every validation branch | Four-platform release candidates, Pages deployment, and cache maintenance; never a formal release |
+| Manual **Run workflow** on another branch | Every validation branch | Validation only; no candidates, Pages deployment, cache deletion, or formal release |
+| Newly created tag such as `v0.10.1` | Exact-commit candidate promotion | Signed Recon component, checksums, GitHub Release, and latest-link verification without recompiling |
 | Deleted or force-moved version tag | No release publication | The release condition rejects it |
 
 ## Cache Maintenance
@@ -163,27 +171,24 @@ successful runs write separate deletion counts and reclaimed size to the job
 summary. Pull-request runs do not receive cache-deletion permission and show
 the job as skipped.
 
-## Preview Versions
+## Release Candidates
 
-A successful product/full-validation push to `main`, or a manual run, creates
-an Actions artifact named like:
-
-```text
-polyglid-v0.10.0-dev.b0cc556-linux-x86_64
-```
-
-The suffix is the first seven characters of the Git commit. The artifact
-contains:
+A successful product/full-validation push to `main`, or a manual run on
+`main`, creates these Actions artifacts:
 
 ```text
-polyglid-linux-preview.tar.gz
-polyglid-linux-preview.tar.gz.sha256
+release-candidate-linux-x86_64
+release-candidate-windows-x86_64
+release-candidate-macos-x86_64
+release-candidate-macos-aarch64
+release-candidate-recon-probe
 ```
 
-Inside the archive are the Linux CLI, Linux desktop executable, README, and
-both license files. The archive deliberately has no `plugins/` directory so a
-clean install begins with an empty registry. Preview artifacts expire after 14
-days and are not GitHub Releases.
+The native archives contain each platform's CLI, desktop executable, README,
+and both license files. They deliberately have no `plugins/` directory. The
+Recon candidate contains an unsigned component, manifest, and provenance
+record binding the version, commit SHA, and embedded public key. Candidates
+expire after 14 days and are not GitHub Releases.
 
 ## Formal Version Releases
 
@@ -205,13 +210,36 @@ Do not tag an unpushed local commit. Release preflight checks:
 3. The Recon manifest version matches the tag.
 4. The checked-out tag resolves to the commit being validated.
 5. The tagged commit is contained in `origin/main`.
+6. A successful `main` push run exists for the exact tag commit.
+7. That run still contains every unexpired release candidate.
+8. Candidate provenance matches the tag version, commit, and signing public key.
+
+Wait for the tagged commit's `main` run to be green before pushing its tag. A
+tag pushed earlier fails quickly instead of waiting for or rebuilding missing
+candidates.
 
 The release requires the `RECON_SIGNING_PRIVATE_SEED` Actions secret and the
 matching `RECON_SIGNING_PUBLIC_KEY` repository variable. It signs and verifies
-the exact Recon component and publishes its component, detached signature, and
-manifest as separate release assets. Native application archives deliberately
-contain no installed plugins. Their smoke checks reject an unexpected
-`plugins/` directory.
+the promoted Recon component and publishes its component, detached signature,
+and manifest as separate release assets. Native application archives were
+already built and smoke-tested by the successful `main` run. The tag path only
+downloads, verifies, signs, checksums, and publishes them, targeting a 3–4
+minute promotion instead of repeating every compilation job.
+
+## Local Pre-Commit Feedback
+
+Enable the repository-owned hook once per clone:
+
+```bash
+scripts/ops/install-git-hooks.sh
+```
+
+The hook runs formatting, locked metadata/version consistency, operations
+tests, detector tests, and Actions lint before a commit is created. Use
+`SKIP_POLYGLID_PRECOMMIT=1 git commit ...` only for an explicit emergency; the
+hook is developer feedback, not a release trust boundary. Pull requests and
+`main` still run authoritative CI, and only successful `main` artifacts can be
+promoted by a version tag.
 
 The release remains a draft while assets upload. The job verifies all expected
 asset names before publishing, and a rerun can safely complete an existing
