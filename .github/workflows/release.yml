@@ -71,7 +71,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.asset }}
-    needs: plugin
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -116,12 +116,6 @@ jobs:
           POLYGLID_OFFICIAL_PUBLISHER_KEY: ${{ inputs.signing_public_key }}
         run: cargo build --locked --release --target ${{ matrix.target }} -p polyglid-cli -p polyglid-desktop
 
-      - name: Download bundled Recon Probe
-        uses: actions/download-artifact@v8
-        with:
-          name: recon-probe
-          path: package/plugins
-
       - name: Package Unix applications
         if: runner.os != 'Windows'
         shell: bash
@@ -137,9 +131,7 @@ jobs:
         run: |
           package/polyglid --help
           test -x package/polyglid-desktop
-          test -s package/plugins/recon-probe.component.wasm
-          test -s package/plugins/recon-probe.component.sig
-          test -s package/plugins/recon-probe.component.polyglid.toml
+          test ! -e package/plugins
           if [ "$RUNNER_OS" = "Linux" ]; then
             ldd package/polyglid-desktop | tee desktop-libraries.txt
             ! grep -F "not found" desktop-libraries.txt
@@ -160,9 +152,7 @@ jobs:
         run: |
           & package/polyglid.exe --help
           if (!(Test-Path package/polyglid-desktop.exe)) { throw "desktop executable is missing" }
-          if (!(Test-Path package/plugins/recon-probe.component.wasm)) { throw "Recon component is missing" }
-          if (!(Test-Path package/plugins/recon-probe.component.sig)) { throw "Recon signature is missing" }
-          if (!(Test-Path package/plugins/recon-probe.component.polyglid.toml)) { throw "Recon manifest is missing" }
+          if (Test-Path package/plugins) { throw "application archive must start without installed plugins" }
 
       - uses: actions/upload-artifact@v7
         with:

@@ -180,9 +180,10 @@ polyglid-linux-preview.tar.gz
 polyglid-linux-preview.tar.gz.sha256
 ```
 
-Inside the archive are the Linux CLI, Linux desktop executable, Recon component,
-README, and both license files. Preview artifacts expire after 14 days and are
-not GitHub Releases.
+Inside the archive are the Linux CLI, Linux desktop executable, README, and
+both license files. The archive deliberately has no `plugins/` directory so a
+clean install begins with an empty registry. Preview artifacts expire after 14
+days and are not GitHub Releases.
 
 ## Formal Version Releases
 
@@ -207,8 +208,10 @@ Do not tag an unpushed local commit. Release preflight checks:
 
 The release requires the `RECON_SIGNING_PRIVATE_SEED` Actions secret and the
 matching `RECON_SIGNING_PUBLIC_KEY` repository variable. It signs and verifies
-the exact Recon component, packages its adjacent detached signature, and
-smoke-checks unpacked package contents before any upload.
+the exact Recon component and publishes its component, detached signature, and
+manifest as separate release assets. Native application archives deliberately
+contain no installed plugins. Their smoke checks reject an unexpected
+`plugins/` directory.
 
 The release remains a draft while assets upload. The job verifies all expected
 asset names before publishing, and a rerun can safely complete an existing
@@ -250,14 +253,16 @@ user with direct push access can bypass it.
 
 The runtime tests now cover denied host imports and exact scoped grants, and
 formal releases enforce a cryptographically verified detached signature for the
-bundled component. Package jobs execute the unpacked CLI, require the bundled
-component, signature, and exact-scope manifest, and reject unresolved Linux
-desktop libraries.
+separately downloadable component. Package jobs execute the unpacked CLI,
+require an empty default plugin installation, and reject unresolved Linux
+desktop libraries. Release publication independently requires the signed
+component, signature, and exact-scope manifest.
 
 Release builds compile the configured official public key into the desktop
 client. First startup enrolls only that pinned publisher and refuses a database
 record with the same official identity but a different key, so Balanced policy
-can verify the signed bundled component without a Development-policy fallback.
+can verify the separately downloaded official component without a
+Development-policy fallback.
 
 There is still no Windows/macOS platform code signing, installer, macOS
 notarization, SBOM/provenance attestation, or automated headless desktop journey

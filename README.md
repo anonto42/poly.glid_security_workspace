@@ -101,7 +101,7 @@ work are defined by the [Desktop MVP checklist](docs/planning/MVP.md).
 
 ## Download Releases
 
-After the first formal publication, builds are available from the [latest GitHub release](https://github.com/anonto42/poly.glid_security_workspace/releases/latest). Releases produced by the current delivery workflow contain Linux, Windows, Intel macOS, and Apple Silicon macOS archives, the Recon Probe WASM component with its detached signature and exact-scope manifest, and `SHA256SUMS`.
+After the first formal publication, builds are available from the [latest GitHub release](https://github.com/anonto42/poly.glid_security_workspace/releases/latest). Releases produced by the current delivery workflow contain plugin-free Linux, Windows, Intel macOS, and Apple Silicon macOS application archives; Recon Probe is provided separately with its detached signature and exact-scope manifest, alongside `SHA256SUMS`.
 
 Maintainers publish a release after updating both the workspace and Recon
 manifest versions, merging that commit to `main`, and pushing the matching tag:

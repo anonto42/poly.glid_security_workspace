@@ -351,19 +351,15 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
           echo "label=v${version}-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-      - name: Build preview applications and plugin
-        run: |
-          cargo build --locked --release -p polyglid-cli -p polyglid-desktop
-          cargo build --locked --release -p recon-probe --target wasm32-wasip1
-          target/release/polyglid plugin componentize target/wasm32-wasip1/release/recon_probe.wasm recon-probe.component.wasm
+      - name: Build preview applications
+        run: cargo build --locked --release -p polyglid-cli -p polyglid-desktop
       - name: Package preview
         run: |
-          mkdir -p package/plugins
+          mkdir -p package
           cp target/release/polyglid package/
           cp target/release/polyglid-desktop package/
-          cp recon-probe.component.wasm package/plugins/
-          cp plugins/recon-probe/polyglid.toml package/plugins/recon-probe.component.polyglid.toml
           cp README.md LICENSE-MIT LICENSE-APACHE package/
+          test ! -e package/plugins
           tar -C package -czf polyglid-linux-preview.tar.gz .
           sha256sum polyglid-linux-preview.tar.gz > polyglid-linux-preview.tar.gz.sha256
       - uses: actions/upload-artifact@v7

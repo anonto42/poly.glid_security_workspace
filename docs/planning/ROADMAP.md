@@ -160,8 +160,9 @@ Status: release archives exist; user-grade packaging remains.
       its private seed only in the release environment/CI secret store.
 - [x] Pin the configured official public key into release binaries and enroll
       only that publisher at first startup.
-- [x] Make CI sign and verify `recon-probe.component.wasm`, then package the
-      adjacent `recon-probe.component.sig` in every desktop artifact.
+- [x] Make CI sign and verify `recon-probe.component.wasm`, then publish its
+      adjacent signature and manifest separately from plugin-free application
+      archives.
 - [ ] Publish a new signed release; do not weaken Balanced policy or silently
       fall back to Development policy for the unsigned v0.10.0 component.
 - [x] Smoke-test unpacked release CLI/component contents on every build runner

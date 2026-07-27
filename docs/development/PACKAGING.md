@@ -17,8 +17,10 @@ polyglid-windows-x86_64.exe
 ```
 
 The Dioxus desktop app is currently distributed beside the CLI in a native
-archive. The bundled Recon component has a required detached Ed25519 signature.
-Platform-native application signing, notarization, and installers remain later
+archive. Application archives contain no preinstalled plugins. Recon is
+published separately with a required detached Ed25519 signature and manifest,
+allowing a clean-install plugin journey to be tested. Platform-native
+application signing, notarization, and installers remain later
 release-hardening stages.
 
 ## What Goes Into One CLI Binary
@@ -220,10 +222,11 @@ Formal releases additionally require:
   32-byte public key as 64 hexadecimal characters.
 
 The release workflow signs the exact component, compares the generated key ID
-with the configured public key, runs cryptographic verification, and packages
-the adjacent signature and exact-scope manifest on every platform. It also
-executes the unpacked CLI, checks all component sidecars, and rejects unresolved
-Linux shared libraries before publication.
+with the configured public key, and runs cryptographic verification. The
+component, adjacent signature, and exact-scope manifest are separate GitHub
+Release assets rather than files inside native application archives. Package
+tests execute the unpacked CLI, require an empty plugin installation, and
+reject unresolved Linux shared libraries before publication.
 
 The same public key is embedded into each release desktop binary at compile
 time. On first startup the client enrolls that exact official publisher in the

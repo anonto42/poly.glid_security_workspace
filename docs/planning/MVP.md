@@ -124,8 +124,8 @@ The MVP cannot ship while any of these conditions is false:
 - [x] The user can create or select a real project without opening a terminal.
 - [x] The user can inspect and install a valid locally selected component from
       the UI.
-- [ ] The packaged Recon component and adjacent signature verify under default
-      Balanced policy without a Development-policy fallback.
+- [ ] The separately downloaded Recon component and adjacent signature verify
+      under default Balanced policy without a Development-policy fallback.
 - [x] The UI explains every requested capability and its exact scope.
 - [x] Denying a capability prevents execution and creates an audit record.
 - [x] Allowing a valid scope starts a job and returns a visible job ID.
