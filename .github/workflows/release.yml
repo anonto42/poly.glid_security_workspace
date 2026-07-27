@@ -137,7 +137,10 @@ jobs:
           fi
           if [ "$RUNNER_OS" = "Linux" ]; then
             ldd package/polyglid-desktop | tee desktop-libraries.txt
-            ! grep -F "not found" desktop-libraries.txt
+            if grep -F "not found" desktop-libraries.txt; then
+              echo "::error::Linux desktop has unresolved shared libraries"
+              exit 1
+            fi
           fi
 
       - name: Package Windows applications
