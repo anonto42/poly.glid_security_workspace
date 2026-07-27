@@ -121,7 +121,7 @@ cargo test --locked -p polyglid-core \
 | Push to `main` | Changed areas; unknown/workflow changes force all | Applicable Linux preview, Pages, or metadata work, followed by cache maintenance |
 | Manual **Run workflow** on `main` | Every validation branch | Linux preview, Pages deployment, and cache maintenance; never a formal release |
 | Manual **Run workflow** on another branch | Every validation branch | Linux preview only; no Pages deployment, cache deletion, or formal release |
-| Newly created tag such as `v0.10.0` | Every validation branch | Four native archives, Recon component, checksums, GitHub Release, and latest-link verification |
+| Newly created tag such as `v0.10.1` | Every validation branch | Four native archives, Recon component, checksums, GitHub Release, and latest-link verification |
 | Deleted or force-moved version tag | No release publication | The release condition rejects it |
 
 ## Cache Maintenance
@@ -194,8 +194,8 @@ the same release version. After the version change is reviewed and merged:
 git switch main
 git pull --ff-only
 cargo test --locked --workspace --exclude polyglid-site
-git tag v0.10.0
-git push origin v0.10.0
+git tag v0.10.1
+git push origin v0.10.1
 ```
 
 Do not tag an unpushed local commit. Release preflight checks:

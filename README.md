@@ -109,8 +109,8 @@ manifest versions, merging that commit to `main`, and pushing the matching tag:
 ```bash
 git switch main
 git pull --ff-only
-git tag v0.10.0
-git push origin v0.10.0
+git tag v0.10.1
+git push origin v0.10.1
 ```
 
 GitHub Actions runs the full gate, builds on each operating system, publishes a
