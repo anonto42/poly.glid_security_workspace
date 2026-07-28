@@ -33,7 +33,7 @@ use super::{
     ExecutionEvent, ExecutionMetrics, ExecutionPreferences, ExecutionReport, ExecutionState,
     ExecutionSubscription, Issue, JobId, PermissionDecisionRequest, Plugin, PluginInspection,
     PluginSource, PluginStatus, Project, Report, ReportFormat, SavedTarget, Severity,
-    ShellPreferences, StartExecutionRequest, Workspace,
+    ShellPreferences, StartExecutionRequest, Workspace, WorkspaceEntry,
 };
 
 #[derive(Clone)]
@@ -283,6 +283,81 @@ impl ClientGateway for LocalClient {
             .discover(workspace_id)
             .map(|items| items.into_iter().map(project_from_db).collect())
             .map_err(|error| ClientError::operation("refresh workspace", error))
+    }
+
+    fn list_workspace_entries(
+        &self,
+        workspace_id: &str,
+        relative_directory: &str,
+    ) -> ClientResult<Vec<WorkspaceEntry>> {
+        use std::path::Component;
+
+        let workspace = self
+            .list_workspaces()?
+            .into_iter()
+            .find(|workspace| workspace.id == workspace_id)
+            .ok_or_else(|| ClientError::NotFound {
+                resource: "workspace",
+                id: workspace_id.to_owned(),
+            })?;
+        let relative = Path::new(relative_directory);
+        if relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_) | Component::CurDir))
+        {
+            return Err(ClientError::InvalidInput {
+                field: "relative directory",
+                message: "the path must stay inside the active workspace".to_owned(),
+            });
+        }
+
+        let root = Path::new(&workspace.root_path)
+            .canonicalize()
+            .map_err(|error| ClientError::operation("resolve workspace root", error.to_string()))?;
+        let directory = root.join(relative).canonicalize().map_err(|error| {
+            ClientError::operation("resolve workspace directory", error.to_string())
+        })?;
+        if !directory.starts_with(&root) || !directory.is_dir() {
+            return Err(ClientError::InvalidInput {
+                field: "relative directory",
+                message: "the path must resolve to a directory inside the active workspace"
+                    .to_owned(),
+            });
+        }
+
+        let mut entries = fs::read_dir(&directory)
+            .map_err(|error| ClientError::operation("list workspace directory", error.to_string()))?
+            .map(|entry| {
+                let entry = entry.map_err(|error| {
+                    ClientError::operation("read workspace entry", error.to_string())
+                })?;
+                let file_type = entry.file_type().map_err(|error| {
+                    ClientError::operation("inspect workspace entry", error.to_string())
+                })?;
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let relative_path = entry
+                    .path()
+                    .strip_prefix(&root)
+                    .map_err(|error| {
+                        ClientError::operation("resolve workspace entry", error.to_string())
+                    })?
+                    .to_string_lossy()
+                    .into_owned();
+                Ok(WorkspaceEntry {
+                    name,
+                    relative_path,
+                    is_directory: file_type.is_dir(),
+                    is_symlink: file_type.is_symlink(),
+                })
+            })
+            .collect::<ClientResult<Vec<_>>>()?;
+        entries.sort_by(|left, right| {
+            right
+                .is_directory
+                .cmp(&left.is_directory)
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+        });
+        Ok(entries)
     }
 
     fn list_projects(&self, workspace_id: &str) -> ClientResult<Vec<Project>> {

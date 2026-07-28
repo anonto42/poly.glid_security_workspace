@@ -1,6 +1,9 @@
 # PolyGlid Security Workspace
 
-PolyGlid is a cross-platform security workspace built around a Rust host engine, a Dioxus desktop workbench, CLI and server clients, and sandboxed WebAssembly plugins.
+PolyGlid is a cross-platform security workspace built around a Rust host
+engine, native desktop workbenches, CLI and server clients, and sandboxed
+WebAssembly plugins. Dioxus remains the packaged client while an original GPUI
+workbench is developed against the same client boundary.
 
 The goal is not to create one large tangled application. The goal is to create a small trusted host that manages windows, state, permissions, and execution, while feature plugins run behind explicit contracts and capability boundaries.
 
@@ -8,6 +11,7 @@ The goal is not to create one large tangled application. The goal is to create a
 
 ```text
 Dioxus Desktop (primary client)
+GPUI Workbench (parallel migration client)
 CLI runtime harness / HTTP API (supporting clients)
         |
         | typed core services and events
@@ -34,6 +38,7 @@ Recon, audit, reporting, diagnostics
 ## Documentation
 
 - [Codebase Architecture](docs/architecture/CODEBASE.md)
+- [Workbench Component and Functionality Map](docs/architecture/WORKBENCH_COMPONENT_MAP.md)
 - [CLI Technology Decision](docs/architecture/CLI_TECH_DECISION.md)
 - [Repository Layout](docs/architecture/REPOSITORY_LAYOUT.md)
 - [Project And Automation Flow](docs/architecture/PROJECT_FLOW.md)
@@ -55,9 +60,11 @@ Recon, audit, reporting, diagnostics
 poly.glid_security_workspace/
 ├── apps/
 │   ├── desktop/              # Dioxus desktop workbench
+│   ├── workbench/            # isolated GPUI migration client
 │   ├── cli/                  # terminal client
 │   └── server/               # HTTP/WebSocket API
 ├── crates/
+│   ├── client/               # shared client gateway and controllers
 │   ├── core/                 # application use cases and persistence
 │   ├── runtime/              # Wasmtime execution adapter
 │   ├── plugin-api/           # plugin-facing Rust types
@@ -85,6 +92,19 @@ poly.glid_security_workspace/
 5. Add the Dioxus desktop shell.
 6. Add the workspace UI.
 7. Add richer plugins only after the boundary is tested.
+
+## Run the GPUI Migration Client
+
+The GPUI client is intentionally isolated from the root Cargo workspace because
+GPUI 0.2.2 and Dioxus 0.7 currently require conflicting versions of the native
+macOS `cocoa` crate. It still imports the same `polyglid-client` gateway and
+controllers:
+
+```bash
+cargo run --manifest-path apps/workbench/Cargo.toml
+```
+
+This is a development surface, not yet the client shipped in release archives.
 
 ## Run the Runtime Harness
 

@@ -3,7 +3,9 @@
 This document is the canonical product-client architecture for PolyGlid. The
 native Dioxus desktop application is the primary product client. The CLI remains
 available as a frozen development and test harness; new product workflows must
-be designed for the desktop application first.
+be designed for the desktop application first. An original GPUI workbench is
+now the parallel native-client migration track and consumes the same product
+boundary.
 
 The current desktop implementation and its real-versus-preview inventory are
 documented in [Desktop UI](DESKTOP_UI.md). The UI-first release boundary is
@@ -14,6 +16,7 @@ defined in [MVP](../planning/MVP.md).
 | Surface | Role | Current priority |
 | --- | --- | --- |
 | Dioxus desktop | Complete local workspace, plugin execution, permissions, and reports | Primary |
+| GPUI workbench | GPU-rendered native shell moving toward feature parity | Active migration |
 | Public site | Marketing, documentation, releases, and downloads | Supporting |
 | CLI | Regression harness and developer diagnostics | Frozen |
 | Web client | Authenticated remote workspace through a server | Future |
@@ -27,10 +30,13 @@ database or plugin runtime directly.
 
 ```mermaid
 flowchart TD
-    USER[Operator] --> VIEW[Dioxus feature views]
-    VIEW --> CONTROLLER[Feature controllers]
+    USER[Operator] --> DIOXUS[Dioxus feature views]
+    USER --> GPUI[GPUI workbench views]
+    DIOXUS --> CONTROLLER[Feature controllers]
+    GPUI --> CONTROLLER
     CONTROLLER --> STORE[Feature stores]
-    STORE --> VIEW
+    STORE --> DIOXUS
+    STORE --> GPUI
     CONTROLLER --> GATEWAY[ClientGateway]
 
     GATEWAY --> LOCAL[LocalGateway]
@@ -85,14 +91,22 @@ Commands and events use stable identifiers such as `WorkspaceId`, `ProjectId`,
 name or filesystem path as an identity.
 
 Messages should be versionable, serializable data-transfer types. They must not
-expose database rows, Wasmtime handles, Dioxus signals, or transport-specific
-types. The proposed shared home for those contracts is `crates/client-api`.
+expose database rows, Wasmtime handles, UI-framework state, or
+transport-specific types.
 
-The first implementation lives in `apps/desktop/src/client/` and provides
-UI-safe DTOs, typed errors, `ClientGateway`, `LocalClient`, and execution
-subscriptions. Keeping it beside the only production client is acceptable for
-this migration. Move stable contracts to `crates/client-api` before a server or
-second client needs them.
+The shared boundary lives in `crates/client` and provides UI-safe DTOs, typed
+errors, `ClientGateway`, `LocalClient`, execution subscriptions, and feature
+controllers. It is the only application-client dependency imported by both
+desktop frameworks.
+
+### Native UI framework isolation
+
+The Dioxus and GPUI applications cannot currently share one Cargo lockfile:
+Dioxus 0.7 requires macOS `cocoa` 0.26.1 while published GPUI 0.2.2 pins
+0.26.0. Cargo rejects two crates with the same native `links` identity even on
+a Linux resolution. Therefore `apps/workbench` is an excluded, nested Cargo
+workspace with its own lockfile. This is a build boundary only; application
+behavior remains shared through `polyglid-client`.
 
 ### Conceptual gateway operations
 
@@ -251,46 +265,40 @@ terminal, and fabricated metrics have been removed from the desktop production
 source. Do not reintroduce them until they have real application services and a
 defined place in the product journey.
 
-## Target Desktop Layout
+## Native Client Layout
 
-The current modules are retained while responsibilities move behind feature
-boundaries:
+The shared boundary is extracted and the GPUI client is isolated from the
+Dioxus build:
 
 ```text
 apps/desktop/src/
-├── app/
-│   ├── bootstrap.rs
-│   └── host.rs
-├── shell/
-│   ├── layout.rs
-│   ├── navigation.rs
-│   └── overlays.rs
-├── features/
-│   ├── projects/
-│   │   ├── controller.rs
-│   │   ├── store.rs
-│   │   └── view.rs
-│   ├── plugins/
-│   ├── scanner/
-│   ├── executions/
-│   ├── reports/
-│   └── settings/
-├── client/
-│   └── local_gateway.rs
-└── shared/
-│   ├── components.rs
-│   └── presentation.rs
+├── main.rs
+└── ui/
+    ├── app.rs
+    ├── state.rs
+    ├── shell.rs
+    ├── editor.rs
+    ├── sidebar.rs
+    ├── overlays.rs
+    └── features/
 
-crates/client-api/
-├── commands.rs
-├── queries.rs
-├── events.rs
+apps/workbench/src/
+├── lib.rs
+├── workbench.rs
 ├── models.rs
-└── errors.rs
+├── actions.rs
+└── theme.rs
+
+crates/client/src/
+├── controllers.rs
+├── gateway.rs
+├── local.rs
+├── models.rs
+└── error.rs
 ```
 
-This is a migration target, not a claim that these paths already exist. The
-current code map is maintained in [Desktop UI](DESKTOP_UI.md).
+The complete present and target component map is maintained in
+[Workbench Component and Functionality Map](WORKBENCH_COMPONENT_MAP.md).
 
 ## Error and Event Rules
 

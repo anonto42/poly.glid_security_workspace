@@ -1,0 +1,22 @@
+[package]
+name = "polyglid-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UI-independent PolyGlid client gateway and feature controllers"
+
+[dependencies]
+polyglid-core = { path = "../core" }
+polyglid-events = { path = "../events" }
+polyglid-config = { path = "../config" }
+polyglid-plugin-api = { path = "../plugin-api" }
+polyglid-runtime = { path = "../runtime" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+thiserror = "2"
+tokio = { version = "1", features = ["rt"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[lints.rust]
+unsafe_code = "forbid"

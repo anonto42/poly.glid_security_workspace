@@ -7,6 +7,7 @@ use super::{
     Approval, BootstrapSnapshot, ClientError, ClientResult, Execution, ExecutionEvent,
     ExecutionPreferences, JobId, PermissionDecisionRequest, Plugin, PluginInspection, Project,
     Report, ReportFormat, SavedTarget, ShellPreferences, StartExecutionRequest, Workspace,
+    WorkspaceEntry,
 };
 
 /// Operations exposed to desktop views and feature controllers.
@@ -21,6 +22,11 @@ pub trait ClientGateway: Clone + Send + Sync + 'static {
     fn register_workspace(&self, name: &str, root_path: &str) -> ClientResult<Workspace>;
     fn activate_workspace(&self, workspace_id: &str) -> ClientResult<()>;
     fn refresh_workspace(&self, workspace_id: &str) -> ClientResult<Vec<Project>>;
+    fn list_workspace_entries(
+        &self,
+        workspace_id: &str,
+        relative_directory: &str,
+    ) -> ClientResult<Vec<WorkspaceEntry>>;
 
     fn list_projects(&self, workspace_id: &str) -> ClientResult<Vec<Project>>;
     fn create_project(&self, workspace_id: &str, name: &str) -> ClientResult<Project>;

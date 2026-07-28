@@ -2,6 +2,7 @@ use crate::client::{
     Approval, BootstrapSnapshot, ClientGateway, ClientResult, Execution, ExecutionPreferences,
     ExecutionSubscription, JobId, PermissionDecisionRequest, Plugin, PluginInspection, Project,
     Report, ReportFormat, SavedTarget, ShellPreferences, StartExecutionRequest, Workspace,
+    WorkspaceEntry,
 };
 
 pub type DesktopControllers = FeatureControllers<crate::client::LocalClient>;
@@ -15,6 +16,7 @@ pub struct FeatureControllers<G: ClientGateway> {
     pub executions: ExecutionsController<G>,
     pub reports: ReportsController<G>,
     pub settings: SettingsController<G>,
+    pub documents: DocumentsController<G>,
 }
 
 impl<G: ClientGateway> FeatureControllers<G> {
@@ -26,8 +28,23 @@ impl<G: ClientGateway> FeatureControllers<G> {
             scanner: ScannerController(gateway.clone()),
             executions: ExecutionsController(gateway.clone()),
             reports: ReportsController(gateway.clone()),
-            settings: SettingsController(gateway),
+            settings: SettingsController(gateway.clone()),
+            documents: DocumentsController(gateway),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct DocumentsController<G: ClientGateway>(G);
+
+impl<G: ClientGateway> DocumentsController<G> {
+    pub fn list_directory(
+        &self,
+        workspace_id: &str,
+        relative_directory: &str,
+    ) -> ClientResult<Vec<WorkspaceEntry>> {
+        self.0
+            .list_workspace_entries(workspace_id, relative_directory)
     }
 }
 
@@ -191,6 +208,16 @@ mod tests {
             .expect("list targets")
             .iter()
             .any(|target| target.name == "example.com"));
+        assert!(controllers
+            .documents
+            .list_directory(&snapshot.active_workspace.id, "")
+            .expect("list workspace root")
+            .iter()
+            .any(|entry| entry.name == "controller-project" && entry.is_directory));
+        assert!(controllers
+            .documents
+            .list_directory(&snapshot.active_workspace.id, "..")
+            .is_err());
 
         std::fs::remove_dir_all(root).expect("remove test workspace");
     }

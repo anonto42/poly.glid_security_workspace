@@ -4,7 +4,9 @@ GitHub automation routing are documented in [Project Flow](PROJECT_FLOW.md).
 > **Historical implementation blueprint.** The Tauri host and illustrative
 > file paths/code below predate the current Rust/Dioxus desktop. Use
 > [Client Architecture](CLIENT_ARCHITECTURE.md) for client boundaries and
-> [Desktop UI](DESKTOP_UI.md) for the implemented component map. The WIT
+> [Desktop UI](DESKTOP_UI.md) for the implemented client and
+> [Workbench Component Map](WORKBENCH_COMPONENT_MAP.md) for the complete target
+> surface. The WIT
 > isolation principles remain background context, not a copy-ready plan.
 
 To make **PolyGlid** a true plug-and-play workspace, we will use the **WebAssembly Component Model**. Instead of writing standard traits that risk crashing your host application, we define a formal language-agnostic interface called a **WIT file (WebAssembly Interface Type)**.

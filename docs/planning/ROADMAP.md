@@ -58,8 +58,8 @@ Status: foundation delivered; controller separation remains.
 - [x] Add focused local-client and core tests.
 - [x] Move remaining `LocalClient` calls out of Dioxus wiring components and
       into feature controllers.
-- [ ] Extract stable contracts to `crates/client-api` before adding a second
-      client.
+- [x] Extract the shared gateway, DTOs, local adapter, and controllers to
+      `crates/client` for Dioxus and GPUI.
 
 Exit condition: views communicate only through feature controllers and stores,
 and no presentation component knows the concrete local adapter.

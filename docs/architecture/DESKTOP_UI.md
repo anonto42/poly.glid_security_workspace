@@ -10,6 +10,27 @@ work explicitly. The target product boundary, permission model, state ownership,
 and migration phases live in the canonical
 [Client Architecture](CLIENT_ARCHITECTURE.md).
 
+## GPUI Migration Milestone
+
+`apps/workbench` now contains the first runnable GPUI shell. It is an original
+PolyGlid interface built from the Apache-2.0 `gpui` framework; Zed's GPL `ui`
+and `workspace` crates and assets are not copied.
+
+The milestone includes a compact editor-first title bar, repository and branch
+chips, large editor canvas, right workspace explorer, bottom utility bar,
+command palette, typed keyboard actions, theme tokens, and tested navigation
+state. Bootstrap, safe workspace-root listing, and refresh load real local data
+through the shared `polyglid-client` controllers.
+Mutation flows and full accessibility/platform acceptance remain future parity
+work. Dioxus therefore remains the release-packaged client.
+
+Run and test the migration client separately:
+
+```bash
+cargo run --manifest-path apps/workbench/Cargo.toml
+cargo test --manifest-path apps/workbench/Cargo.toml --lib
+```
+
 ## Status Language
 
 | Status | Meaning |
@@ -23,7 +44,7 @@ and migration phases live in the canonical
 | Surface | Status | Current behavior | Remaining work |
 | --- | --- | --- | --- |
 | Window and workbench shell | Real | Dioxus window, product rail, contextual sidebar, open views, resizable panes, command palette | Accessibility acceptance |
-| Client boundary | Real foundation | UI-safe DTOs/errors, `ClientGateway`, one `ApplicationHost`, feature controllers, bootstrap, and execution subscription | Extract stable contracts before a second client; make controllers the sole store writers |
+| Client boundary | Real foundation | Shared `polyglid-client` crate exposes UI-safe DTOs/errors, `ClientGateway`, one `ApplicationHost`, feature controllers, bootstrap, and execution subscription | Move remaining Dioxus direct calls behind controllers |
 | Shell preferences | Real | Pane visibility and sizes persist through local settings | Persist any new shell preferences through the same boundary |
 | Workspace selector | Real | Loads registered workspaces and changes the active workspace | Workspace registration UI |
 | Projects | Real | Discovers, creates, renames, removes, selects, and optionally deletes real folders | Filtering and recovery polish |
@@ -75,9 +96,9 @@ flowchart TD
     EDITOR --> PLUGINS[features/plugins.rs]
 
     APP --> STORES[Shell, Catalog, Plugin, and Run stores]
-    APP --> CONTROLLERS[controllers.rs · Feature controllers]
-    CONTROLLERS --> LOCAL[client/local.rs · LocalClient]
-    LOCAL --> PORT[client/gateway.rs · ClientGateway]
+    APP --> CONTROLLERS[crates/client/controllers.rs · Feature controllers]
+    CONTROLLERS --> LOCAL[crates/client/local.rs · LocalClient]
+    LOCAL --> PORT[crates/client/gateway.rs · ClientGateway]
     LOCAL --> CORE[Core services and policy]
     CORE --> SQLITE[(SQLite)]
     CORE --> WASM[Wasmtime]
@@ -87,16 +108,17 @@ flowchart TD
 
 ## Module Ownership
 
-Paths below are relative to `apps/desktop/src/`.
+UI paths below are relative to `apps/desktop/src/`; shared client paths are
+relative to `crates/client/src/`.
 
 | Module | Current responsibility |
 | --- | --- |
 | `main.rs` | Configures and launches the Dioxus window |
-| `client/models.rs` | UI-safe workspaces, projects, plugins, targets, jobs, reports, and capability DTOs |
-| `client/error.rs` | Typed, presentation-safe client failures |
-| `client/gateway.rs` | `ClientGateway` operations and execution subscription |
-| `client/local.rs` | Local adapter over core services, SQLite, plugin manager, and execution manager |
-| `controllers.rs` | Feature-specific operations over the gateway; the only adapter capability exposed to views |
+| `crates/client/models.rs` | UI-safe workspaces, projects, plugins, targets, jobs, reports, and capability DTOs |
+| `crates/client/error.rs` | Typed, presentation-safe client failures |
+| `crates/client/gateway.rs` | `ClientGateway` operations and execution subscription |
+| `crates/client/local.rs` | Local adapter over core services, SQLite, plugin manager, and execution manager |
+| `crates/client/controllers.rs` | Feature-specific operations over the gateway; the only adapter capability exposed to views |
 | `ui/app.rs` | Creates the application host/controller context, loads the bootstrap snapshot, watches operational changes, and composes the shell |
 | `ui/state.rs` | Composes `ShellStore`, `CatalogStore`, `PluginStore`, and `RunStore` |
 | `ui/models.rs` | Navigation, overlay, permission-review, and presentation models |

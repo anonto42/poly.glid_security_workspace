@@ -60,6 +60,14 @@ pub struct Project {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceEntry {
+    pub name: String,
+    pub relative_path: String,
+    pub is_directory: bool,
+    pub is_symlink: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Plugin {
     pub id: String,
     pub name: String,

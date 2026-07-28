@@ -1,0 +1,23 @@
+[package]
+name = "polyglid-workbench"
+version = "0.10.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Native GPU workbench client for PolyGlid"
+
+[workspace]
+
+[dependencies]
+gpui = "0.2.2"
+polyglid-client = { path = "../../crates/client" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "polyglid-workbench"
+path = "src/main.rs"
+test = false
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -1,2 +1,1 @@
-pub mod client;
-pub mod controllers;
+pub use polyglid_client::{client, controllers};

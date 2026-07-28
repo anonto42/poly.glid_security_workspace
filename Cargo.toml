@@ -3,6 +3,7 @@ members = [
   "apps/cli",
   "apps/desktop",
   "apps/server",
+  "crates/client",
   "crates/config",
   "crates/events",
   "crates/plugin-api",
@@ -11,7 +12,7 @@ members = [
   "plugins/recon-probe",
   "site",
 ]
-exclude = ["sdk"]
+exclude = ["apps/workbench", "sdk"]
 resolver = "2"
 
 [workspace.package]
