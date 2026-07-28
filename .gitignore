@@ -8,3 +8,11 @@ target/
 .vscode/
 *.swp
 *.swo
+
+# Local AI continuation context
+/.agents/shared/history/
+/.agents/shared/caveman.md
+
+# moon
+.moon/cache
+.moon/docker

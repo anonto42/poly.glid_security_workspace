@@ -1,0 +1,6 @@
+projects:
+  polyglid: "."
+
+vcs:
+  defaultBranch: "main"
+  provider: "github"

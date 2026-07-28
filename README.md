@@ -36,3 +36,12 @@ cargo run -p polyglid-desktop
 cargo check --workspace
 cargo test --workspace
 ```
+
+Moon can orchestrate the workspace checks without replacing Cargo:
+
+```bash
+moon run polyglid:format
+moon run polyglid:check
+moon run polyglid:test
+moon run polyglid:build
+```
