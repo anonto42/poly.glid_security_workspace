@@ -1,146 +1,49 @@
-# PolyGlid Security Workspace
+# Zed
 
-PolyGlid is a cross-platform security workspace built around a Rust host
-engine, native desktop workbenches, CLI and server clients, and sandboxed
-WebAssembly plugins. Dioxus remains the packaged client while an original GPUI
-workbench is developed against the same client boundary.
+[![Zed](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/zed-industries/zed/main/assets/badge/v0.json)](https://zed.dev)
+[![CI](https://github.com/zed-industries/zed/actions/workflows/run_tests.yml/badge.svg)](https://github.com/zed-industries/zed/actions/workflows/run_tests.yml)
 
-The goal is not to create one large tangled application. The goal is to create a small trusted host that manages windows, state, permissions, and execution, while feature plugins run behind explicit contracts and capability boundaries.
+Welcome to Zed, a high-performance, multiplayer code editor from the creators of [Atom](https://github.com/atom/atom) and [Tree-sitter](https://github.com/tree-sitter/tree-sitter).
 
-## Product Shape
+---
 
-```text
-Dioxus Desktop (primary client)
-GPUI Workbench (parallel migration client)
-CLI runtime harness / HTTP API (supporting clients)
-        |
-        | typed core services and events
-        v
-Rust Host Engine
-Tokio, SQLite, config, permissions, scheduling
-        |
-        | Wasmtime Component Model
-        v
-Sandboxed WASM Plugins
-Recon, audit, reporting, diagnostics
-```
+### Installation
 
-## Core Principles
+On macOS, Linux, and Windows you can [download Zed directly](https://zed.dev/download) or install Zed via your local package manager ([macOS](https://zed.dev/docs/installation#macos)/[Linux](https://zed.dev/docs/linux#installing-via-a-package-manager)/[Windows](https://zed.dev/docs/windows#package-managers)).
 
-- The host is trusted. Plugins are not trusted by default.
-- Plugins never directly own filesystem, process, or network access.
-- Every host/plugin boundary is described through a stable contract.
-- Every plugin returns structured data instead of free-form terminal text.
-- Runtime and plugin behavior can be tested through the CLI harness, while the
-  desktop journey remains the product acceptance surface.
-- Security features must be designed for authorized testing and defensive validation.
+Other platforms are not yet available:
 
-## Documentation
+- Web ([tracking discussion](https://github.com/zed-industries/zed/discussions/26195))
 
-- [Codebase Architecture](docs/architecture/CODEBASE.md)
-- [Workbench Component and Functionality Map](docs/architecture/WORKBENCH_COMPONENT_MAP.md)
-- [CLI Technology Decision](docs/architecture/CLI_TECH_DECISION.md)
-- [Repository Layout](docs/architecture/REPOSITORY_LAYOUT.md)
-- [Project And Automation Flow](docs/architecture/PROJECT_FLOW.md)
-- [System Architecture](docs/architecture/SYSTEM.md)
-- [Development Targets](docs/planning/DEVELOPMENT_TARGETS.md)
-- [Roadmap](docs/planning/ROADMAP.md)
-- [MVP Definition](docs/planning/MVP.md)
-- [Security Model](docs/security/SECURITY_MODEL.md)
-- [Development Workflow](docs/development/WORKFLOW.md)
-- [CI And Delivery Lifecycle](docs/development/CI_DELIVERY.md)
-- [MVP Runbook](docs/development/MVP_RUNBOOK.md)
-- [Step-By-Step Development Flow](docs/development/STEP_BY_STEP_DEVELOPMENT_FLOW.md)
-- [Packaging And Distribution](docs/development/PACKAGING.md)
-- [Brand Guide](docs/branding/README.md)
+### Developing Zed
 
-## Repository Layout
+- [Building Zed for macOS](./docs/src/development/macos.md)
+- [Building Zed for Linux](./docs/src/development/linux.md)
+- [Building Zed for Windows](./docs/src/development/windows.md)
 
-```text
-poly.glid_security_workspace/
-├── apps/
-│   ├── desktop/              # Dioxus desktop workbench
-│   ├── workbench/            # isolated GPUI migration client
-│   ├── cli/                  # terminal client
-│   └── server/               # HTTP/WebSocket API
-├── crates/
-│   ├── client/               # shared client gateway and controllers
-│   ├── core/                 # application use cases and persistence
-│   ├── runtime/              # Wasmtime execution adapter
-│   ├── plugin-api/           # plugin-facing Rust types
-│   ├── config/               # configuration and registry
-│   └── events/               # typed host events
-├── contracts/
-│   └── polyglid.wit          # canonical host/plugin contract
-├── plugins/
-│   └── recon-probe/          # first-party WASM plugin
-├── site/                     # public website generator
-├── sdk/                      # plugin SDK and examples
-├── tools/                    # repository tooling and isolated experiments
-├── scripts/ops/              # stable operations CLI
-├── infrastructure/          # legacy placeholders; no active deployment stack
-├── tests/                    # reserved workspace-level test area
-└── docs/                     # architecture and operating guides
-```
+### Contributing
 
-## Build Order
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for ways you can contribute to Zed.
 
-1. Define the WIT contract.
-2. Build the Rust plugin runtime and CLI harness.
-3. Build one harmless diagnostic plugin.
-4. Add config and permission models.
-5. Add the Dioxus desktop shell.
-6. Add the workspace UI.
-7. Add richer plugins only after the boundary is tested.
+Also... we're hiring! Check out our [jobs](https://zed.dev/jobs) page for open roles.
 
-## Run the GPUI Migration Client
+### Licensing
 
-The GPUI client is intentionally isolated from the root Cargo workspace because
-GPUI 0.2.2 and Dioxus 0.7 currently require conflicting versions of the native
-macOS `cocoa` crate. It still imports the same `polyglid-client` gateway and
-controllers:
+Zed source code is licensed primarily under GPL-3.0-or-later, with Apache-2.0 components where marked.
 
-```bash
-cargo run --manifest-path apps/workbench/Cargo.toml
-```
+License information for third party dependencies must be correctly provided for CI to pass.
 
-This is a development surface, not yet the client shipped in release archives.
+We use [`cargo-about`](https://github.com/EmbarkStudios/cargo-about) to automatically comply with open source licenses. If CI is failing, check the following:
 
-## Run the Runtime Harness
+- Is it showing a `no license specified` error for a crate you've created? If so, add `publish = false` under `[package]` in your crate's Cargo.toml.
+- Is the error `failed to satisfy license requirements` for a dependency? If so, first determine what license the project has and whether this system is sufficient to comply with this license's requirements. If you're unsure, ask a lawyer. Once you've verified that this system is acceptable add the license's SPDX identifier to the `accepted` array in `script/licenses/zed-licenses.toml`.
+- Is `cargo-about` unable to find the license for a dependency? If so, add a clarification field at the end of `script/licenses/zed-licenses.toml`, as specified in the [cargo-about book](https://embarkstudios.github.io/cargo-about/cli/generate/config.html#crate-configuration).
 
-```bash
-rustup target add wasm32-wasip1
-scripts/run-mvp.sh
-```
+## Sponsorship
 
-This developer and regression harness runs the CLI host, componentizes
-`recon_probe`, exercises the happy-path DNS/report host calls, and writes output
-under `reports/`. It proves the host/plugin boundary; it does not complete the
-desktop product MVP. The user-facing milestone and its remaining acceptance
-work are defined by the [Desktop MVP checklist](docs/planning/MVP.md).
+Zed is developed by **Zed Industries, Inc.**, a for-profit company.
 
-## Download Releases
+If you’d like to financially support the project, you can do so via GitHub Sponsors.
+Sponsorships go directly to Zed Industries and are used as general company revenue.
+There are no perks or entitlements associated with sponsorship.
 
-After the first formal publication, builds are available from the [latest GitHub release](https://github.com/anonto42/poly.glid_security_workspace/releases/latest). Releases produced by the current delivery workflow contain plugin-free Linux, Windows, Intel macOS, and Apple Silicon macOS application archives; Recon Probe is provided separately with its detached signature and exact-scope manifest, alongside `SHA256SUMS`.
-
-Maintainers publish a release after updating both the workspace and Recon
-manifest versions, merging that commit to `main`, and pushing the matching tag:
-
-```bash
-git switch main
-git pull --ff-only
-git tag v0.10.1
-git push origin v0.10.1
-```
-
-Wait for the commit's `main` workflow to finish successfully before creating
-the tag. GitHub Actions then promotes that exact commit's already-green,
-four-platform release candidates, signs Recon, publishes a verified release,
-and verifies the latest release and expected asset names. This keeps
-tag-to-release time short without trusting bypassable local hooks. Enable fast
-local feedback once per clone with `scripts/ops/install-git-hooks.sh`.
-
-## License
-
-PolyGlid is available under either the [MIT license](LICENSE-MIT) or the
-[Apache License 2.0](LICENSE-APACHE), at your option.

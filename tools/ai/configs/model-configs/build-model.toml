@@ -1,3 +1,0 @@
-model = "phi3:3.8b"
-temperature = 0.5
-max_tokens = 1024

@@ -1,9 +1,0 @@
-{
-  "id": "pred_1a2b3c4d",
-  "timestamp": "2026-07-07T10:00:00+00:00",
-  "category": "code_generation",
-  "input": "Generate a JWT auth middleware for actix-web",
-  "output": "```rust\npub async fn jwt_middleware(req: HttpRequest, next: Next<Body>) -> Result<HttpResponse, actix_web::Error> {\n    let token = req.headers().get(\"Authorization\")\n        .and_then(|v| v.to_str().ok())\n        .and_then(|v| v.strip_prefix(\"Bearer \"))\n        .ok_or_else(|| actix_web::error::ErrorUnauthorized(\"missing token\"))?;\n    let config = req.app_data::<web::Data<JwtConfig>>().unwrap();\n    let decoded = jsonwebtoken::decode::<Claims>(token, &config.decoding, &Validation::default())\n        .map_err(|_| actix_web::error::ErrorUnauthorized(\"invalid token\"))?;\n    req.extensions_mut().insert(decoded.claims);\n    next.call(req).await\n}\n```",
-  "status": "Accepted",
-  "metadata": {"language": "rust", "file": "auth/middleware.rs"}
-}
