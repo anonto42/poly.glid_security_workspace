@@ -32,6 +32,8 @@ pub(crate) fn WorkspaceSidebar() -> Element {
 #[component]
 fn ProjectsSidebar() -> Element {
     let mut state = use_context::<AppState>();
+    let selected_project_id = state.catalog.selected_project_id.read().clone();
+    let operation_in_progress = state.catalog.operation.read().is_some();
     rsx! {
         div { class: "sidebar-section",
             p { class: "section-label", "Workspace" }
@@ -43,12 +45,27 @@ fn ProjectsSidebar() -> Element {
         div { class: "sidebar-section grow",
             p { class: "section-label", "Projects · {state.catalog.projects.read().len()}" }
             for project in state.catalog.projects.read().iter() {
-                div { class: "project-nav", span { "◇" } div { strong { "{project.name}" } small { "{project.kind}" } } }
+                button {
+                    class: if selected_project_id.as_ref() == Some(&project.id) { "project-nav active" } else { "project-nav" },
+                    aria_label: "Select project {project.name}",
+                    onclick: {
+                        let project_id = project.id.clone();
+                        move |_| state.catalog.selected_project_id.set(Some(project_id.clone()))
+                    },
+                    span { "◇" }
+                    div { strong { "{project.name}" } small { "{project.kind}" } }
+                }
             }
-            button { class: "sidebar-option", onclick: move |_| {
-                let next = *state.catalog.refresh.read() + 1;
-                state.catalog.refresh.set(next);
-            }, span { "Refresh discovery" } small { "↻" } }
+            button {
+                class: "sidebar-option",
+                disabled: operation_in_progress,
+                onclick: move |_| {
+                    let next = *state.catalog.refresh.read() + 1;
+                    state.catalog.refresh.set(next);
+                },
+                span { "Refresh discovery" }
+                small { "↻" }
+            }
         }
     }
 }

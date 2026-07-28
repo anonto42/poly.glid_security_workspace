@@ -18,7 +18,12 @@
 .ghost-button:hover { color: var(--text); background: var(--surface-3); }
 .danger-button { border: 1px solid rgba(255, 123, 114, .4); color: var(--danger); background: var(--danger-soft); }
 .danger-button:hover { border-color: var(--danger); background: rgba(248, 81, 73, .16); }
-.project-alert { margin: -12px 0 20px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgba(255, 123, 114, .3); border-radius: var(--radius-sm); color: var(--danger); background: var(--danger-soft); font-size: 11px; line-height: 1.5; }
+.project-alert { margin: -12px 0 20px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255, 123, 114, .3); border-radius: var(--radius-sm); color: var(--danger); background: var(--danger-soft); font-size: 11px; line-height: 1.5; }
+.project-alert span { flex: 1; }
+.project-alert .ghost-button { color: inherit; }
+.project-operation { margin: -12px 0 20px; color: var(--text-muted); font: 10px var(--font-mono); }
+.project-delete-warning { flex-basis: 100%; display: grid; gap: 4px; color: var(--danger); font-size: 10px; line-height: 1.45; }
+.project-delete-warning span { color: var(--text-muted); }
 .project-state { padding: 65px 30px; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); text-align: center; background: rgba(255, 255, 255, .012); }
 .project-state h2 { margin: 0 0 8px; color: var(--text-strong); font-size: 18px; }
 .project-state p { max-width: 540px; margin: 0 auto 18px; color: var(--text-muted); font-size: 12px; line-height: 1.7; }

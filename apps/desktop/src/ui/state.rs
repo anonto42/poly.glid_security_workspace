@@ -29,6 +29,7 @@ pub(crate) struct CatalogStore {
     pub(crate) active_workspace_name: Signal<String>,
     pub(crate) refresh: Signal<u64>,
     pub(crate) error: Signal<Option<String>>,
+    pub(crate) operation: Signal<Option<String>>,
 }
 
 /// Installed-component state owned by the plugins feature.
@@ -89,6 +90,7 @@ pub(crate) fn use_app_state() -> AppState {
             active_workspace_name: use_signal(|| "PolyGlid Projects".to_string()),
             refresh: use_signal(|| 0),
             error: use_signal(|| None),
+            operation: use_signal(|| None),
         },
         plugins: PluginStore {
             items: use_signal(Vec::new),
