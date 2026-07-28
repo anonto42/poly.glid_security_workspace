@@ -1,28 +1,10 @@
-# PolyGlid AI workspace
-.workspace/state/cache/
-.workspace/state/temp/
-.workspace/state/logs/
-tools/ai/rust/target/
-.workspace/data/backups/
-
-# Dependencies
-node_modules/
-
-# Build outputs
 target/
-dist/
-build/
-/reports/
 /polyglid.db
 /polyglid.db-*
-/.workspace/data/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Environment
 .env
 .env.local
+.idea/
+.vscode/
+*.swp
+*.swo

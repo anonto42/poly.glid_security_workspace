@@ -1,18 +1,13 @@
 [workspace]
 members = [
-  "apps/cli",
   "apps/desktop",
-  "apps/server",
   "crates/client",
   "crates/config",
   "crates/events",
   "crates/plugin-api",
   "crates/core",
   "crates/runtime",
-  "plugins/recon-probe",
-  "site",
 ]
-exclude = ["apps/workbench", "sdk"]
 resolver = "2"
 
 [workspace.package]

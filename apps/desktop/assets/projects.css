@@ -21,6 +21,9 @@
 .project-alert { margin: -12px 0 20px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255, 123, 114, .3); border-radius: var(--radius-sm); color: var(--danger); background: var(--danger-soft); font-size: 11px; line-height: 1.5; }
 .project-alert span { flex: 1; }
 .project-alert .ghost-button { color: inherit; }
+.project-notice { margin: -12px 0 20px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--line-accent); border-radius: var(--radius-sm); color: var(--accent); background: var(--accent-soft); font-size: 11px; line-height: 1.5; }
+.project-notice span { flex: 1; }
+.project-notice .ghost-button { color: inherit; }
 .project-operation { margin: -12px 0 20px; color: var(--text-muted); font: 10px var(--font-mono); }
 .project-delete-warning { flex-basis: 100%; display: grid; gap: 4px; color: var(--danger); font-size: 10px; line-height: 1.45; }
 .project-delete-warning span { color: var(--text-muted); }

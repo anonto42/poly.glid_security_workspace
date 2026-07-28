@@ -1,4 +1,5 @@
 .developer-space.resizing { user-select: none; cursor: col-resize; }
+.phase-title { justify-self: center; color: var(--text-muted); font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .14em; }
 .activity-rail { width: 48px; flex-basis: 48px; padding-right: 4px; padding-left: 4px; }
 .rail-button { height: 46px; border-radius: 4px; }
 .rail-button small { left: 43px; }
@@ -9,8 +10,6 @@
 .resize-handle:hover::after, .resizing .resize-handle::after { background: var(--accent); }
 .resize-handle.vertical { margin-left: -2px; cursor: col-resize; }
 .resize-handle.vertical::after { inset: 0 1px; }
-.resize-handle.horizontal { height: 4px; margin-top: -2px; cursor: row-resize; }
-.resize-handle.horizontal::after { inset: 1px 0; }
 .workbench-tabs { height: 36px; flex: 0 0 36px; display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--surface-1); }
 .workbench-tab { min-width: 120px; max-width: 210px; height: 36px; padding: 0 7px 0 11px; display: grid; grid-template-columns: auto minmax(0, 1fr) 20px; align-items: center; gap: 7px; border: 0; border-right: 1px solid var(--line); border-top: 1px solid transparent; color: var(--text-muted); background: var(--canvas-deep); font-size: 11px; text-align: left; cursor: pointer; }
 .workbench-tab > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -23,30 +22,16 @@
 .tab-close:focus-visible { color: var(--text-strong); background: var(--surface-hover); }
 .editor-surface { min-height: 0; flex: 1; overflow: hidden; }
 .editor-surface > .dashboard-scroll { height: 100%; }
-.bottom-panel { height: 210px; flex-basis: 210px; }
-.panel-actions { padding: 4px 8px; }
-.panel-actions button, .status-control { border: 0; color: inherit; background: transparent; cursor: pointer; }
-.panel-actions button { width: 28px; height: 28px; border-radius: 4px; }
-.panel-actions button:hover { color: var(--text); background: var(--surface-hover); }
+.status-control { border: 0; color: inherit; background: transparent; cursor: pointer; }
 .status-control { min-width: 28px; height: 22px; padding: 0 7px; border-radius: 3px; }
 .status-control:hover { color: #fff; background: rgba(255,255,255,.12); }
-.command-palette { padding: 0; }
-.command-palette > input { margin: 8px; width: calc(100% - 16px); }
-.command-results { max-height: 390px; padding: 0 8px 8px; overflow-y: auto; }
-.command-results button { align-items: center; }
-.command-results button.selected { color: var(--text-strong); background: var(--surface-hover); }
-.command-results button div { display: grid; gap: 3px; }
-.command-results button strong { font-size: 10px; font-weight: 500; }
-.command-results button small { color: var(--text-dim); font-size: 9px; }
-.command-empty { padding: 28px; color: var(--text-muted); font-size: 11px; text-align: center; }
 @media (max-width: 1080px) {
   .sidebar { width: 215px; flex-basis: 215px; }
-  .bottom-panel { height: 180px; flex-basis: 180px; }
 }
 @media (max-width: 760px) {
   .sidebar { width: 190px; flex-basis: 190px; }
   .workbench-tab { min-width: 105px; }
   .statusbar { gap: 10px; overflow: hidden; white-space: nowrap; }
-  .statusbar > div:nth-child(2), .statusbar > div:nth-child(5) { display: none; }
+  .statusbar > div:first-child { overflow: hidden; text-overflow: ellipsis; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

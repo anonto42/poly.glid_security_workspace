@@ -3,7 +3,7 @@ use polyglid_desktop::client::Project;
 use polyglid_desktop::controllers::DesktopControllers;
 
 use super::super::models::LoadState;
-use super::super::state::{push_activity, AppState};
+use super::super::state::AppState;
 
 #[component]
 pub(crate) fn ProjectsDashboard() -> Element {
@@ -64,6 +64,19 @@ pub(crate) fn ProjectsDashboard() -> Element {
                         class: "ghost-button",
                         aria_label: "Dismiss project error",
                         onclick: move |_| state.catalog.error.set(None),
+                        "Dismiss"
+                    }
+                }
+            }
+            if let Some(notice) = state.catalog.notice.read().as_ref() {
+                div {
+                    class: "project-notice",
+                    role: "status",
+                    span { "{notice}" }
+                    button {
+                        class: "ghost-button",
+                        aria_label: "Dismiss project message",
+                        onclick: move |_| state.catalog.notice.set(None),
                         "Dismiss"
                     }
                 }
@@ -237,6 +250,7 @@ fn run_mutation(
     }
     let success_message = success_message.into();
     state.catalog.error.set(None);
+    state.catalog.notice.set(None);
     state
         .catalog
         .operation
@@ -248,7 +262,7 @@ fn run_mutation(
             .and_then(|result| result);
         match result {
             Ok(()) => {
-                push_activity(state, success_message);
+                state.catalog.notice.set(Some(success_message));
                 refresh(state);
             }
             Err(error) => state.catalog.error.set(Some(error)),
