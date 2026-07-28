@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "apps/desktop",
+  "apps/website",
   "crates/client",
   "crates/config",
   "crates/events",

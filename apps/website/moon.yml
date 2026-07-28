@@ -1,0 +1,31 @@
+language: "rust"
+layer: "application"
+stack: "frontend"
+
+tasks:
+  format:
+    inputs:
+      - "Dioxus.toml"
+
+  check:
+    inputs:
+      - "Dioxus.toml"
+
+  test:
+    inputs:
+      - "Dioxus.toml"
+
+  build:
+    inputs:
+      - "Dioxus.toml"
+
+  bundle:
+    command: "$workspaceRoot/scripts/site/build.sh"
+    inputs:
+      - "@group(sources)"
+      - "Dioxus.toml"
+      - "/scripts/site/build.sh"
+    outputs:
+      - "/target/dx/polyglid-website/release/web/public"
+    options:
+      runInCI: "affected"

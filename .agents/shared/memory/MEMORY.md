@@ -17,6 +17,7 @@ a time.
 ## Workspace Shape
 
 - `apps/desktop` — Dioxus 0.7 native desktop application.
+- `apps/website` — Dioxus 0.7 Web product website and Pages bundle.
 - `crates/client` — UI-independent gateway, models, and feature controllers.
 - `crates/core` — domain services, SQLite stores, security, and execution.
 - `crates/config` — persisted configuration and plugin registry.
@@ -24,6 +25,7 @@ a time.
 - `crates/plugin-api` — plugin contracts and capability types.
 - `crates/runtime` — Wasmtime component runtime.
 - `contracts/polyglid.wit` — host/plugin component contract.
+- `scripts` — Moon project for CI, site, packaging, and release automation.
 
 Rust 2021 is used across the workspace and unsafe code is forbidden.
 

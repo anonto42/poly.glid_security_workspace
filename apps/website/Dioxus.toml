@@ -1,0 +1,12 @@
+[application]
+name = "polyglid-website"
+out_dir = "dist"
+asset_dir = "public"
+
+[web.app]
+title = "PolyGlid — Local-first security workspace"
+base_path = "poly.glid_security_workspace"
+
+[web.watcher]
+reload_html = true
+watch_path = ["src", "assets", "public"]

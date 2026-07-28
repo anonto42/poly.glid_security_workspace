@@ -1,5 +1,9 @@
 projects:
-  polyglid: "."
+  globs:
+    - "apps/*"
+    - "crates/*"
+  sources:
+    automation: "scripts"
 
 vcs:
   defaultBranch: "main"

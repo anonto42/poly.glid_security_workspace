@@ -10,8 +10,10 @@ These decisions are current until the user explicitly changes them.
 
 ## UI
 
-- Use one shipped UI technology for the desktop application.
-- The current implementation uses Dioxus for cross-platform desktop support.
+- Use Dioxus as the shipped UI technology across the desktop application and
+  product website.
+- The desktop uses Dioxus Desktop; the website uses Dioxus Web and produces a
+  static GitHub Pages-compatible bundle.
 - Treat Zed/GPUI as a design and methodology reference, not a second UI
   implementation.
 - Keep business and security behavior outside the UI so a future approved UI
@@ -20,6 +22,7 @@ These decisions are current until the user explicitly changes them.
 ## Layering
 
 - Runnable application composition belongs in `apps/desktop`.
+- Product website composition belongs in `apps/website`.
 - UI-independent controllers and models belong in `crates/client`.
 - Domain, persistence, security, and runtime behavior belongs in reusable
   crates.

@@ -1,0 +1,14 @@
+language: "bash"
+layer: "automation"
+
+tasks:
+  validate:
+    command: "ci/validate-automation.sh"
+    inputs:
+      - "**/*"
+      - "/.github/workflows/*.yml"
+      - "/.moon/**/*.yml"
+      - "/.prototools"
+    options:
+      cache: false
+      runInCI: "affected"

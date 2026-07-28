@@ -12,6 +12,7 @@
   `.agents/shared/scopes/domain-core.md`
 - Cross-layer work: `.agents/shared/context/architecture.md`
 - Commands: `.agents/shared/memory/development-commands.md`
+- CI and releases: `.agents/shared/memory/release-process.md`
 - Settled choices: `.agents/shared/memory/decisions.md`
 - Rule routing: `.agents/shared/rules/README.md`
 

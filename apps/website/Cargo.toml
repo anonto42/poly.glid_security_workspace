@@ -1,0 +1,23 @@
+[package]
+name = "polyglid-website"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Public PolyGlid website for GitHub Pages"
+
+[dependencies]
+dioxus = { version = "0.7", default-features = false, features = [
+  "asset",
+  "document",
+  "minimal",
+  "web",
+] }
+web-sys = { version = "0.3", features = ["Location"] }
+
+[[bin]]
+name = "polyglid-website"
+path = "src/main.rs"
+test = false
+
+[lints.rust]
+unsafe_code = "forbid"

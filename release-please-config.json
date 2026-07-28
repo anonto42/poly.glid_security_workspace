@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "df1fc661643bb9c2ea32c40a7ae67dcd7e4ab6c0",
+  "include-component-in-tag": false,
+  "release-type": "rust",
+  "packages": {
+    ".": {
+      "component": "polyglid",
+      "package-name": "polyglid",
+      "draft": true
+    }
+  }
+}

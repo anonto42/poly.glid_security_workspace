@@ -1,0 +1,48 @@
+inheritedBy:
+  files:
+    - "Cargo.toml"
+
+implicitInputs:
+  - "/.moon/**/*.yml"
+  - "/.prototools"
+  - "/Cargo.lock"
+  - "/Cargo.toml"
+
+fileGroups:
+  sources:
+    - "src/**/*"
+    - "assets/**/*"
+    - "public/**/*"
+    - "Cargo.toml"
+
+tasks:
+  format:
+    command: "cargo fmt --package $projectAlias --check"
+    inputs:
+      - "@group(sources)"
+    options:
+      runInCI: "affected"
+
+  check:
+    command: "cargo check --locked --package $projectAlias"
+    inputs:
+      - "@group(sources)"
+    options:
+      mutex: "cargo-workspace"
+      runInCI: "affected"
+
+  test:
+    command: "cargo test --locked --package $projectAlias"
+    inputs:
+      - "@group(sources)"
+    options:
+      mutex: "cargo-workspace"
+      runInCI: "affected"
+
+  build:
+    command: "cargo build --locked --package $projectAlias"
+    inputs:
+      - "@group(sources)"
+    options:
+      mutex: "cargo-workspace"
+      runInCI: "affected"
