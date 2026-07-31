@@ -69,3 +69,17 @@ These decisions are current until the user explicitly changes them.
 3. Implement idempotent first-run setup and versioned upgrade migrations.
 4. Add uninstall behavior, signing, and update metadata after the installer
    layout stabilizes.
+
+### Runtime directory foundation (2026-08-01)
+
+- `polyglid-client::RuntimePaths` is the single source of truth for runtime
+  directories and first-run initialization.
+- `LocalClient::open_default` resolves `POLYGLID_DATA_DIR` and
+  `POLYGLID_WORKSPACE_ROOT`, then creates config, cache, logs, plugins,
+  reports, and workspace directories idempotently.
+- Unix runtime directories are restricted to owner-only permissions. Windows
+  uses the OS access-control model and resolves data under `%LOCALAPPDATA%`.
+- macOS resolves data under `~/Library/Application Support/PolyGlid`; other
+  Unix systems retain the existing `~/.polyglid` default.
+- Installer-specific registration, signing, migration, and uninstall behavior
+  remains separate from this runtime bootstrap foundation.

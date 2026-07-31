@@ -25,6 +25,21 @@ If `nix develop` is unavailable because of a host sandbox restriction, use a
 normal Nix installation on the host; the project configuration itself has been
 validated independently.
 
+The desktop runtime creates these directories on first run:
+
+```text
+data/              SQLite database and application-owned state
+data/config/       persistent configuration
+data/cache/        disposable caches
+data/logs/         application logs
+data/plugins/      installed plugin artifacts
+data/reports/      generated reports
+workspace/         default project workspace
+```
+
+Override the data and workspace roots with `POLYGLID_DATA_DIR` and
+`POLYGLID_WORKSPACE_ROOT` when testing portable or isolated installations.
+
 ## Desktop
 
 ```sh

@@ -27,6 +27,7 @@ use polyglid_plugin_api::{
 };
 use polyglid_runtime::WasmRuntime;
 
+use super::paths::RuntimePaths;
 use super::{
     Approval, ApprovalDecision, ApprovalDuration, BootstrapSnapshot, CapabilityKind,
     CapabilityRequest, CapabilityScope, ClientError, ClientGateway, ClientResult, Execution,
@@ -55,7 +56,9 @@ struct ApplicationHost {
 
 impl LocalClient {
     pub fn open_default() -> ClientResult<Self> {
-        Self::open(data_directory()?, default_workspace_root()?)
+        let paths = RuntimePaths::discover()
+            .map_err(|error| ClientError::Unavailable(error.to_string()))?;
+        Self::open_paths(paths)
     }
 
     /// Open a local desktop client with explicit paths. This is useful for
@@ -64,29 +67,25 @@ impl LocalClient {
         data_directory: impl AsRef<Path>,
         default_workspace_root: impl AsRef<Path>,
     ) -> ClientResult<Self> {
-        let data_directory = data_directory.as_ref().to_path_buf();
-        let default_workspace_root = default_workspace_root.as_ref().to_path_buf();
-        let plugin_directory = data_directory.join("plugins");
-        let reports_directory = data_directory.join("reports");
+        Self::open_paths(RuntimePaths::from_roots(
+            data_directory.as_ref(),
+            default_workspace_root.as_ref(),
+        ))
+    }
 
-        for directory in [&data_directory, &plugin_directory, &reports_directory] {
-            fs::create_dir_all(directory).map_err(|error| {
-                ClientError::operation(
-                    "create desktop data directory",
-                    format!("{}: {error}", directory.display()),
-                )
-            })?;
-        }
+    fn open_paths(paths: RuntimePaths) -> ClientResult<Self> {
+        paths.initialize().map_err(|error| {
+            ClientError::operation("initialize desktop runtime directories", error.to_string())
+        })?;
 
-        let database_path = data_directory.join("polyglid.db");
         let config = AppConfig {
-            plugin_dir: plugin_directory,
-            reports_dir: reports_directory,
+            plugin_dir: paths.plugins.clone(),
+            reports_dir: paths.reports.clone(),
             ..AppConfig::development()
         };
-        let catalog = WorkspaceCatalogService::open(&database_path)
+        let catalog = WorkspaceCatalogService::open(&paths.database())
             .map_err(|error| ClientError::operation("open workspace catalog", error))?;
-        let store = WorkspaceStore::new(&database_path)
+        let store = WorkspaceStore::new(&paths.database())
             .map_err(|error| ClientError::operation("open desktop database", error))?;
         enroll_official_publisher(&store, option_env!("POLYGLID_OFFICIAL_PUBLISHER_KEY"))?;
         let plugins = Arc::new(
@@ -108,8 +107,8 @@ impl LocalClient {
                 plugins,
                 executions,
                 store,
-                default_workspace_root,
-                data_directory,
+                default_workspace_root: paths.workspace,
+                data_directory: paths.data,
                 session_id: uuid::Uuid::now_v7().to_string(),
             }),
         })
@@ -1400,49 +1399,11 @@ fn enroll_official_publisher(
         .map_err(|error| ClientError::operation("enroll official publisher", error))
 }
 
-fn data_directory() -> ClientResult<PathBuf> {
-    if let Some(path) = std::env::var_os("POLYGLID_DATA_DIR") {
-        if !path.is_empty() {
-            return Ok(PathBuf::from(path));
-        }
-    }
-    #[cfg(target_os = "windows")]
-    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
-        if !path.is_empty() {
-            return Ok(PathBuf::from(path).join("PolyGlid"));
-        }
-    }
-    home_directory().map(|home| home.join(".polyglid"))
-}
-
-fn default_workspace_root() -> ClientResult<PathBuf> {
-    if let Some(path) = std::env::var_os("POLYGLID_WORKSPACE_ROOT") {
-        if !path.is_empty() {
-            return Ok(PathBuf::from(path));
-        }
-    }
-    home_directory().map(|home| home.join("polyglid-projects"))
-}
-
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-fn home_directory() -> ClientResult<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .filter(|path| !path.as_os_str().is_empty())
-        .ok_or_else(|| {
-            ClientError::Unavailable(
-                "no home directory is configured; set POLYGLID_DATA_DIR and \
-                 POLYGLID_WORKSPACE_ROOT"
-                    .to_string(),
-            )
-        })
 }
 
 #[cfg(test)]

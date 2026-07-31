@@ -16,6 +16,16 @@ permissions:
   contents: read
 
 jobs:
+  nix:
+    name: Validate Nix development shell
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - name: Check flake definition
+        run: nix flake check --no-build
+
   release-intent:
     name: Validate release intent
     if: github.event_name == 'pull_request'

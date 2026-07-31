@@ -7,6 +7,7 @@ mod error;
 mod gateway;
 mod local;
 mod models;
+mod paths;
 
 pub use error::{ClientError, ClientResult};
 pub use gateway::{ClientGateway, ExecutionSubscription};
@@ -18,6 +19,7 @@ pub use models::{
     Plugin, PluginInspection, PluginSource, PluginStatus, Project, Report, ReportFormat,
     SavedTarget, Severity, ShellPreferences, StartExecutionRequest, Workspace, WorkspaceEntry,
 };
+pub use paths::RuntimePaths;
 
 /// Compatibility namespace used by both desktop clients.
 pub mod client {
