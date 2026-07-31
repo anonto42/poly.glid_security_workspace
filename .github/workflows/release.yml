@@ -41,6 +41,21 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: Check out release pull request
+        if: steps.release.outputs.prs_created == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          fetch-depth: 0
+      - name: Install Rust toolchain
+        if: steps.release.outputs.prs_created == 'true'
+        uses: dtolnay/rust-toolchain@1.96.0
+      - name: Synchronize release lockfile
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: scripts/release/sync-cargo-lock.sh "$RELEASE_BRANCH"
 
   build:
     name: Build ${{ matrix.asset }}

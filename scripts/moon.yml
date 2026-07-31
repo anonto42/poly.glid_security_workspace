@@ -9,6 +9,10 @@ tasks:
       - "/.github/workflows/*.yml"
       - "/.moon/**/*.yml"
       - "/.prototools"
+      - "/.release-please-manifest.json"
+      - "/Cargo.toml"
+      - "/release-please-config.json"
+      - "/version.txt"
     options:
       cache: false
       runInCI: "affected"

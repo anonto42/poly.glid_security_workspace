@@ -38,8 +38,11 @@ not release inputs.
 ## Delivery
 
 After CI succeeds for a push to `main`, Release Please updates a release pull
-request. Merging that pull request updates `Cargo.toml`, `Cargo.lock`, and
-`CHANGELOG.md`, creates the version tag, and creates a draft GitHub release.
+request. `version.txt` is the release tool's canonical version file. The same
+pull request updates `[workspace.package].version` in `Cargo.toml`, and the
+release workflow runs `cargo update --workspace` on its branch so `Cargo.lock`
+remains valid for locked builds. Merging the pull request creates the version
+tag and a draft GitHub release.
 
 Set the `RELEASE_PLEASE_TOKEN` repository secret to a GitHub App token or
 fine-grained personal access token so release pull requests trigger CI. The

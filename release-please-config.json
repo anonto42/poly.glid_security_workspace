@@ -2,12 +2,19 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "bootstrap-sha": "df1fc661643bb9c2ea32c40a7ae67dcd7e4ab6c0",
   "include-component-in-tag": false,
-  "release-type": "rust",
+  "release-type": "simple",
   "packages": {
     ".": {
       "component": "polyglid",
       "package-name": "polyglid",
-      "draft": true
+      "draft": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$.workspace.package.version"
+        }
+      ]
     }
   }
 }
