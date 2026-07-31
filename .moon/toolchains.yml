@@ -1,6 +1,4 @@
 rust:
   installDependencies: false
-  bins:
-    - "dioxus-cli@0.7.9"
   addMsrvConstraint: false
   syncToolchainConfig: false

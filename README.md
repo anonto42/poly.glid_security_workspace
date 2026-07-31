@@ -79,6 +79,10 @@ pull request creates a version tag and draft GitHub release. GitHub Actions then
 builds Linux x86-64, Windows x86-64, and macOS Apple Silicon archives, generates
 SHA-256 checksums, uploads the assets, and publishes the release.
 
+The website is also built and deployed to GitHub Pages only after CI succeeds
+for `main`. Before its first deployment, set the repository's Pages source to
+**GitHub Actions** in repository settings.
+
 For release pull requests to trigger their own CI run, configure a repository
 secret named `RELEASE_PLEASE_TOKEN` with a GitHub App token or fine-grained
 personal access token. Without it, the workflow falls back to `GITHUB_TOKEN`.

@@ -2,7 +2,8 @@
 
 Repository automation lives here instead of being embedded in workflow YAML.
 
-- `ci/` contains validation, dependency setup, and workspace verification.
+- `ci/` contains validation, pinned tool setup, platform dependency setup, and
+  workspace verification.
 - `release/` contains platform packaging and GitHub release publication.
 - `site/` contains the reproducible Dioxus Web production build.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v dx >/dev/null 2>&1; then
-  echo "The Dioxus CLI is required. Install dioxus-cli 0.7 before building the website." >&2
+if ! command -v dx >/dev/null 2>&1 || ! dx --version | grep -q "dioxus 0.7.9"; then
+  echo "Dioxus CLI 0.7.9 is required to build the website." >&2
   exit 1
 fi
 

@@ -17,3 +17,9 @@ Build the GitHub Pages output from the repository root with:
 ```sh
 scripts/site/build.sh
 ```
+
+The `Website` GitHub Actions workflow deploys this bundle only after CI passes
+for a push to `main`. Enable **GitHub Actions** as the repository's Pages source
+before the first deployment. The expected project-site URL is:
+
+<https://anonto42.github.io/poly.glid_security_workspace/>

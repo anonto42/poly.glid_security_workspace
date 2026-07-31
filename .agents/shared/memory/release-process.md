@@ -13,6 +13,10 @@ Workflow, Moon, or script changes run the automation validator, including shell
 syntax checks and Actionlint. Global Cargo or Moon configuration changes
 intentionally invalidate all relevant projects.
 
+CI installs the checksummed Dioxus CLI 0.7.9 release binary. Do not restore
+source installation through Moon: compiling `dioxus-cli` on a fresh hosted
+runner is slow and can make the affected-task step unreliable.
+
 Adding `apps/*/Cargo.toml` or `crates/*/Cargo.toml` requires a `feat:` title.
 Workflow YAML contains orchestration only. Reusable commands belong under
 `scripts/ci/`, `scripts/site/`, and `scripts/release/`. Cargo's `target`
@@ -56,3 +60,13 @@ The release is published only after all three archives and `SHA256SUMS` upload
 successfully.
 
 Reference branches never publish active PolyGlid releases.
+
+## Website Delivery
+
+The `Website` workflow waits for successful CI from a push to `main`, checks
+out the exact tested commit, builds the Dioxus Web bundle, and deploys it using
+the `github-pages` environment. It can also be run manually for recovery.
+
+The repository owner must select **GitHub Actions** as the Pages publishing
+source before the first deployment. The expected project-site URL is
+`https://anonto42.github.io/poly.glid_security_workspace/`.

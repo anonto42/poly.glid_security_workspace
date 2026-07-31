@@ -28,4 +28,5 @@ tasks:
     outputs:
       - "/target/dx/polyglid-website/release/web/public"
     options:
+      mutex: "cargo-workspace"
       runInCI: "affected"
