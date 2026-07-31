@@ -33,6 +33,19 @@ when their development phase begins.
 
 ## Development
 
+Install [Nix](https://nixos.org/download/) with flakes enabled, then enter the
+reproducible PolyGlid development environment:
+
+```bash
+nix develop
+```
+
+The shell provides Rust 1.96.0 with the WebAssembly target, Moon 2.4.6, Dioxus
+CLI 0.7.9, Go, Git, and the native Linux libraries required by Dioxus Desktop.
+It supports Linux x86-64/ARM64 and macOS Apple Silicon. On macOS, Xcode Command
+Line Tools remain a host requirement. Nix manages developer dependencies; Moon
+and Cargo continue to own project tasks and Rust builds.
+
 ```bash
 cargo run -p polyglid-desktop
 cargo check --workspace

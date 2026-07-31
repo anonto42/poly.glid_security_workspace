@@ -11,6 +11,8 @@ tasks:
       - "/.prototools"
       - "/.release-please-manifest.json"
       - "/Cargo.toml"
+      - "/flake.lock"
+      - "/flake.nix"
       - "/release-please-config.json"
       - "/version.txt"
     options:

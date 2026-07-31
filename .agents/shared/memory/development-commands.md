@@ -2,6 +2,29 @@
 
 Run commands from the repository root.
 
+## Development Environment
+
+Enter the pinned development shell before running project commands:
+
+```sh
+nix develop
+```
+
+Verify its primary tools with:
+
+```sh
+rustc --version
+rustc --print target-libdir --target wasm32-unknown-unknown
+moon --version
+dx --version
+```
+
+The flake currently supports x86_64 Linux, aarch64 Linux, and Apple Silicon
+macOS. Intel macOS is not a supported Nix target in the pinned nixpkgs release.
+If `nix develop` is unavailable because of a host sandbox restriction, use a
+normal Nix installation on the host; the project configuration itself has been
+validated independently.
+
 ## Desktop
 
 ```sh

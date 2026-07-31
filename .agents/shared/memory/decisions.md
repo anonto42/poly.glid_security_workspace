@@ -35,3 +35,37 @@ These decisions are current until the user explicitly changes them.
   and ideas.
 - Copy concepts selectively; do not merge either reference branch wholesale
   into `main`.
+
+## Development Environment
+
+- Nix owns reproducible host-side developer tools and native development
+  libraries through `flake.nix` and the committed `flake.lock`.
+- Moon remains the repository task runner, Cargo remains the Rust build system,
+  and GitHub Actions remains the CI and delivery platform.
+- The development flake does not package the application. Native installers and
+  release packages are a separate delivery concern.
+
+### Nix implementation status (2026-08-01)
+
+- The initial Nix development environment is complete and committed in
+  `flake.nix` and `flake.lock`.
+- It pins Rust 1.96.0 with `rustfmt` and the WebAssembly target, Moon 2.4.6,
+  Dioxus CLI 0.7.9, Go, Git, jq, pkg-config, and the Linux GTK/WebKit
+  libraries needed by Dioxus Desktop.
+- Supported flake systems are x86_64 Linux, aarch64 Linux, and aarch64-darwin.
+  Intel macOS is intentionally not declared because the current nixpkgs
+  release no longer supports that target.
+- Validation completed with tool-version checks, native-library checks, flake
+  evaluation, and `cargo check --locked -p polyglid-desktop`.
+- Nix is a development dependency layer only; it does not replace Moon, Cargo,
+  Docker, or the existing GitHub Actions workflow.
+
+### Next development steps
+
+1. Add a lightweight CI job that runs `nix flake check` when the flake changes.
+2. Design the installer/runtime-data layer separately for Linux, Windows, and
+   macOS: config, data, cache, logs, plugins, workspaces, permissions, and
+   PATH registration.
+3. Implement idempotent first-run setup and versioned upgrade migrations.
+4. Add uninstall behavior, signing, and update metadata after the installer
+   layout stabilizes.
