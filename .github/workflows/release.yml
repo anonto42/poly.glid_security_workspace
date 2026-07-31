@@ -41,11 +41,17 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: Resolve release pull request branch
+        id: release-pr
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_PR_JSON: ${{ steps.release.outputs.pr }}
+        run: echo "branch=$(jq -er '.headBranchName' <<< "$RELEASE_PR_JSON")" >> "$GITHUB_OUTPUT"
       - name: Check out release pull request
         if: steps.release.outputs.prs_created == 'true'
         uses: actions/checkout@v6
         with:
-          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          ref: ${{ steps.release-pr.outputs.branch }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           fetch-depth: 0
       - name: Install Rust toolchain
@@ -54,7 +60,7 @@ jobs:
       - name: Synchronize release lockfile
         if: steps.release.outputs.prs_created == 'true'
         env:
-          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          RELEASE_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: scripts/release/sync-cargo-lock.sh "$RELEASE_BRANCH"
 
   build:
