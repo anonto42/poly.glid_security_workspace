@@ -67,8 +67,9 @@ jobs:
     name: Build ${{ matrix.asset }}
     needs: release-please
     # TEMPORARY DRY-RUN BYPASS: DO NOT MERGE. Allows workflow_dispatch to
-    # exercise this job without a real release-please version bump.
-    if: needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch'
+    # exercise this job without a real release-please version bump, even if
+    # the release-please job itself failed (e.g. PR-creation permissions).
+    if: always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
