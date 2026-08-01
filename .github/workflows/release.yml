@@ -78,6 +78,7 @@ jobs:
           - os: ubuntu-24.04
             asset: linux-x86_64
             archive: polyglid-linux-x86_64.tar.gz
+            appimage: polyglid-linux-x86_64.AppImage
           - os: windows-latest
             asset: windows-x86_64
             archive: polyglid-windows-x86_64.zip
@@ -104,10 +105,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: scripts/release/package-windows.ps1 -Archive ${{ matrix.archive }}
+      - name: Package Linux AppImage
+        if: matrix.appimage != ''
+        run: scripts/release/package-appimage.sh ${{ matrix.appimage }}
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset }}
           path: ${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Linux AppImage
+        if: matrix.appimage != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}-appimage
+          path: ${{ matrix.appimage }}
           if-no-files-found: error
           retention-days: 14
 

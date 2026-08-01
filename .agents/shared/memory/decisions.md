@@ -62,13 +62,25 @@ These decisions are current until the user explicitly changes them.
 
 ### Next development steps
 
-1. Add a lightweight CI job that runs `nix flake check` when the flake changes.
-2. Design the installer/runtime-data layer separately for Linux, Windows, and
-   macOS: config, data, cache, logs, plugins, workspaces, permissions, and
-   PATH registration.
+1. Done: `.github/workflows/ci.yml` runs a `nix` job (`nix flake check
+   --no-build`) on every push and pull request.
+2. Done (2026-08-01): Linux AppImage packaging implemented and locally
+   verified end-to-end. `scripts/release/package-appimage.sh` builds a
+   `PolyGlid.AppDir`, fetches `appimagetool` if missing, and produces the
+   `.AppImage`; `.github/workflows/release.yml`'s Linux leg packages and
+   uploads it as a separate `release-linux-x86_64-appimage` artifact
+   alongside the existing tar.gz so `if-no-files-found: error` does not break
+   the Windows/macOS legs. `scripts/release/publish.sh` needed no changes.
+   Scope is Linux-only for this phase (Windows/macOS installer work deferred
+   until real testing capacity exists); no `.deb`/`.rpm`/Flatpak; AppImage
+   ships unsigned since AppImage does not require OS-level signing to run.
+   Still open: real app icon/branding (placeholder in place, marked with a
+   `TODO` in the script) and AppStream metadata (`appimagetool` warns it is
+   missing).
 3. Implement idempotent first-run setup and versioned upgrade migrations.
 4. Add uninstall behavior, signing, and update metadata after the installer
-   layout stabilizes.
+   layout stabilizes. Revisit Windows/macOS installer scope and signing when
+   that work actually starts.
 
 ### Runtime directory foundation (2026-08-01)
 
