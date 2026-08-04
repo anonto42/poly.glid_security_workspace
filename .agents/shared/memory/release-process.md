@@ -62,6 +62,10 @@ Release jobs build and archive:
 The release is published only after all three archives and `SHA256SUMS` upload
 successfully.
 
+Run the manually triggered `Package validation` workflow before the first
+production release. It builds the same Linux, Windows, and macOS artifacts as
+the release workflow but does not invoke Release Please or publish anything.
+
 Reference branches never publish active PolyGlid releases.
 
 ## Website Delivery

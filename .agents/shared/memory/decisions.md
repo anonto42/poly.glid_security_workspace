@@ -101,6 +101,10 @@ These decisions are current until the user explicitly changes them.
    2026-08-04. Production release builds are again gated by a successful
    Release Please result.
 
+   A separate manually triggered `Package validation` workflow now exercises
+   all platform packaging without bypassing release gating or publishing a
+   GitHub release.
+
 ### Runtime directory foundation (2026-08-01)
 
 - `polyglid-client::RuntimePaths` is the single source of truth for runtime
