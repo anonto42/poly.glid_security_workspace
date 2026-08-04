@@ -95,3 +95,15 @@ These decisions are current until the user explicitly changes them.
   Unix systems retain the existing `~/.polyglid` default.
 - Installer-specific registration, signing, migration, and uninstall behavior
   remains separate from this runtime bootstrap foundation.
+
+### Versioned first-run setup (2026-08-04)
+
+- `LocalClient::open_with_setup` and `open_default_with_setup` expose a
+  `SetupReport` without changing the existing `open` APIs.
+- Setup reports `FirstRun`, `Migrated`, or `Ready`, records directories created,
+  and reports the database version transition and applied migration versions.
+- Runtime directory creation and SQLite migrations remain transactional and
+  idempotent; opening an existing installation does not recreate directories
+  or reapply migrations.
+- Future installer work should call this setup boundary after installation and
+  surface its errors to the user before opening the desktop shell.

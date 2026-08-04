@@ -14,6 +14,11 @@ pub struct RuntimePaths {
     pub workspace: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeInitialization {
+    pub created_directories: Vec<PathBuf>,
+}
+
 impl RuntimePaths {
     pub fn discover() -> Result<Self, String> {
         let data = std::env::var_os("POLYGLID_DATA_DIR")
@@ -41,7 +46,8 @@ impl RuntimePaths {
     }
 
     /// Create all application-owned directories. Re-running this is safe.
-    pub fn initialize(&self) -> io::Result<()> {
+    pub fn initialize(&self) -> io::Result<RuntimeInitialization> {
+        let mut created_directories = Vec::new();
         for directory in [
             &self.data,
             &self.config,
@@ -51,10 +57,16 @@ impl RuntimePaths {
             &self.reports,
             &self.workspace,
         ] {
+            let existed = directory.is_dir();
             fs::create_dir_all(directory)?;
+            if !existed {
+                created_directories.push(directory.clone());
+            }
             restrict_directory_permissions(directory)?;
         }
-        Ok(())
+        Ok(RuntimeInitialization {
+            created_directories,
+        })
     }
 
     pub fn database(&self) -> PathBuf {

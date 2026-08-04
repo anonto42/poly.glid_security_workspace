@@ -40,6 +40,12 @@ workspace/         default project workspace
 Override the data and workspace roots with `POLYGLID_DATA_DIR` and
 `POLYGLID_WORKSPACE_ROOT` when testing portable or isolated installations.
 
+For setup-aware startup flows, use `LocalClient::open_with_setup` (or
+`open_default_with_setup`) and inspect `SetupReport` before rendering the shell.
+`FirstRun` means the database and runtime directories were initialized;
+`Migrated` means one or more schema migrations ran; `Ready` means no setup
+changes were needed.
+
 ## Desktop
 
 ```sh

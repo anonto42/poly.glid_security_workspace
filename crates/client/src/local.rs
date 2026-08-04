@@ -14,6 +14,7 @@ use polyglid_core::execution::{
 };
 use polyglid_core::plugin_manager::PluginManager;
 use polyglid_core::services::WorkspaceCatalogService;
+use polyglid_core::store::migrations::MigrationReport;
 use polyglid_core::store::permission_store::{
     ApprovalBinding as CoreApprovalBinding, ApprovalDuration as CoreApprovalDuration,
     DbPermissionRecord,
@@ -27,7 +28,23 @@ use polyglid_plugin_api::{
 };
 use polyglid_runtime::WasmRuntime;
 
-use super::paths::RuntimePaths;
+use super::paths::{RuntimeInitialization, RuntimePaths};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SetupStatus {
+    FirstRun,
+    Migrated,
+    Ready,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetupReport {
+    pub status: SetupStatus,
+    pub created_directories: Vec<PathBuf>,
+    pub database_previous_version: i32,
+    pub database_version: i32,
+    pub applied_migrations: Vec<i32>,
+}
 use super::{
     Approval, ApprovalDecision, ApprovalDuration, BootstrapSnapshot, CapabilityKind,
     CapabilityRequest, CapabilityScope, ClientError, ClientGateway, ClientResult, Execution,
@@ -56,9 +73,13 @@ struct ApplicationHost {
 
 impl LocalClient {
     pub fn open_default() -> ClientResult<Self> {
+        Self::open_default_with_setup().map(|(client, _)| client)
+    }
+
+    pub fn open_default_with_setup() -> ClientResult<(Self, SetupReport)> {
         let paths = RuntimePaths::discover()
             .map_err(|error| ClientError::Unavailable(error.to_string()))?;
-        Self::open_paths(paths)
+        Self::open_paths_with_setup(paths)
     }
 
     /// Open a local desktop client with explicit paths. This is useful for
@@ -67,14 +88,21 @@ impl LocalClient {
         data_directory: impl AsRef<Path>,
         default_workspace_root: impl AsRef<Path>,
     ) -> ClientResult<Self> {
-        Self::open_paths(RuntimePaths::from_roots(
+        Self::open_with_setup(data_directory, default_workspace_root).map(|(client, _)| client)
+    }
+
+    pub fn open_with_setup(
+        data_directory: impl AsRef<Path>,
+        default_workspace_root: impl AsRef<Path>,
+    ) -> ClientResult<(Self, SetupReport)> {
+        Self::open_paths_with_setup(RuntimePaths::from_roots(
             data_directory.as_ref(),
             default_workspace_root.as_ref(),
         ))
     }
 
-    fn open_paths(paths: RuntimePaths) -> ClientResult<Self> {
-        paths.initialize().map_err(|error| {
+    fn open_paths_with_setup(paths: RuntimePaths) -> ClientResult<(Self, SetupReport)> {
+        let initialization = paths.initialize().map_err(|error| {
             ClientError::operation("initialize desktop runtime directories", error.to_string())
         })?;
 
@@ -83,10 +111,9 @@ impl LocalClient {
             reports_dir: paths.reports.clone(),
             ..AppConfig::development()
         };
-        let catalog = WorkspaceCatalogService::open(&paths.database())
-            .map_err(|error| ClientError::operation("open workspace catalog", error))?;
-        let store = WorkspaceStore::new(&paths.database())
+        let (store, migration_report) = WorkspaceStore::new_with_migrations(&paths.database())
             .map_err(|error| ClientError::operation("open desktop database", error))?;
+        let catalog = WorkspaceCatalogService::from_store(store.clone());
         enroll_official_publisher(&store, option_env!("POLYGLID_OFFICIAL_PUBLISHER_KEY"))?;
         let plugins = Arc::new(
             PluginManager::new(Arc::new(WasmRuntime::new()), &config, store.clone())
@@ -101,17 +128,21 @@ impl LocalClient {
             config,
         ));
 
-        Ok(Self {
-            host: Arc::new(ApplicationHost {
-                catalog,
-                plugins,
-                executions,
-                store,
-                default_workspace_root: paths.workspace,
-                data_directory: paths.data,
-                session_id: uuid::Uuid::now_v7().to_string(),
-            }),
-        })
+        let setup_report = setup_report(initialization, migration_report);
+        Ok((
+            Self {
+                host: Arc::new(ApplicationHost {
+                    catalog,
+                    plugins,
+                    executions,
+                    store,
+                    default_workspace_root: paths.workspace,
+                    data_directory: paths.data,
+                    session_id: uuid::Uuid::now_v7().to_string(),
+                }),
+            },
+            setup_report,
+        ))
     }
 
     pub fn data_directory(&self) -> &Path {
@@ -1346,6 +1377,23 @@ fn setting_u64(
         .clamp(minimum, maximum))
 }
 
+fn setup_report(initialization: RuntimeInitialization, migrations: MigrationReport) -> SetupReport {
+    let status = if migrations.previous_version == 0 && migrations.current_version > 0 {
+        SetupStatus::FirstRun
+    } else if !migrations.applied_versions.is_empty() {
+        SetupStatus::Migrated
+    } else {
+        SetupStatus::Ready
+    };
+    SetupReport {
+        status,
+        created_directories: initialization.created_directories,
+        database_previous_version: migrations.previous_version,
+        database_version: migrations.current_version,
+        applied_migrations: migrations.applied_versions,
+    }
+}
+
 fn enroll_official_publisher(
     store: &WorkspaceStore,
     configured_key: Option<&str>,
@@ -1436,6 +1484,28 @@ mod tests {
         assert_eq!(client.list_targets().expect("list targets"), vec![saved]);
 
         fs::remove_dir_all(root).expect("clean temporary client");
+    }
+
+    #[test]
+    fn first_run_setup_is_reported_and_is_idempotent() {
+        let root = temporary_directory("setup-report");
+        let data = root.join("data");
+        let workspace = root.join("projects");
+
+        let (_, first) = LocalClient::open_with_setup(&data, &workspace).expect("first setup");
+        assert_eq!(first.status, SetupStatus::FirstRun);
+        assert_eq!(first.database_previous_version, 0);
+        assert_eq!(first.database_version, 7);
+        assert_eq!(first.applied_migrations, (1..=7).collect::<Vec<_>>());
+        assert_eq!(first.created_directories.len(), 7);
+
+        let (_, second) = LocalClient::open_with_setup(&data, &workspace).expect("second setup");
+        assert_eq!(second.status, SetupStatus::Ready);
+        assert_eq!(second.database_previous_version, 7);
+        assert!(second.applied_migrations.is_empty());
+        assert!(second.created_directories.is_empty());
+
+        fs::remove_dir_all(root).expect("clean setup test");
     }
 
     #[test]

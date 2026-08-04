@@ -1,4 +1,4 @@
-use crate::store::migrations::MigrationManager;
+use crate::store::migrations::{MigrationManager, MigrationReport};
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -17,10 +17,14 @@ impl Clone for WorkspaceStore {
 
 impl WorkspaceStore {
     pub fn new(path: &Path) -> Result<Self, String> {
+        Self::new_with_migrations(path).map(|(store, _)| store)
+    }
+
+    pub fn new_with_migrations(path: &Path) -> Result<(Self, MigrationReport), String> {
         let mut conn = Connection::open(path)
             .map_err(|err| format!("failed to open database file '{}': {err}", path.display()))?;
 
-        MigrationManager::run(&mut conn)?;
+        let migration_report = MigrationManager::run_with_report(&mut conn)?;
 
         let profile_default = if cfg!(test) {
             "Development"
@@ -32,9 +36,12 @@ impl WorkspaceStore {
             [profile_default],
         );
 
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-        })
+        Ok((
+            Self {
+                conn: Arc::new(Mutex::new(conn)),
+            },
+            migration_report,
+        ))
     }
 
     pub fn plugins(&self) -> crate::store::plugin_store::PluginStore {
