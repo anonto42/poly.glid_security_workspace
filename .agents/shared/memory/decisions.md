@@ -83,6 +83,10 @@ These decisions are current until the user explicitly changes them.
    layout stabilizes. Revisit Windows/macOS installer scope and signing when
    that work actually starts.
 
+   The current Windows ZIP and macOS Unix archive now bundle runtime-directory
+   guidance and run package-content validation. Native registration (MSI/MSIX,
+   DMG/PKG), signing, and uninstall behavior remain intentionally deferred.
+
 ### Runtime directory foundation (2026-08-01)
 
 - `polyglid-client::RuntimePaths` is the single source of truth for runtime
