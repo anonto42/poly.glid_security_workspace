@@ -84,7 +84,8 @@ titles declare release intent using Conventional Commits:
 
 A new app or crate is treated as a feature and requires a `feat:` title.
 Breaking changes can use `!` after the type or a `BREAKING CHANGE:` commit
-footer.
+footer. Validation-only PRs may use a title such as
+`test/release package dry run`; they cannot introduce a new app or crate.
 
 After changes land on `main` and CI succeeds, Release Please creates or updates
 a release pull request containing the workspace version, lockfile, and

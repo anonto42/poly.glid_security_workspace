@@ -7,9 +7,10 @@ set -euo pipefail
 
 conventional_pattern='^(feat|fix|perf|refactor|revert|build|ci|docs|style|test|chore)(\([a-z0-9._/-]+\))?(!)?: .+'
 feature_pattern='^feat(\([a-z0-9._/-]+\))?(!)?: .+'
+test_pattern='^[Tt]est([/:_-]).+'
 
-if [[ ! "$PR_TITLE" =~ $conventional_pattern ]]; then
-  echo "::error::PR title must use Conventional Commits, for example 'feat(desktop): add project search'"
+if [[ ! "$PR_TITLE" =~ $conventional_pattern && ! "$PR_TITLE" =~ $test_pattern ]]; then
+  echo "::error::PR title must use Conventional Commits, or start with 'test/' for validation-only work"
   exit 1
 fi
 

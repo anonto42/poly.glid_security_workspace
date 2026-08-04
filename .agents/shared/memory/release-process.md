@@ -18,6 +18,8 @@ source installation through Moon: compiling `dioxus-cli` on a fresh hosted
 runner is slow and can make the affected-task step unreliable.
 
 Adding `apps/*/Cargo.toml` or `crates/*/Cargo.toml` requires a `feat:` title.
+Validation-only pull requests may use a `test/`, `test:`, `Test/`, `Test:`, or
+similar test-prefixed title, but they cannot add a new app or crate.
 Workflow YAML contains orchestration only. Reusable commands belong under
 `scripts/ci/`, `scripts/site/`, and `scripts/release/`. Cargo's `target`
 directory is not a Moon cache output; only the final static website bundle is
