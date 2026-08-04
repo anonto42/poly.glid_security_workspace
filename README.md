@@ -94,6 +94,11 @@ Windows x86-64 (ZIP and MSI), and macOS Apple Silicon (tar.gz and DMG),
 generates SHA-256 checksums, uploads the assets, and publishes the release.
 Native artifacts are currently unsigned pending release-key setup.
 
+Before the first production release, run the manually triggered **Package
+validation** workflow from the GitHub Actions tab. It builds the platform
+packages on their native runners and uploads short-lived artifacts without
+creating a tag or publishing a release.
+
 The website is also built and deployed to GitHub Pages only after CI succeeds
 for `main`. Before its first deployment, set the repository's Pages source to
 **GitHub Actions** in repository settings.
