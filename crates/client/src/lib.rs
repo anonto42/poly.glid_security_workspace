@@ -29,7 +29,8 @@ pub mod client {
         ExecutionEvent, ExecutionMetrics, ExecutionPreferences, ExecutionReport, ExecutionState,
         ExecutionSubscription, Issue, JobId, LocalClient, PermissionDecisionRequest, Plugin,
         PluginInspection, PluginSource, PluginStatus, Project, Report, ReportFormat, SavedTarget,
-        Severity, ShellPreferences, StartExecutionRequest, Workspace, WorkspaceEntry,
+        SetupReport, SetupStatus, Severity, ShellPreferences, StartExecutionRequest, Workspace,
+        WorkspaceEntry,
     };
 }
 

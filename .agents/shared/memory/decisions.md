@@ -107,3 +107,6 @@ These decisions are current until the user explicitly changes them.
   or reapply migrations.
 - Future installer work should call this setup boundary after installation and
   surface its errors to the user before opening the desktop shell.
+- The Dioxus desktop startup now calls the setup-aware API and surfaces first-run
+  or migration notices in the existing Projects status area. Setup failures
+  remain blocking startup errors with recovery guidance.

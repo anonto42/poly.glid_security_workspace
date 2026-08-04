@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use polyglid_desktop::client::LocalClient;
+use polyglid_desktop::client::{LocalClient, SetupReport, SetupStatus};
 use polyglid_desktop::controllers::DesktopControllers;
 
 use super::commands::{handle_shortcut, persist_shell};
@@ -19,11 +19,11 @@ const APP_CSS: &str = concat!(
 
 #[component]
 pub(crate) fn App() -> Element {
-    let state = use_app_state();
+    let mut state = use_app_state();
     use_context_provider(|| state);
-    let opened = use_hook(LocalClient::open_default);
-    let client = match opened {
-        Ok(client) => client,
+    let opened = use_hook(LocalClient::open_default_with_setup);
+    let (client, setup) = match opened {
+        Ok(result) => result,
         Err(error) => {
             return rsx! {
                 style { dangerous_inner_html: APP_CSS }
@@ -40,6 +40,15 @@ pub(crate) fn App() -> Element {
     };
     let controllers = DesktopControllers::new(client);
     use_context_provider(|| controllers.clone());
+
+    let setup_message = setup_message(&setup);
+    use_effect(move || {
+        if state.catalog.notice.read().is_none() {
+            if let Some(message) = setup_message.clone() {
+                state.catalog.notice.set(Some(message));
+            }
+        }
+    });
 
     load_projects(state, controllers.clone());
 
@@ -69,6 +78,20 @@ pub(crate) fn App() -> Element {
             }
             StatusBar {}
         }
+    }
+}
+
+fn setup_message(report: &SetupReport) -> Option<String> {
+    match report.status {
+        SetupStatus::FirstRun => Some(format!(
+            "PolyGlid initialized this workspace and applied {} database migrations.",
+            report.applied_migrations.len()
+        )),
+        SetupStatus::Migrated => Some(format!(
+            "PolyGlid upgraded this workspace with {} database migration(s).",
+            report.applied_migrations.len()
+        )),
+        SetupStatus::Ready => None,
     }
 }
 
