@@ -62,6 +62,10 @@ Release jobs build and archive:
 The release is published only after all three archives and `SHA256SUMS` upload
 successfully.
 
+`publish.sh` also generates `polyglid-update.json`, containing the release tag,
+version, repository, artifact download URLs, and SHA-256 hashes. This manifest
+is metadata only; clients must verify hashes before applying an update.
+
 Run the manually triggered `Package validation` workflow before the first
 production release. It builds the same Linux, Windows, and macOS artifacts as
 the release workflow but does not invoke Release Please or publish anything.

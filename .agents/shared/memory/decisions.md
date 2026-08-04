@@ -105,6 +105,10 @@ These decisions are current until the user explicitly changes them.
    all platform packaging without bypassing release gating or publishing a
    GitHub release.
 
+   Release publication now generates `polyglid-update.json` with artifact URLs
+   and SHA-256 hashes. Automatic update installation remains deferred until a
+   client-side verification and rollback design is approved.
+
 ### Runtime directory foundation (2026-08-01)
 
 - `polyglid-client::RuntimePaths` is the single source of truth for runtime
