@@ -74,10 +74,11 @@ These decisions are current until the user explicitly changes them.
    Scope is Linux-only for this phase (Windows/macOS installer work deferred
    until real testing capacity exists); no `.deb`/`.rpm`/Flatpak; AppImage
    ships unsigned since AppImage does not require OS-level signing to run.
-   Still open: real app icon/branding (placeholder in place, marked with a
-   `TODO` in the script) and AppStream metadata (`appimagetool` warns it is
-   missing).
-3. Implement idempotent first-run setup and versioned upgrade migrations.
+   AppImage now includes AppStream metadata, runtime-directory guidance, and a
+   deterministic AppDir validation step. Still open: real app icon/branding
+   (placeholder in place, marked with a `TODO` in the script).
+3. Done (2026-08-04): idempotent first-run setup and versioned migration
+   reporting are implemented in the client and surfaced by desktop startup.
 4. Add uninstall behavior, signing, and update metadata after the installer
    layout stabilizes. Revisit Windows/macOS installer scope and signing when
    that work actually starts.
