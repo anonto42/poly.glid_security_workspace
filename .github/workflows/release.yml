@@ -89,6 +89,7 @@ jobs:
           - os: macos-15
             asset: macos-aarch64
             archive: polyglid-macos-aarch64.tar.gz
+            dmg: polyglid-macos-aarch64.dmg
     steps:
       - uses: actions/checkout@v6
         with:
@@ -122,6 +123,9 @@ jobs:
       - name: Package Linux AppImage
         if: matrix.appimage != ''
         run: scripts/release/package-appimage.sh ${{ matrix.appimage }}
+      - name: Package macOS DMG
+        if: matrix.dmg != ''
+        run: scripts/release/package-macos-dmg.sh ${{ matrix.dmg }}
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset }}
@@ -142,6 +146,14 @@ jobs:
         with:
           name: release-${{ matrix.asset }}-msi
           path: ${{ matrix.msi }}
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload macOS DMG
+        if: matrix.dmg != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}-dmg
+          path: ${{ matrix.dmg }}
           if-no-files-found: error
           retention-days: 14
 

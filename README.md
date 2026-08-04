@@ -89,9 +89,10 @@ footer.
 After changes land on `main` and CI succeeds, Release Please creates or updates
 a release pull request containing the workspace version, lockfile, and
 changelog updates. Merging that pull request creates a version tag and draft
-GitHub release. GitHub Actions then builds Linux x86-64, Windows x86-64, and
-macOS Apple Silicon archives, generates SHA-256 checksums, uploads the assets,
-and publishes the release.
+GitHub release. GitHub Actions then builds Linux x86-64 (tar.gz and AppImage),
+Windows x86-64 (ZIP and MSI), and macOS Apple Silicon (tar.gz and DMG),
+generates SHA-256 checksums, uploads the assets, and publishes the release.
+Native artifacts are currently unsigned pending release-key setup.
 
 The website is also built and deployed to GitHub Pages only after CI succeeds
 for `main`. Before its first deployment, set the repository's Pages source to

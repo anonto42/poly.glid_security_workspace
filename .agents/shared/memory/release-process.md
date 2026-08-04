@@ -57,7 +57,7 @@ Release jobs build and archive:
 
 - Linux x86-64;
 - Windows x86-64 ZIP and MSI;
-- macOS Apple Silicon.
+- macOS Apple Silicon archive and DMG.
 
 The release is published only after all three archives and `SHA256SUMS` upload
 successfully.
