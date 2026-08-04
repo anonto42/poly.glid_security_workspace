@@ -7,7 +7,8 @@ Repository automation lives here instead of being embedded in workflow YAML.
 - `release/` contains release lockfile synchronization, platform packaging,
   package validation, AppImage metadata validation, and GitHub release
   publication. Every platform archive bundles the runtime-directory guidance
-  used by first-run setup.
+  used by first-run setup. The Windows release also produces a WiX v4 MSI with
+  Start Menu registration and major-upgrade handling.
 - `site/` contains the reproducible Dioxus Web production build.
 
 Run scripts from the repository root unless a script says otherwise.

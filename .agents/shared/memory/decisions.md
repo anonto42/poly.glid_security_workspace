@@ -84,8 +84,14 @@ These decisions are current until the user explicitly changes them.
    that work actually starts.
 
    The current Windows ZIP and macOS Unix archive now bundle runtime-directory
-   guidance and run package-content validation. Native registration (MSI/MSIX,
-   DMG/PKG), signing, and uninstall behavior remain intentionally deferred.
+   guidance and run package-content validation. Windows MSI registration is now
+   defined; macOS DMG/PKG packaging, signing, and uninstall behavior remain
+   intentionally deferred.
+
+   Windows MSI packaging is now defined with WiX v4 and included as a separate
+   release artifact. It installs the executable and runtime guidance, creates a
+   Start Menu shortcut, and supports major upgrades. Signing and actual hosted
+   Windows validation remain prerequisites before calling it production-ready.
 
 ### Runtime directory foundation (2026-08-01)
 
