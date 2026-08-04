@@ -97,6 +97,10 @@ These decisions are current until the user explicitly changes them.
    `.app` bundle with `Info.plist`, runtime guidance, and an Applications alias.
    Signing, notarization, and actual hosted macOS validation remain open.
 
+   The temporary release `workflow_dispatch` bypass commits were reverted on
+   2026-08-04. Production release builds are again gated by a successful
+   Release Please result.
+
 ### Runtime directory foundation (2026-08-01)
 
 - `polyglid-client::RuntimePaths` is the single source of truth for runtime
