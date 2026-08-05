@@ -12,6 +12,7 @@ Repository automation lives here instead of being embedded in workflow YAML.
   produces an ARM64 `.app` bundle inside a `.dmg` with an Applications alias.
   Publishing generates `polyglid-update.json` beside `SHA256SUMS` for future
   automatic update clients.
+  The manifest and checksum set are verified before any GitHub upload.
 - `site/` contains the reproducible Dioxus Web production build.
 
 Run scripts from the repository root unless a script says otherwise.

@@ -17,6 +17,7 @@ fi
 )
 
 scripts/release/generate-update-manifest.sh "$assets_dir" "$TAG"
+scripts/release/verify-update-manifest.sh "$assets_dir" "$TAG"
 
 gh release upload "$TAG" "$assets_dir"/* --clobber
 gh release edit "$TAG" --draft=false
