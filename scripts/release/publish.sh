@@ -13,7 +13,11 @@ fi
 
 (
   cd "$assets_dir"
-  sha256sum polyglid-* | sort -k 2 > SHA256SUMS
+  : > SHA256SUMS
+  while IFS= read -r asset; do
+    sha256sum "$asset"
+  done < <(find . -maxdepth 1 -type f -name 'polyglid-*' \
+    ! -name 'polyglid-update.json' -printf '%f\n' | sort) > SHA256SUMS
 )
 
 scripts/release/generate-update-manifest.sh "$assets_dir" "$TAG"
