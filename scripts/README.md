@@ -2,8 +2,8 @@
 
 Repository automation lives here instead of being embedded in workflow YAML.
 
-- `ci/` contains validation, pinned tool setup, platform dependency setup, and
-  workspace verification.
+- `ci/` contains validation (including release-title tests), pinned tool setup,
+  platform dependency setup, and workspace verification.
 - `release/` contains release lockfile synchronization, platform packaging,
   package validation, AppImage metadata validation, and GitHub release
   publication. Every platform archive bundles the runtime-directory guidance
