@@ -83,4 +83,4 @@ the `github-pages` environment. It can also be run manually for recovery.
 
 The repository owner must select **GitHub Actions** as the Pages publishing
 source before the first deployment. The expected project-site URL is
-`https://anonto42.github.io/poly.glid_security_workspace/`.
+`https://anonto42.github.io/polyglid/`.

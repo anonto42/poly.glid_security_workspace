@@ -5,7 +5,7 @@ asset_dir = "public"
 
 [web.app]
 title = "PolyGlid — Local-first security workspace"
-base_path = "poly.glid_security_workspace"
+base_path = "polyglid"
 
 [web.watcher]
 reload_html = true

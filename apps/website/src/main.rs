@@ -44,7 +44,7 @@ fn Header() -> Element {
                 a { href: "#status", "Status" }
                 a {
                     class: "nav-action",
-                    href: "https://github.com/anonto42/poly.glid_security_workspace",
+                    href: "https://github.com/anonto42/polyglid",
                     target: "_blank",
                     rel: "noreferrer",
                     "Source ↗"
@@ -74,13 +74,13 @@ fn Hero() -> Element {
                 div { class: "hero-actions",
                     a {
                         class: "button button-primary",
-                        href: "https://github.com/anonto42/poly.glid_security_workspace/releases",
+                        href: "https://github.com/anonto42/polyglid/releases",
                         "View releases"
                         span { aria_hidden: "true", "→" }
                     }
                     a {
                         class: "button button-secondary",
-                        href: "https://github.com/anonto42/poly.glid_security_workspace",
+                        href: "https://github.com/anonto42/polyglid",
                         "Explore the code"
                     }
                 }
@@ -254,11 +254,11 @@ fn Footer() -> Element {
             }
             div { class: "footer-links",
                 a {
-                    href: "https://github.com/anonto42/poly.glid_security_workspace",
+                    href: "https://github.com/anonto42/polyglid",
                     "GitHub"
                 }
                 a {
-                    href: "https://github.com/anonto42/poly.glid_security_workspace/blob/main/LICENSE-MIT",
+                    href: "https://github.com/anonto42/polyglid/blob/main/LICENSE-MIT",
                     "License"
                 }
             }

@@ -18,7 +18,7 @@ pub fn export(report: &ExportedReport) -> Result<String, String> {
             "shortDescription": {
                 "text": issue.title
             },
-            "helpUri": "https://github.com/anonto42/poly.glid_security_workspace"
+            "helpUri": "https://github.com/anonto42/polyglid"
         }));
 
         results.push(serde_json::json!({
