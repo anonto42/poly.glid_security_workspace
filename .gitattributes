@@ -1,0 +1,29 @@
+# Auto-detect text files and normalize their line endings on checkout.
+* text=auto eol=lf
+
+# Explicitly enforce LF for source and config files.
+*.rs   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.wit  text eol=lf
+*.sh   text eol=lf
+*.ps1  text eol=lf
+*.nxs  text eol=lf
+
+# Lockfiles: union-merge reduces churn and conflicts.
+*.lock merge=union
+
+# Binary / generated artifacts.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.tar  binary
+*.gz   binary
