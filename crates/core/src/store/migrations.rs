@@ -3,8 +3,19 @@ use rusqlite::Connection;
 
 pub struct MigrationManager;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationReport {
+    pub previous_version: i32,
+    pub current_version: i32,
+    pub applied_versions: Vec<i32>,
+}
+
 impl MigrationManager {
     pub fn run(conn: &mut Connection) -> Result<(), String> {
+        Self::run_with_report(conn).map(|_| ())
+    }
+
+    pub fn run_with_report(conn: &mut Connection) -> Result<MigrationReport, String> {
         // Enforce foreign key constraints
         conn.execute("PRAGMA foreign_keys = ON;", [])
             .map_err(|err| format!("failed to enable foreign keys: {err}"))?;
@@ -14,6 +25,7 @@ impl MigrationManager {
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .map_err(|err| format!("failed to read user_version: {err}"))?;
 
+        let mut applied_versions = Vec::new();
         for migration in MIGRATIONS {
             if migration.version > current_version {
                 let tx = conn
@@ -35,9 +47,15 @@ impl MigrationManager {
                         migration.version
                     )
                 })?;
+                applied_versions.push(migration.version);
             }
         }
 
-        Ok(())
+        let final_version = applied_versions.last().copied().unwrap_or(current_version);
+        Ok(MigrationReport {
+            previous_version: current_version,
+            current_version: final_version,
+            applied_versions,
+        })
     }
 }

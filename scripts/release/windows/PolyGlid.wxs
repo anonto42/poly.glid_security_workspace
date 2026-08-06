@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="PolyGlid"
+      Manufacturer="PolyGlid"
+      Version="$(var.Version)"
+      UpgradeCode="7A1C89D6-2B66-4E6B-8A8D-6D5D3BC6BA9D"
+      Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of PolyGlid is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="PolyGlid" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="APPLICATIONPROGRAMSFOLDER" Name="PolyGlid" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="PolyGlid" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentGroupRef Id="StartMenuComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="Application">
+        <File Id="PolyGlidExecutable" Source="$(var.PackageDirectory)\polyglid-desktop.exe" KeyPath="yes" />
+        <File Id="Readme" Source="$(var.PackageDirectory)\README.md" />
+        <File Id="MitLicense" Source="$(var.PackageDirectory)\LICENSE-MIT" />
+        <File Id="ApacheLicense" Source="$(var.PackageDirectory)\LICENSE-APACHE" />
+        <File Id="RuntimeDirectories" Source="$(var.PackageDirectory)\runtime-directories.md" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="StartMenuComponents" Directory="APPLICATIONPROGRAMSFOLDER">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="PolyGlidStartMenuShortcut"
+                  Name="PolyGlid"
+                  Description="PolyGlid Security Workspace"
+                  Target="[INSTALLFOLDER]polyglid-desktop.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\PolyGlid" Name="StartMenuInstalled" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

@@ -17,6 +17,10 @@ impl WorkspaceCatalogService {
         })
     }
 
+    pub fn from_store(store: WorkspaceStore) -> Self {
+        Self { store }
+    }
+
     pub fn list_workspaces(&self) -> Result<Vec<DbWorkspace>, String> {
         self.store.workspace_catalog().list()
     }

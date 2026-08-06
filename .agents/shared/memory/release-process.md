@@ -18,6 +18,8 @@ source installation through Moon: compiling `dioxus-cli` on a fresh hosted
 runner is slow and can make the affected-task step unreliable.
 
 Adding `apps/*/Cargo.toml` or `crates/*/Cargo.toml` requires a `feat:` title.
+Validation-only pull requests may use a `test/`, `test:`, `Test/`, `Test:`, or
+similar test-prefixed title, but they cannot add a new app or crate.
 Workflow YAML contains orchestration only. Reusable commands belong under
 `scripts/ci/`, `scripts/site/`, and `scripts/release/`. Cargo's `target`
 directory is not a Moon cache output; only the final static website bundle is
@@ -56,11 +58,19 @@ intent on `main`, where Release Please reads it.
 Release jobs build and archive:
 
 - Linux x86-64;
-- Windows x86-64;
-- macOS Apple Silicon.
+- Windows x86-64 ZIP and MSI;
+- macOS Apple Silicon archive and DMG.
 
 The release is published only after all three archives and `SHA256SUMS` upload
 successfully.
+
+`publish.sh` also generates `polyglid-update.json`, containing the release tag,
+version, repository, artifact download URLs, and SHA-256 hashes. This manifest
+is metadata only; clients must verify hashes before applying an update.
+
+Run the manually triggered `Package validation` workflow before the first
+production release. It builds the same Linux, Windows, and macOS artifacts as
+the release workflow but does not invoke Release Please or publish anything.
 
 Reference branches never publish active PolyGlid releases.
 

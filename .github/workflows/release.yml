@@ -78,12 +78,15 @@ jobs:
           - os: ubuntu-24.04
             asset: linux-x86_64
             archive: polyglid-linux-x86_64.tar.gz
+            appimage: polyglid-linux-x86_64.AppImage
           - os: windows-latest
             asset: windows-x86_64
             archive: polyglid-windows-x86_64.zip
+            msi: polyglid-windows-x86_64.msi
           - os: macos-15
             asset: macos-aarch64
             archive: polyglid-macos-aarch64.tar.gz
+            dmg: polyglid-macos-aarch64.dmg
     steps:
       - uses: actions/checkout@v6
         with:
@@ -104,10 +107,50 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: scripts/release/package-windows.ps1 -Archive ${{ matrix.archive }}
+      - name: Install WiX v4
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix
+          "$(Join-Path $env:USERPROFILE '.dotnet\tools')" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Package Windows MSI
+        if: matrix.msi != ''
+        shell: pwsh
+        run: scripts/release/package-windows-msi.ps1 -PackageDirectory package -Archive ${{ matrix.msi }} -Version (Get-Content version.txt).Trim()
+      - name: Package Linux AppImage
+        if: matrix.appimage != ''
+        run: scripts/release/package-appimage.sh ${{ matrix.appimage }}
+      - name: Package macOS DMG
+        if: matrix.dmg != ''
+        run: scripts/release/package-macos-dmg.sh ${{ matrix.dmg }}
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset }}
           path: ${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Linux AppImage
+        if: matrix.appimage != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}-appimage
+          path: ${{ matrix.appimage }}
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Windows MSI
+        if: matrix.msi != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}-msi
+          path: ${{ matrix.msi }}
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload macOS DMG
+        if: matrix.dmg != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}-dmg
+          path: ${{ matrix.dmg }}
           if-no-files-found: error
           retention-days: 14
 

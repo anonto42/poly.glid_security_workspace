@@ -62,13 +62,52 @@ These decisions are current until the user explicitly changes them.
 
 ### Next development steps
 
-1. Add a lightweight CI job that runs `nix flake check` when the flake changes.
-2. Design the installer/runtime-data layer separately for Linux, Windows, and
-   macOS: config, data, cache, logs, plugins, workspaces, permissions, and
-   PATH registration.
-3. Implement idempotent first-run setup and versioned upgrade migrations.
+1. Done: `.github/workflows/ci.yml` runs a `nix` job (`nix flake check
+   --no-build`) on every push and pull request.
+2. Done (2026-08-01): Linux AppImage packaging implemented and locally
+   verified end-to-end. `scripts/release/package-appimage.sh` builds a
+   `PolyGlid.AppDir`, fetches `appimagetool` if missing, and produces the
+   `.AppImage`; `.github/workflows/release.yml`'s Linux leg packages and
+   uploads it as a separate `release-linux-x86_64-appimage` artifact
+   alongside the existing tar.gz so `if-no-files-found: error` does not break
+   the Windows/macOS legs. `scripts/release/publish.sh` needed no changes.
+   Scope is Linux-only for this phase (Windows/macOS installer work deferred
+   until real testing capacity exists); no `.deb`/`.rpm`/Flatpak; AppImage
+   ships unsigned since AppImage does not require OS-level signing to run.
+   AppImage now includes AppStream metadata, runtime-directory guidance, and a
+   deterministic AppDir validation step. Still open: real app icon/branding
+   (placeholder in place, marked with a `TODO` in the script).
+3. Done (2026-08-04): idempotent first-run setup and versioned migration
+   reporting are implemented in the client and surfaced by desktop startup.
 4. Add uninstall behavior, signing, and update metadata after the installer
-   layout stabilizes.
+   layout stabilizes. Revisit Windows/macOS installer scope and signing when
+   that work actually starts.
+
+   The current Windows ZIP and macOS Unix archive now bundle runtime-directory
+   guidance and run package-content validation. Windows MSI registration and
+   macOS DMG packaging are now defined; signing and uninstall behavior remain
+   intentionally deferred.
+
+   Windows MSI packaging is now defined with WiX v4 and included as a separate
+   release artifact. It installs the executable and runtime guidance, creates a
+   Start Menu shortcut, and supports major upgrades. Signing and actual hosted
+   Windows validation remain prerequisites before calling it production-ready.
+
+   macOS DMG packaging is now defined for Apple Silicon. It creates a standard
+   `.app` bundle with `Info.plist`, runtime guidance, and an Applications alias.
+   Signing, notarization, and actual hosted macOS validation remain open.
+
+   The temporary release `workflow_dispatch` bypass commits were reverted on
+   2026-08-04. Production release builds are again gated by a successful
+   Release Please result.
+
+   A separate manually triggered `Package validation` workflow now exercises
+   all platform packaging without bypassing release gating or publishing a
+   GitHub release.
+
+   Release publication now generates `polyglid-update.json` with artifact URLs
+   and SHA-256 hashes. Automatic update installation remains deferred until a
+   client-side verification and rollback design is approved.
 
 ### Runtime directory foundation (2026-08-01)
 
@@ -83,3 +122,18 @@ These decisions are current until the user explicitly changes them.
   Unix systems retain the existing `~/.polyglid` default.
 - Installer-specific registration, signing, migration, and uninstall behavior
   remains separate from this runtime bootstrap foundation.
+
+### Versioned first-run setup (2026-08-04)
+
+- `LocalClient::open_with_setup` and `open_default_with_setup` expose a
+  `SetupReport` without changing the existing `open` APIs.
+- Setup reports `FirstRun`, `Migrated`, or `Ready`, records directories created,
+  and reports the database version transition and applied migration versions.
+- Runtime directory creation and SQLite migrations remain transactional and
+  idempotent; opening an existing installation does not recreate directories
+  or reapply migrations.
+- Future installer work should call this setup boundary after installation and
+  surface its errors to the user before opening the desktop shell.
+- The Dioxus desktop startup now calls the setup-aware API and surfaces first-run
+  or migration notices in the existing Projects status area. Setup failures
+  remain blocking startup errors with recovery guidance.

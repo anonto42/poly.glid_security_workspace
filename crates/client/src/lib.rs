@@ -11,7 +11,7 @@ mod paths;
 
 pub use error::{ClientError, ClientResult};
 pub use gateway::{ClientGateway, ExecutionSubscription};
-pub use local::LocalClient;
+pub use local::{LocalClient, SetupReport, SetupStatus};
 pub use models::{
     Approval, ApprovalDecision, ApprovalDuration, BootstrapSnapshot, CapabilityKind,
     CapabilityRequest, CapabilityScope, Execution, ExecutionEvent, ExecutionMetrics,
@@ -19,7 +19,7 @@ pub use models::{
     Plugin, PluginInspection, PluginSource, PluginStatus, Project, Report, ReportFormat,
     SavedTarget, Severity, ShellPreferences, StartExecutionRequest, Workspace, WorkspaceEntry,
 };
-pub use paths::RuntimePaths;
+pub use paths::{RuntimeInitialization, RuntimePaths};
 
 /// Compatibility namespace used by both desktop clients.
 pub mod client {
@@ -29,7 +29,8 @@ pub mod client {
         ExecutionEvent, ExecutionMetrics, ExecutionPreferences, ExecutionReport, ExecutionState,
         ExecutionSubscription, Issue, JobId, LocalClient, PermissionDecisionRequest, Plugin,
         PluginInspection, PluginSource, PluginStatus, Project, Report, ReportFormat, SavedTarget,
-        Severity, ShellPreferences, StartExecutionRequest, Workspace, WorkspaceEntry,
+        SetupReport, SetupStatus, Severity, ShellPreferences, StartExecutionRequest, Workspace,
+        WorkspaceEntry,
     };
 }
 

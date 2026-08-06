@@ -84,14 +84,21 @@ titles declare release intent using Conventional Commits:
 
 A new app or crate is treated as a feature and requires a `feat:` title.
 Breaking changes can use `!` after the type or a `BREAKING CHANGE:` commit
-footer.
+footer. Validation-only PRs may use a title such as
+`test/release package dry run`; they cannot introduce a new app or crate.
 
 After changes land on `main` and CI succeeds, Release Please creates or updates
 a release pull request containing the workspace version, lockfile, and
 changelog updates. Merging that pull request creates a version tag and draft
-GitHub release. GitHub Actions then builds Linux x86-64, Windows x86-64, and
-macOS Apple Silicon archives, generates SHA-256 checksums, uploads the assets,
-and publishes the release.
+GitHub release. GitHub Actions then builds Linux x86-64 (tar.gz and AppImage),
+Windows x86-64 (ZIP and MSI), and macOS Apple Silicon (tar.gz and DMG),
+generates SHA-256 checksums, uploads the assets, and publishes the release.
+Native artifacts are currently unsigned pending release-key setup.
+
+Before the first production release, run the manually triggered **Package
+validation** workflow from the GitHub Actions tab. It builds the platform
+packages on their native runners and uploads short-lived artifacts without
+creating a tag or publishing a release.
 
 The website is also built and deployed to GitHub Pages only after CI succeeds
 for `main`. Before its first deployment, set the repository's Pages source to

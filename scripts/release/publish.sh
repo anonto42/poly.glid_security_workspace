@@ -16,5 +16,7 @@ fi
   sha256sum polyglid-* | sort -k 2 > SHA256SUMS
 )
 
+scripts/release/generate-update-manifest.sh "$assets_dir" "$TAG"
+
 gh release upload "$TAG" "$assets_dir"/* --clobber
 gh release edit "$TAG" --draft=false
