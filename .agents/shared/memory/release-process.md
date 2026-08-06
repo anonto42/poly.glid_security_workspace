@@ -67,6 +67,7 @@ successfully.
 `publish.sh` also generates `polyglid-update.json`, containing the release tag,
 version, repository, artifact download URLs, and SHA-256 hashes. This manifest
 is metadata only; clients must verify hashes before applying an update.
+Publishing verifies the manifest and `SHA256SUMS` before uploading any asset.
 
 Run the manually triggered `Package validation` workflow before the first
 production release. It builds the same Linux, Windows, and macOS artifacts as

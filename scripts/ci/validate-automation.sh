@@ -9,4 +9,5 @@ while IFS= read -r script; do
 done < <(find scripts -type f -name '*.sh' -print | sort)
 
 scripts/ci/validate-release-config.sh
+scripts/ci/test-release-intent.sh
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12

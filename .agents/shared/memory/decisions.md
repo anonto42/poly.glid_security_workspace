@@ -107,7 +107,8 @@ These decisions are current until the user explicitly changes them.
 
    Release publication now generates `polyglid-update.json` with artifact URLs
    and SHA-256 hashes. Automatic update installation remains deferred until a
-   client-side verification and rollback design is approved.
+   client-side verification and rollback design is approved. Publication
+   validates the manifest and checksum set before uploading artifacts.
 
 ### Runtime directory foundation (2026-08-01)
 

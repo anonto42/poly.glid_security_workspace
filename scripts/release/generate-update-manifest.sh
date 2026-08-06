@@ -15,7 +15,8 @@ while IFS= read -r asset; do
   url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$asset"
   assets_json="$(jq --arg filename "$asset" --arg sha256 "$checksum" --arg url "$url" \
     '. + [{filename: $filename, sha256: $sha256, url: $url}]' <<<"$assets_json")"
-done < <(find "$assets_dir" -maxdepth 1 -type f -name 'polyglid-*' -printf '%f\n' | sort)
+done < <(find "$assets_dir" -maxdepth 1 -type f -name 'polyglid-*' \
+  ! -name 'polyglid-update.json' -printf '%f\n' | sort)
 
 jq -n \
   --argjson schema 1 \
