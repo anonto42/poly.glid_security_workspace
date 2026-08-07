@@ -4,7 +4,7 @@ PolyGlid is a local-first, cross-platform desktop application for organizing
 and managing local project workspaces. It is built in Rust with Dioxus and is
 developed one working product phase at a time.
 
-[![GitHub repository](https://img.shields.io/badge/GitHub-anonto42%2Fpoly.glid__security__workspace-181717?logo=github)](https://github.com/anonto42/poly.glid_security_workspace)
+[![GitHub repository](https://img.shields.io/badge/GitHub-anonto42%2Fpolyglid-181717?logo=github)](https://github.com/anonto42/polyglid)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Dioxus](https://img.shields.io/badge/Dioxus-0.7-8A2BE2)](https://dioxuslabs.com/)
 [![License](https://img.shields.io/badge/License-MIT%20or%20Apache--2.0-blue)](LICENSE-APACHE)
